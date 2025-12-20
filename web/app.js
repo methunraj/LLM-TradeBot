@@ -145,11 +145,41 @@ function renderDecisionTable(history) {
 
         // Extract Agent Scores
         const stratHtml = fmtScore('strategist_total');
-        // Prefer 1h trend/osc, fallback to others if needed? User likely wants primary signal.
-        // The bot uses 1h for main trend check usually.
-        const trendHtml = fmtScore('trend_1h');
-        const oscHtml = fmtScore('oscillator_1h');
+        const trend1hHtml = fmtScore('trend_1h');
+        const osc1hHtml = fmtScore('oscillator_1h');
         const sentHtml = fmtScore('sentiment');
+
+        // Multi-period signals (15m, 5m)
+        const trend15mHtml = fmtScore('trend_15m');
+        const osc15mHtml = fmtScore('oscillator_15m');
+        const trend5mHtml = fmtScore('trend_5m');
+        const osc5mHtml = fmtScore('oscillator_5m');
+
+        // Combine 15m and 5m signals
+        const signal15m = `<div style="font-size:0.75em">T:${d.vote_details?.trend_15m ? Math.round(d.vote_details.trend_15m) : '-'}<br>O:${d.vote_details?.oscillator_15m ? Math.round(d.vote_details.oscillator_15m) : '-'}</div>`;
+        const signal5m = `<div style="font-size:0.75em">T:${d.vote_details?.trend_5m ? Math.round(d.vote_details.trend_5m) : '-'}<br>O:${d.vote_details?.oscillator_5m ? Math.round(d.vote_details.oscillator_5m) : '-'}</div>`;
+
+        // Reason (truncated with tooltip)
+        let reasonHtml = '<span class="cell-na">-</span>';
+        if (d.reason) {
+            const shortReason = d.reason.length > 30 ? d.reason.substring(0, 30) + '...' : d.reason;
+            reasonHtml = `<span title="${d.reason}" style="font-size:0.8em;cursor:help">${shortReason}</span>`;
+        }
+
+        // Position % (exact percentage)
+        let posPctHtml = '<span class="cell-na">-</span>';
+        if (d.position && d.position.position_pct !== undefined) {
+            const pct = d.position.position_pct.toFixed(1);
+            posPctHtml = `<span style="font-size:0.85em">${pct}%</span>`;
+        }
+
+        // Alignment status
+        let alignedHtml = '<span class="cell-na">-</span>';
+        if (d.multi_period_aligned !== undefined) {
+            alignedHtml = d.multi_period_aligned
+                ? '<span class="badge pos" title="Multi-period aligned">✅</span>'
+                : '<span class="badge neutral" title="Not aligned">➖</span>';
+        }
 
         // Risk & Guardian
         let riskHtml = '<span class="cell-na">-</span>';
@@ -196,12 +226,17 @@ function renderDecisionTable(history) {
                 <td>${symbol}</td>
                 <td class="${actionClass}">${action}</td>
                 <td>${conf}</td>
+                <td>${reasonHtml}</td>
                 <td>${stratHtml}</td>
-                <td>${trendHtml}</td>
-                <td>${oscHtml}</td>
+                <td>${trend1hHtml}</td>
+                <td>${osc1hHtml}</td>
+                <td>${signal15m}</td>
+                <td>${signal5m}</td>
                 <td>${sentHtml}</td>
                 <td>${riskHtml}</td>
                 <td>${guardHtml}</td>
+                <td>${posPctHtml}</td>
+                <td>${alignedHtml}</td>
                 <td>${contextHtml}</td>
             </tr>
         `;

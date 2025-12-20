@@ -79,7 +79,6 @@ python main.py --mode continuous
 - **📜 交易历史**: 所有交易记录及盈亏统计
 - **📡 Live Log Output**: 实时滚动日志，支持 Agent 标签高亮显示 (Oracle, Strategist, Critic, Guardian)，500行容量历史回溯
 
-![Live Log Output](./docs/screenshot-20251221-070754.png)
 
 ---
 
@@ -143,7 +142,16 @@ LLM-TradeBot/
 
 ### 数据流转架构
 
-![数据流转架构](./docs/data_flow_diagram_1766231460411.png)
+![数据流转架构](./docs/data_flow_architecture_enhanced.png)
+
+**架构说明**:
+
+1. **数据采集层** (蓝色): DataSyncAgent 异步并发采集多周期数据
+2. **量化分析层** (绿色): QuantAnalystAgent 内部 3 个子 Agent 并行分析
+3. **决策对抗层** (橙色): DecisionCoreAgent 集成市场感知模块进行加权投票
+4. **风控审计层** (红色): RiskAuditAgent 执行最终审核和自动修正
+5. **执行层** (紫色): ExecutionEngine 执行订单
+6. **可视化层**: Recent Decisions 表格完整展示所有 Agent 数据 (16列)
 
 > 📖 **详细文档**: 查看 [数据流转分析文档](./docs/data_flow_analysis.md) 了解完整的数据流转机制，或查看 [多Agent技术详解](./README_MULTI_AGENT.md) 了解底层实现细节。
 
