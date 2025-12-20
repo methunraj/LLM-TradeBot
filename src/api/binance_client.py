@@ -166,6 +166,20 @@ class BinanceClient:
             log.error(f"获取持仓信息失败: {e}")
             raise
     
+    def get_account_balance(self) -> float:
+        """
+        获取合约账户可用余额
+        
+        Returns:
+            float: 可用余额（USDT）
+        """
+        try:
+            account = self.get_futures_account()
+            return account['available_balance']
+        except BinanceAPIException as e:
+            log.error(f"获取账户余额失败: {e}")
+            raise
+    
     def get_funding_rate(self, symbol: str) -> Dict:
         """获取资金费率"""
         try:
@@ -201,7 +215,8 @@ class BinanceClient:
         symbol: str,
         side: str,
         quantity: float,
-        reduce_only: bool = False
+        reduce_only: bool = False,
+        position_side: str = 'BOTH'
     ) -> Dict:
         """
         下市价单
@@ -211,17 +226,25 @@ class BinanceClient:
             side: BUY 或 SELL
             quantity: 数量
             reduce_only: 只减仓
+            position_side: 持仓方向 (BOTH/LONG/SHORT), 双向持仓用LONG/SHORT
         """
         try:
-            order = self.client.futures_create_order(
-                symbol=symbol,
-                side=side,
-                type='MARKET',
-                quantity=quantity,
-                reduceOnly=reduce_only
-            )
+            # 构建订单参数
+            order_params = {
+                'symbol': symbol,
+                'side': side,
+                'type': 'MARKET',
+                'quantity': quantity,
+                'positionSide': position_side
+            }
             
-            log.info(f"市价单已下: {side} {quantity} {symbol}")
+            # 只在需要时添加 reduceOnly 参数
+            if reduce_only:
+                order_params['reduceOnly'] = True
+            
+            order = self.client.futures_create_order(**order_params)
+            
+            log.info(f"市价单已下: {side} {quantity} {symbol} (positionSide={position_side})")
             return order
             
         except BinanceAPIException as e:
@@ -258,9 +281,18 @@ class BinanceClient:
         self,
         symbol: str,
         stop_loss_price: Optional[float] = None,
-        take_profit_price: Optional[float] = None
+        take_profit_price: Optional[float] = None,
+        position_side: str = 'LONG'  # 新增：明确指定持仓方向
     ) -> List[Dict]:
-        """设置止损止盈"""
+        """
+        设置止损止盈
+        
+        Args:
+            symbol: 交易对
+            stop_loss_price: 止损价格
+            take_profit_price: 止盈价格
+            position_side: 持仓方向 (LONG/SHORT)
+        """
         orders = []
         
         try:
@@ -280,10 +312,11 @@ class BinanceClient:
                     side=side,
                     type='STOP_MARKET',
                     stopPrice=stop_loss_price,
-                    closePosition=True
+                    closePosition=True,
+                    positionSide=position_side  # 添加持仓方向
                 )
                 orders.append(sl_order)
-                log.info(f"止损单已设置: {stop_loss_price}")
+                log.info(f"止损单已设置: {stop_loss_price} (positionSide={position_side})")
             
             # 止盈单
             if take_profit_price:
@@ -292,10 +325,11 @@ class BinanceClient:
                     side=side,
                     type='TAKE_PROFIT_MARKET',
                     stopPrice=take_profit_price,
-                    closePosition=True
+                    closePosition=True,
+                    positionSide=position_side  # 添加持仓方向
                 )
                 orders.append(tp_order)
-                log.info(f"止盈单已设置: {take_profit_price}")
+                log.info(f"止盈单已设置: {take_profit_price} (positionSide={position_side})")
             
             return orders
             
@@ -317,6 +351,8 @@ class BinanceClient:
         """
         获取市场数据快照（完整）
         这是提供给后续模块的标准接口
+        
+        注意：账户信息获取失败会在返回中标注错误，不会抛出异常
         """
         try:
             price = self.get_ticker_price(symbol)
@@ -327,10 +363,13 @@ class BinanceClient:
             # 合约账户信息（需要认证，如果失败则返回空）
             account = None
             position = None
+            account_error = None
+            
             try:
                 account = self.get_futures_account()
                 position = self.get_futures_position(symbol)
             except Exception as e:
+                account_error = str(e)
                 log.warning(f"获取账户/持仓信息失败（可能未配置有效API密钥）: {e}")
             
             return {
@@ -341,9 +380,62 @@ class BinanceClient:
                 'funding': funding,
                 'oi': oi,
                 'account': account,
-                'position': position
+                'position': position,
+                'account_error': account_error  # 传递错误信息
             }
             
         except Exception as e:
             log.error(f"获取市场快照失败: {e}")
             raise
+    
+    def get_symbol_info(self, symbol: str) -> Dict:
+        """获取交易对信息（包含 filters）"""
+        try:
+            info = self.client.get_symbol_info(symbol)
+            return info or {}
+        except BinanceAPIException as e:
+            log.error(f"获取交易对信息失败: {e}")
+            raise
+    
+    def get_symbol_min_notional(self, symbol: str) -> float:
+        """尝试从交易对信息中解析最小名义(minNotional 或 MIN_NOTIONAL)
+
+        返回 float（找不到则返回 0.0）
+        """
+        try:
+            info = self.get_symbol_info(symbol)
+            filters = info.get('filters', []) if isinstance(info, dict) else []
+
+            # 常见的过滤器字段: {'filterType': 'MIN_NOTIONAL', 'minNotional': '100'}
+            for f in filters:
+                if not isinstance(f, dict):
+                    continue
+                ft = f.get('filterType')
+                if ft == 'MIN_NOTIONAL':
+                    try:
+                        return float(f.get('minNotional', 0))
+                    except Exception:
+                        continue
+
+                # 有些接口直接返回 minNotional 字段
+                if 'minNotional' in f:
+                    try:
+                        return float(f.get('minNotional', 0))
+                    except Exception:
+                        continue
+
+            # 兼容性兜底：某些合约可能使用其他命名
+            for f in filters:
+                if not isinstance(f, dict):
+                    continue
+                for k in ['minNotional', 'minNotionalValue', 'minNotionalAmt', 'NOTIONAL', 'minNotionalUSD']:
+                    if k in f:
+                        try:
+                            return float(f.get(k, 0))
+                        except Exception:
+                            continue
+
+            return 0.0
+        except Exception as e:
+            log.warning(f"解析最小名义失败，返回0: {e}")
+            return 0.0

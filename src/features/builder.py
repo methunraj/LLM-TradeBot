@@ -3,6 +3,8 @@
 """
 from typing import Dict, List, Optional
 from datetime import datetime
+import pandas as pd
+import numpy as np
 from src.utils.logger import log
 
 
@@ -29,8 +31,32 @@ class FeatureBuilder:
             position_info: 持仓信息
             
         Returns:
-            结构化的市场上下文
+            结构化的市场上下文（包含完整元数据和数据质量验证）
         """
+        
+        # === 数据质量验证（静默检查）===
+        # 验证多周期价格一致性
+        price_check = self._validate_multiframe_prices(multi_timeframe_states)
+        if not price_check['consistent']:
+            log.debug(f"[{symbol}] 多周期价格一致性: {', '.join(price_check['warnings'])}")
+        
+        # 验证多周期时间对齐
+        alignment_check = self._validate_multiframe_alignment(multi_timeframe_states)
+        if not alignment_check['aligned']:
+            log.debug(f"[{symbol}] 多周期时间对齐: {', '.join(alignment_check['warnings'])}")
+        
+        # 🆕 验证指标完整性（每个周期）
+        indicator_completeness = {}
+        for tf, state in multi_timeframe_states.items():
+            if 'indicator_completeness' in state:
+                indicator_completeness[tf] = state['indicator_completeness']
+            else:
+                # 如果processor没有提供,标记为未知
+                indicator_completeness[tf] = {
+                    'is_complete': None,
+                    'issues': ['未提供指标完整性检查'],
+                    'overall_coverage': None
+                }
         
         # 提取当前价格信息
         current_price = snapshot.get('price', {}).get('price', 0)
@@ -45,10 +71,22 @@ class FeatureBuilder:
         orderbook = snapshot.get('orderbook', {})
         liquidity_score = self._analyze_liquidity(orderbook)
         
+        # 提取账户获取错误（如果有）
+        account_fetch_error = snapshot.get('account_error', None)
+        
+        # 提取快照ID（用于数据一致性追踪）
+        snapshot_ids = {}
+        for tf, state in multi_timeframe_states.items():
+            if 'snapshot_id' in state:
+                snapshot_ids[tf] = state['snapshot_id']
+        
         # 构建上下文
         context = {
             'timestamp': datetime.now().isoformat(),
             'symbol': symbol,
+            
+            # === 数据一致性追踪 ===
+            'snapshot_ids': snapshot_ids,  # 各周期的快照ID
             
             # 市场概览
             'market_overview': {
@@ -66,11 +104,20 @@ class FeatureBuilder:
             'position_context': self._build_position_context(
                 position_info,
                 current_price,
-                snapshot.get('account', {})
+                snapshot.get('account', {}),
+                account_fetch_error  # 传递错误信息
             ),
             
             # 风险约束
-            'risk_constraints': self._get_risk_constraints()
+            'risk_constraints': self._get_risk_constraints(),
+            
+            # === 🆕 数据质量报告 ===
+            'data_quality': {
+                'price_consistency': price_check,
+                'time_alignment': alignment_check,
+                'indicator_completeness': indicator_completeness,
+                'overall_score': self._calculate_quality_score(price_check, alignment_check, indicator_completeness)
+            }
         }
         
         return context
@@ -127,22 +174,29 @@ class FeatureBuilder:
         self,
         position: Optional[Dict],
         current_price: float,
-        account: Optional[Dict]
+        account: Optional[Dict],
+        account_fetch_error: Optional[str] = None
     ) -> Dict:
-        """构建持仓上下文"""
+        """
+        构建持仓上下文
         
-        # 如果没有账户信息，返回默认值
-        if not account:
+        重要：不要将 None/缺失 转换为 0，要明确标注
+        """
+        
+        # 如果没有账户信息，明确标注为 None
+        if not account or account_fetch_error:
             return {
                 'has_position': False,
                 'side': 'NONE',
-                'size': 0,
-                'entry_price': 0,
-                'current_pnl_pct': 0,
-                'unrealized_pnl': 0,
-                'account_balance': 0,
-                'margin_usage_pct': 0,
-                'note': '未配置有效API密钥，无法获取账户信息'
+                'size': None,  # 明确标注为 None，不是 0
+                'entry_price': None,
+                'current_pnl_pct': None,
+                'unrealized_pnl': None,
+                'account_balance': None,  # 重要：None 不是 0
+                'total_balance': None,
+                'margin_usage_pct': None,
+                'account_fetch_error': account_fetch_error or 'No account data available',
+                'warning': '⚠️ 账户信息缺失，建议不要进行交易操作'
             }
         
         if not position or position.get('position_amt', 0) == 0:
@@ -154,7 +208,9 @@ class FeatureBuilder:
                 'current_pnl_pct': 0,
                 'unrealized_pnl': 0,
                 'account_balance': account.get('available_balance', 0),
-                'margin_usage_pct': 0
+                'total_balance': account.get('total_wallet_balance', 0),
+                'margin_usage_pct': 0,
+                'account_fetch_error': None
             }
         
         position_amt = position.get('position_amt', 0)
@@ -189,7 +245,8 @@ class FeatureBuilder:
             'account_balance': account.get('available_balance', 0),
             'total_balance': total_balance,
             'margin_usage_pct': round(margin_usage_pct, 2),
-            'leverage': position.get('leverage', 1)
+            'leverage': position.get('leverage', 1),
+            'account_fetch_error': None
         }
     
     def _get_risk_constraints(self) -> Dict:
@@ -259,7 +316,17 @@ class FeatureBuilder:
         
         # 持仓信息
         text += "\n### 当前持仓\n"
-        if position['has_position']:
+        if position.get('account_fetch_error'):
+            # 账户信息获取失败
+            text += f"⚠️ **警告**: {position['warning']}\n"
+            text += f"- 错误原因: {position['account_fetch_error']}\n"
+            text += "- 持仓状态: 无法获取\n"
+            text += "- 账户余额: 无法获取\n"
+            text += "\n**重要提示**: 由于无法获取账户信息，建议采取以下措施：\n"
+            text += "  1. 不要进行任何开仓操作\n"
+            text += "  2. 检查API密钥配置是否正确\n"
+            text += "  3. 确认API权限是否包含账户查询\n"
+        elif position['has_position']:
             text += f"- 方向: {position['side']}\n"
             text += f"- 数量: {position['size']}\n"
             text += f"- 入场价: ${position['entry_price']:,.2f}\n"
@@ -271,8 +338,14 @@ class FeatureBuilder:
             text += "- 无持仓\n"
         
         text += f"\n### 账户信息\n"
-        text += f"- 可用余额: ${position['account_balance']:,.2f}\n"
-        text += f"- 总余额: ${position.get('total_balance', 0):,.2f}\n"
+        if position.get('account_fetch_error'):
+            text += "- 可用余额: **无法获取**\n"
+            text += "- 总余额: **无法获取**\n"
+        else:
+            balance = position.get('account_balance')
+            total = position.get('total_balance', 0)
+            text += f"- 可用余额: ${balance:,.2f}\n" if balance is not None else "- 可用余额: **未知**\n"
+            text += f"- 总余额: ${total:,.2f}\n"
         
         # 风险约束
         text += f"\n### 风险约束\n"
@@ -293,3 +366,96 @@ class FeatureBuilder:
         text += "7. **持仓管理**: 如有持仓，考虑是否需要调整或止盈止损\n"
         
         return text
+    
+    def _validate_multiframe_prices(self, multi_timeframe_states: Dict[str, Dict]) -> Dict:
+        """
+        验证多周期价格一致性
+        
+        检查不同时间周期的收盘价是否一致
+        """
+        all_prices = []
+        warnings = []
+        
+        for tf, state in multi_timeframe_states.items():
+            if 'close' in state:
+                all_prices.append(state['close'])
+            else:
+                warnings.append(f"{tf} 缺失收盘价")
+        
+        # 检查一致性
+        if len(set(all_prices)) > 1:
+            warnings.append("不同周期的收盘价不一致")
+        
+        return {
+            'consistent': len(warnings) == 0,
+            'warnings': warnings
+        }
+    
+    def _validate_multiframe_alignment(self, multi_timeframe_states: Dict[str, Dict]) -> Dict:
+        """
+        验证多周期时间对齐
+        
+        检查不同时间周期的时间戳是否对齐
+        """
+        all_times = []
+        warnings = []
+        
+        for tf, state in multi_timeframe_states.items():
+            if 'timestamp' in state:
+                all_times.append(state['timestamp'])
+            else:
+                warnings.append(f"{tf} 缺失时间戳")
+        
+        # 检查对齐情况
+        if len(set(all_times)) > 1:
+            warnings.append("不同周期的时间戳不一致")
+        
+        return {
+            'aligned': len(warnings) == 0,
+            'warnings': warnings
+        }
+    
+    def _calculate_quality_score(self, price_check: Dict, alignment_check: Dict, indicator_completeness: Dict) -> float:
+        """
+        计算数据质量分数
+        
+        综合考虑:
+        1. 价格一致性 (权重: 30%)
+        2. 时间对齐 (权重: 20%)
+        3. 指标完整性 (权重: 50%)
+        
+        Returns:
+            质量分数 (0-100)
+        """
+        score = 100.0
+        
+        # 1. 价格一致性检查 (-30分)
+        if not price_check.get('consistent', True):
+            score -= 30
+        elif len(price_check.get('warnings', [])) > 0:
+            score -= 15  # 有警告但不严重
+        
+        # 2. 时间对齐检查 (-20分)
+        if not alignment_check.get('aligned', True):
+            score -= 20
+        
+        # 3. 指标完整性检查 (-50分)
+        # 计算所有周期的平均完整性
+        completeness_scores = []
+        for tf, comp in indicator_completeness.items():
+            if comp.get('is_complete') is True:
+                completeness_scores.append(100.0)
+            elif comp.get('overall_coverage') is not None:
+                # 按覆盖率打分
+                completeness_scores.append(comp['overall_coverage'] * 100)
+            else:
+                completeness_scores.append(0.0)
+        
+        if completeness_scores:
+            avg_completeness = sum(completeness_scores) / len(completeness_scores)
+            # 完整性权重50%
+            score -= (100 - avg_completeness) * 0.5
+        else:
+            score -= 50  # 无法评估完整性，扣满分
+        
+        return max(score, 0.0)  # 分数不低于 0

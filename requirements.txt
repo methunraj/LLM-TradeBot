@@ -26,8 +26,10 @@ python-dotenv==1.0.0
 # 日志
 loguru==0.7.2
 
-# 回测
+# 回测和可视化
 backtrader==1.9.78.123
+matplotlib==3.8.2
+seaborn==0.13.0
 
 # 工具
 requests==2.31.0

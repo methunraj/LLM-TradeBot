@@ -160,11 +160,17 @@ class RiskManager:
             current_price: 当前价格
             
         Returns:
-            开仓数量
+            开仓数量（已舍入到合适精度）
         """
         position_value = account_balance * (position_pct / 100)
         position_value_with_leverage = position_value * leverage
         quantity = position_value_with_leverage / current_price
+        
+        # 舍入到3位小数（BTC合约的标准精度）
+        # 确保不小于最小交易量0.001
+        quantity = max(round(quantity, 3), 0.001)
+        
+        log.info(f"计算仓位: 余额=${account_balance:.2f}, 仓位={position_pct}%, 杠杆={leverage}x, 价格=${current_price:.2f} -> 数量={quantity}")
         
         return quantity
     
@@ -183,12 +189,15 @@ class RiskManager:
             side: LONG or SHORT
             
         Returns:
-            止损价格
+            止损价格（四舍五入到2位小数，符合BTCUSDT精度要求）
         """
         if side == 'LONG':
-            return entry_price * (1 - stop_loss_pct / 100)
+            price = entry_price * (1 - stop_loss_pct / 100)
         else:  # SHORT
-            return entry_price * (1 + stop_loss_pct / 100)
+            price = entry_price * (1 + stop_loss_pct / 100)
+        
+        # 四舍五入到2位小数（BTCUSDT的价格精度）
+        return round(price, 2)
     
     def calculate_take_profit_price(
         self,
@@ -196,11 +205,16 @@ class RiskManager:
         take_profit_pct: float,
         side: str
     ) -> float:
-        """计算止盈价格"""
+        """
+        计算止盈价格（四舍五入到2位小数，符合BTCUSDT精度要求）
+        """
         if side == 'LONG':
-            return entry_price * (1 + take_profit_pct / 100)
+            price = entry_price * (1 + take_profit_pct / 100)
         else:  # SHORT
-            return entry_price * (1 - take_profit_pct / 100)
+            price = entry_price * (1 - take_profit_pct / 100)
+        
+        # 四舍五入到2位小数（BTCUSDT的价格精度）
+        return round(price, 2)
     
     def record_trade(self, trade: Dict):
         """记录交易结果"""

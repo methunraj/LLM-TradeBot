@@ -1,303 +1,285 @@
-# 🤖 AI Trader - 基于 DeepSeek 的加密货币自动交易系统
+# 🤖 AI 量化交易系统
 
-<div align="center">
+基于 LLM (DeepSeek) 的智能量化交易系统,支持多时间框架数据分析、技术指标计算、特征工程和自动化交易决策。
 
-![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)
-![License](https://img.shields.io/badge/License-MIT-green.svg)
-![Status](https://img.shields.io/badge/Status-Beta-yellow.svg)
-
-**一个将大模型推理能力与严格风控相结合的智能交易系统**
-
-[快速开始](#-快速开始) • [架构设计](#-架构设计) • [核心特点](#-核心特点) • [文档](#-文档)
-
-</div>
+[![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 ---
 
-## 📖 项目概述
-
-AI Trader 是一个基于 **Binance API** 和 **DeepSeek 大模型**的智能加密货币交易系统。系统将 LLM 的强大推理能力应用于市场分析和策略决策，同时通过硬编码的风控规则确保资金安全。
-
-### 设计理念
-
-- ✅ **LLM 做决策，不做计算** - 所有技术指标由代码计算，LLM只负责推理
-- ✅ **风控不可绕过** - 硬编码规则层层把关
-- ✅ **完整可审计** - 所有决策过程可追溯
-- ✅ **测试网优先** - 充分测试后再实盘
-
-## 🏗️ 架构设计
-
-```
-┌───────────────────────────────┐
-│         Binance API            │  ← 市场数据 & 交易执行
-└──────────────┬────────────────┘
-               ↓
-┌───────────────────────────────┐
-│     Market Data Processor     │  ← 技术指标 & 市场状态
-└──────────────┬────────────────┘
-               ↓
-┌───────────────────────────────┐
-│      Feature & Context        │  ← 多周期特征整合
-└──────────────┬────────────────┘
-               ↓
-┌───────────────────────────────┐
-│   DeepSeek Strategy Engine    │  ← LLM 决策推理
-└──────────────┬────────────────┘
-               ↓
-┌───────────────────────────────┐
-│       Risk Manager            │  ← 风控验证 & 修正
-└──────────────┬────────────────┘
-               ↓
-┌───────────────────────────────┐
-│     Execution Engine          │  ← 交易执行
-└──────────────┬────────────────┘
-               ↓
-┌───────────────────────────────┐
-│   Logging & Monitoring        │  ← 日志 & 性能分析
-└───────────────────────────────┘
-```
-
-## ✨ 核心特点
-
-### 1. 🧠 DeepSeek 驱动的决策
-- 多周期市场分析
-- 自然语言推理
-- 自动生成交易理由
-- 可解释的决策过程
-
-### 2. 🛡️ 严格的风险管理
-```python
-硬编码规则（不可被 LLM 绕过）：
-├── 单笔风险 ≤ 1.5%
-├── 总仓位 ≤ 30%
-├── 最大杠杆 ≤ 5x
-├── 连续亏损3次 → 暂停交易
-├── 回撤 ≥ 10% → 暂停交易
-└── 极端资金费率 → 拒绝开仓
-```
-
-### 3. 📊 完整的技术分析
-- 多周期K线分析（1m, 5m, 15m, 1h）
-- 20+ 技术指标（MA, MACD, RSI, 布林带等）
-- 趋势识别 & 波动率分析
-- 支撑阻力位自动识别
-
-### 4. 💾 完整的日志系统
-- SQLite 数据库存储
-- 所有决策可追溯
-- 交易统计 & 性能分析
-- LLM 原始输出存档
-
 ## 🚀 快速开始
 
-### 1. 自动安装
-
+### 1. 安装依赖
 ```bash
-# 克隆项目
-git clone <your-repo-url>
-cd ai_trader
-
-# 运行自动安装脚本
-./install.sh
+pip install -r requirements.txt
 ```
 
-### 2. 配置 API 密钥
-
+### 2. 配置环境
 ```bash
-# 复制环境变量文件
+# 复制环境变量模板
 cp .env.example .env
 
-# 编辑配置（填入你的 API 密钥）
-nano .env
+# 设置 API 密钥
+./set_api_keys.sh
 ```
 
-需要配置：
-- **Binance API Key** - [获取地址](https://www.binance.com/en/my/settings/api-management)
-- **DeepSeek API Key** - [获取地址](https://platform.deepseek.com)
-
-⚠️ **建议先使用 Binance 测试网**: https://testnet.binancefuture.com
-
-### 3. 运行测试
-
+### 3. 配置交易参数
 ```bash
-python test.py
+# 复制配置文件模板
+cp config.example.yaml config.yaml
+
+# 编辑配置文件
+vim config.yaml
 ```
 
-预期输出：
-```
-=== 测试配置模块 ===
-✓ 配置模块正常
-
-=== 测试Binance连接 ===
-✓ Binance连接正常
-
-=== 测试市场数据处理 ===
-✓ 市场数据处理正常
-
-...
-```
-
-### 4. 启动系统
-
+### 4. 运行实盘交易
 ```bash
-# 实盘模式（测试网）
-python main.py --mode live
-
-# 回测模式（开发中）
-python main.py --mode backtest --start 2024-01-01 --end 2024-12-01
+python run_live_trading.py
 ```
+
+---
 
 ## 📁 项目结构
 
 ```
 ai_trader/
-├── src/
-│   ├── api/                    # Binance API 接入
-│   │   └── binance_client.py
-│   ├── data/                   # 市场数据处理
-│   │   └── processor.py
-│   ├── features/               # 特征工程
-│   │   └── builder.py
-│   ├── strategy/               # 策略引擎
-│   │   └── deepseek_engine.py
-│   ├── risk/                   # 风险管理
-│   │   └── manager.py
-│   ├── execution/              # 交易执行
-│   │   └── engine.py
-│   ├── monitoring/             # 监控日志
-│   │   └── logger.py
-│   └── utils/                  # 工具模块
-│       └── logger.py
-├── main.py                     # 主程序
-├── test.py                     # 测试脚本
-├── requirements.txt            # 依赖包
-└── config.example.yaml         # 配置模板
+├── src/                    # 核心源代码
+│   ├── api/               # Binance API 客户端
+│   ├── execution/         # 交易执行引擎
+│   ├── features/          # 特征工程模块
+│   ├── monitoring/        # 监控和日志
+│   ├── risk/              # 风险管理
+│   ├── strategy/          # LLM 决策引擎
+│   └── utils/             # 工具函数
+│
+├── tests/                 # 单元测试
+├── config/                # 配置文件
+├── docs_organized/        # 项目文档 (157 个文件)
+├── research/              # 研究和回测
+├── data/                  # 数据存储
+├── logs/                  # 日志文件
+│
+├── main.py                # 主程序入口
+├── run_live_trading.py    # 实盘交易脚本
+└── requirements.txt       # Python 依赖
 ```
 
-## 🎯 使用场景
+---
 
-### ✅ 适合
-- 学习量化交易
-- 研究 LLM 在交易中的应用
-- 测试交易策略
-- 个人小资金交易
+## 🎯 核心功能
 
-### ❌ 不适合
-- 高频交易（系统每分钟决策一次）
-- 大资金交易（需要更复杂的风控）
-- 完全自动化（建议人工监控）
+### 数据处理管道
+- **Step 1**: K线数据获取 (多时间框架: 5m, 15m, 1h, 4h, 1d)
+- **Step 2**: 技术指标计算 (MACD, RSI, Bollinger Bands, ATR, OBV 等)
+- **Step 3**: 特征工程 (数据归一化、特征组合)
+- **Step 4**: 数据质量检查
+- **Step 5**: LLM 提示生成
+- **Step 6**: LLM 智能决策
+- **Step 7**: 交易信号输出
 
-## 📊 决策示例
+### 技术特性
+- ✅ 多时间框架数据对齐
+- ✅ 完整的技术指标库
+- ✅ LLM 驱动的智能决策
+- ✅ 风险管理和仓位控制
+- ✅ 完整的数据归档 (Parquet + Stats)
+- ✅ 详细的日志系统
+- ✅ 实时交易执行
 
-```json
-{
-  "action": "open_long",
-  "confidence": 82,
-  "leverage": 3,
-  "position_size_pct": 10,
-  "stop_loss_pct": 0.8,
-  "take_profit_pct": 1.6,
-  "reasoning": "1h趋势向上，RSI 65未超买，成交量放大，MACD金叉..."
-}
-```
+### 支持的交易对
+- BTCUSDT (主要)
+- 可扩展到其他币安合约交易对
+
+---
 
 ## 📚 文档
 
-- [� 新手入门指南](GETTING_STARTED.md) - 从零开始，手把手教学
-- [⚡ 快速开始](QUICK_START.md) - 快速安装和配置步骤
-- [🔑 API 密钥配置](API_KEYS_REFERENCE.md) - API 密钥配置快速参考
-- [⚙️ 配置指南](CONFIG_GUIDE.md) - 详细配置说明
-- [🏗️ 架构文档](ARCHITECTURE.md) - 系统架构和模块说明
-- [📝 项目总结](PROJECT_SUMMARY.md) - 完整项目概览
+### 入门文档
+- [快速开始指南](docs_organized/01_快速开始/QUICK_START.md)
+- [配置指南](docs_organized/02_配置指南/CONFIG_GUIDE.md)
+- [系统架构](docs_organized/03_架构设计/ARCHITECTURE.md)
+
+### 实盘交易
+- [实盘交易快速开始](docs_organized/07_实盘交易/LIVE_TRADING_QUICKSTART.md)
+- [实盘交易安全指南](docs_organized/07_实盘交易/LIVE_TRADING_SAFETY_GUIDE.md)
+- [止盈止损指南](docs_organized/07_实盘交易/STOP_LOSS_TAKE_PROFIT_GUIDE.md)
+
+### 完整文档
+- [文档导航](DOCS_README.md) - 所有文档的导航指南
+- [完整文档索引](docs_organized/README.md) - 157 个文档的详细索引
+- [文档分类摘要](docs_organized/SUMMARY.md) - 按分类查看文档
+
+---
+
+## 🔧 技术栈
+
+### 核心依赖
+- **Python**: 3.11+
+- **Binance API**: 币安合约交易
+- **DeepSeek API**: LLM 决策引擎
+- **pandas**: 数据处理
+- **numpy**: 数值计算
+- **ta-lib**: 技术指标
+- **pyarrow**: 数据存储
+
+### 技术指标
+- MACD (Moving Average Convergence Divergence)
+- RSI (Relative Strength Index)
+- Bollinger Bands
+- ATR (Average True Range)
+- OBV (On-Balance Volume)
+- EMA/SMA (Exponential/Simple Moving Average)
+
+---
 
 ## ⚙️ 配置说明
 
-### 风险参数 (config.yaml)
+### 环境变量 (.env)
+```bash
+# Binance API
+BINANCE_API_KEY=your_api_key
+BINANCE_API_SECRET=your_api_secret
 
-```yaml
-risk:
-  max_risk_per_trade_pct: 1.5      # 单笔最大风险
-  max_total_position_pct: 30.0     # 最大总仓位
-  max_leverage: 5                   # 最大杠杆
-  max_consecutive_losses: 3         # 连续亏损限制
-  stop_trading_on_drawdown_pct: 10.0  # 回撤停止阈值
+# DeepSeek API
+DEEPSEEK_API_KEY=your_deepseek_key
+
+# 交易模式
+TRADING_MODE=testnet  # 或 production
 ```
 
-### 交易参数
-
+### 配置文件 (config.yaml)
 ```yaml
 trading:
-  symbol: "BTCUSDT"
-  timeframes: ["1m", "5m", "15m", "1h"]
-  leverage: 5
+  symbol: BTCUSDT
+  timeframe: 5m
+  leverage: 1
+  risk_per_trade: 0.01
+
+strategy:
+  model: deepseek-chat
+  temperature: 0.1
+  max_tokens: 500
+
+risk:
+  max_position_size: 1000
+  stop_loss_pct: 0.02
+  take_profit_pct: 0.04
 ```
 
-## 🔍 监控和日志
+---
 
-### 实时日志
+## 🔒 安全提示
+
+⚠️ **重要安全措施**:
+
+1. **API 密钥**: 妥善保管,不要提交到版本控制
+2. **测试网先行**: 先在测试网测试,确认无误后再上生产
+3. **风险控制**: 设置合理的止损和仓位大小
+4. **监控系统**: 密切监控交易日志和账户状态
+5. **IP 白名单**: 建议为 API 密钥设置 IP 白名单
+
+---
+
+## 📊 数据归档
+
+系统自动归档所有步骤的数据:
+
+```
+data/
+├── step1/                 # K线数据 (Parquet + Stats)
+├── step2/                 # 技术指标 (Parquet + Stats)
+├── step3/                 # 特征数据 (Parquet + Stats)
+├── step4/                 # 质量检查 (JSON)
+├── step5/                 # LLM 提示 (TXT)
+├── step6/                 # LLM 决策 (JSON)
+└── step7/                 # 交易信号 (JSON)
+```
+
+每个步骤都包含:
+- **Parquet 文件**: 高效的数据存储
+- **Stats 文件**: 数据统计信息
+- **时间戳**: 完整的审计跟踪
+
+---
+
+## 📈 系统监控
+
+### 日志系统
 ```bash
-tail -f logs/trading.log
+# 查看实时日志
+tail -f logs/live_trading_YYYYMMDD.log
+
+# 查看数据流日志
+tail -f logs/data_flow_YYYYMMDD.log
+
+# 查看交易日志
+tail -f logs/trade_YYYYMMDD.json
 ```
 
-### 数据库查询
+### 性能指标
+- 数据获取延迟
+- 指标计算时间
+- LLM 响应时间
+- 交易执行时间
+
+---
+
+## 🧪 测试
+
 ```bash
-sqlite3 logs/trading.db
+# 运行单元测试
+python -m pytest tests/
 
-# 查看最近决策
-SELECT * FROM decisions ORDER BY id DESC LIMIT 10;
-
-# 查看交易统计
-SELECT COUNT(*), AVG(pnl_pct), SUM(pnl) FROM trades WHERE status='CLOSED';
+# 测试特定模块
+python -m pytest tests/test_step3_features.py
 ```
 
-## ⚠️ 风险提示
+---
 
-<div align="center">
+## 🛠️ 维护工具
 
-### ⚠️ 重要警告 ⚠️
+### 文档管理
+```bash
+# 整理文档
+python organize_docs.py
+```
 
-**加密货币交易风险极高，可能导致本金全部损失**
+### 项目清理
+```bash
+# 预览清理
+python cleanup_project.py
 
-1. 本系统**仅供学习研究**
-2. **不构成任何投资建议**
-3. 使用前请**充分理解代码逻辑**
-4. 建议先在**测试网充分测试**
-5. 实盘请使用**小额资金**
-6. **持续监控系统运行**
+# 执行清理
+python cleanup_project.py --execute
+```
 
-</div>
+---
 
-## 🛠️ 技术栈
+## 📝 开发指南
 
-| 类别 | 技术 |
-|------|------|
-| 语言 | Python 3.8+ |
-| API | python-binance, ccxt |
-| 数据处理 | pandas, numpy |
-| 技术分析 | ta (Technical Analysis) |
-| LLM | DeepSeek API (OpenAI 兼容) |
-| 数据库 | SQLite |
-| 日志 | loguru |
-| 配置 | YAML, python-dotenv |
+### 添加新策略
+1. 在 `src/strategy/` 创建新策略类
+2. 继承基础策略接口
+3. 实现决策逻辑
+4. 在配置文件中启用
 
-## 🗺️ Roadmap
+### 添加新指标
+1. 在 `src/features/technical_features.py` 添加指标计算
+2. 更新特征构建器
+3. 在 Step 2 中注册新指标
 
-- [x] 基础架构搭建
-- [x] Binance API 接入
-- [x] 技术指标计算
-- [x] DeepSeek 决策引擎
-- [x] 风险管理系统
-- [x] 交易执行引擎
-- [x] 日志监控系统
-- [ ] 回测系统完善
-- [ ] Web 监控面板
-- [ ] 多币种支持
-- [ ] 更多 LLM 模型
-- [ ] 策略优化工具
+### 添加新交易对
+1. 在 `config.yaml` 中添加交易对配置
+2. 确认币安支持该交易对
+3. 测试数据获取和交易执行
+
+---
 
 ## 🤝 贡献
 
-欢迎提交 Issue 和 Pull Request！
+欢迎提交 Issue 和 Pull Request!
+
+---
 
 ## 📄 许可证
 
@@ -305,10 +287,23 @@ MIT License
 
 ---
 
-<div align="center">
+## 📞 支持
 
-**如果这个项目对你有帮助，请给个 ⭐️**
+- 📚 [完整文档](docs_organized/README.md)
+- 🐛 [问题诊断](docs_organized/12_其他/DIAGNOSIS_SUMMARY.md)
+- 📊 [项目状态](docs_organized/12_其他/PROJECT_STATUS_OVERVIEW.md)
 
-Made with ❤️ by AI Trader Team
+---
 
-</div>
+## 🎉 最新更新
+
+**2024-12-19**:
+- ✅ 完成项目清理,移除 71 个临时文件
+- ✅ 整理 157 个文档到 docs_organized/
+- ✅ 修复 Step2/3 数据归档问题
+- ✅ 验证所有步骤的数据流
+- ✅ 系统已就绪,可用于实盘交易
+
+---
+
+**从零到一,从混沌到秩序,开启智能交易新纪元!** 🚀

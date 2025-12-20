@@ -103,11 +103,12 @@ class ExecutionEngine:
         except Exception as e:
             log.warning(f"设置杠杆失败: {e}")
         
-        # 下市价买单
+        # 下市价买单（开多仓）
         order = self.client.place_market_order(
             symbol=symbol,
             side='BUY',
-            quantity=quantity
+            quantity=quantity,
+            position_side='LONG'  # 双向持仓模式下明确指定为LONG
         )
         
         # 计算止损止盈价格
@@ -129,7 +130,8 @@ class ExecutionEngine:
         sl_tp_orders = self.client.set_stop_loss_take_profit(
             symbol=symbol,
             stop_loss_price=stop_loss_price,
-            take_profit_price=take_profit_price
+            take_profit_price=take_profit_price,
+            position_side='LONG'  # 明确指定多仓
         )
         
         log.info(f"开多仓成功: {quantity} {symbol} @ {entry_price}")
@@ -166,11 +168,12 @@ class ExecutionEngine:
         except Exception as e:
             log.warning(f"设置杠杆失败: {e}")
         
-        # 下市价卖单
+        # 下市价卖单（开空仓）
         order = self.client.place_market_order(
             symbol=symbol,
             side='SELL',
-            quantity=quantity
+            quantity=quantity,
+            position_side='SHORT'  # 双向持仓模式下明确指定为SHORT
         )
         
         entry_price = float(order.get('avgPrice', current_price))
@@ -190,7 +193,8 @@ class ExecutionEngine:
         sl_tp_orders = self.client.set_stop_loss_take_profit(
             symbol=symbol,
             stop_loss_price=stop_loss_price,
-            take_profit_price=take_profit_price
+            take_profit_price=take_profit_price,
+            position_side='SHORT'  # 明确指定空仓
         )
         
         log.info(f"开空仓成功: {quantity} {symbol} @ {entry_price}")

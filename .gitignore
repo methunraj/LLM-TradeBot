@@ -34,7 +34,7 @@ logs/
 *.log
 
 # 数据
-data/
+/data/
 *.db
 *.sqlite
 
@@ -49,6 +49,9 @@ data/
 .cache/
 .pytest_cache/
 
-# Jupyter
-.ipynb_checkpoints/
-*.ipynb
+# 归档文件
+archived_files_*/
+CLEANUP_PREVIEW.md
+
+# macOS
+.DS_Store

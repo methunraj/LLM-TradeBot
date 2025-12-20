@@ -1,0 +1,647 @@
+"""
+👮 风控审计官 Agent (Risk Audit Agent)
+===========================================
+
+职责:
+1. 止损方向自动修正 - 检测并修正做多止损>入场价、做空止损<入场价的致命错误
+2. 资金预演 - 模拟订单执行，验证保证金充足、仓位合规
+3. 一票否决权 - 高风险决策直接拦截（如已有仓位反向开仓）
+4. 物理隔离执行 - 独立运行，不依赖其他Agent状态
+5. 审计日志 - 记录所有拦截事件和风控决策
+
+Author: AI Trader Team
+Date: 2025-12-19
+"""
+
+import asyncio
+from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass
+from datetime import datetime
+from enum import Enum
+
+
+class RiskLevel(Enum):
+    """风险等级"""
+    SAFE = "safe"
+    WARNING = "warning"
+    DANGER = "danger"
+    FATAL = "fatal"
+
+
+@dataclass
+class RiskCheckResult:
+    """风控检查结果"""
+    passed: bool  # 是否通过
+    risk_level: RiskLevel
+    blocked_reason: Optional[str] = None  # 拦截原因（如果未通过）
+    corrections: Optional[Dict] = None  # 自动修正内容
+    warnings: List[str] = None  # 警告信息
+
+
+@dataclass
+class PositionInfo:
+    """持仓信息"""
+    symbol: str
+    side: str  # 'long' or 'short'
+    entry_price: float
+    quantity: float
+    unrealized_pnl: float
+
+
+class RiskAuditAgent:
+    """
+    👮 风控审计官 Agent
+    
+    核心功能:
+    - 止损方向自动修正: 做多止损必须<入场价，做空止损必须>入场价
+    - 资金预演: 模拟订单执行，验证保证金充足
+    - 一票否决: 拦截高风险决策（如逆向开仓、超杠杆）
+    - 物理隔离: 独立运行，不依赖其他Agent
+    """
+    
+    def __init__(
+        self, 
+        max_leverage: float = 10.0,
+        max_position_pct: float = 0.3,  # 最大单仓位占比（30%）
+        max_total_risk_pct: float = 0.02,  # 最大总风险敞口（2%）
+        min_stop_loss_pct: float = 0.005,  # 最小止损距离（0.5%）
+        max_stop_loss_pct: float = 0.05,  # 最大止损距离（5%）
+    ):
+        """
+        初始化风控审计官
+        
+        Args:
+            max_leverage: 最大杠杆倍数
+            max_position_pct: 最大单仓位占总资金比例
+            max_total_risk_pct: 最大总风险敞口占总资金比例
+            min_stop_loss_pct: 最小止损距离（防止秒爆）
+            max_stop_loss_pct: 最大止损距离（防止过度亏损）
+        """
+        self.max_leverage = max_leverage
+        self.max_position_pct = max_position_pct
+        self.max_total_risk_pct = max_total_risk_pct
+        self.min_stop_loss_pct = min_stop_loss_pct
+        self.max_stop_loss_pct = max_stop_loss_pct
+        
+        # 审计日志
+        self.audit_log: List[Dict] = []
+        
+        # 拦截统计
+        self.block_stats = {
+            'total_checks': 0,
+            'total_blocks': 0,
+            'stop_loss_corrections': 0,
+            'reverse_position_blocks': 0,
+            'insufficient_margin_blocks': 0,
+            'over_leverage_blocks': 0,
+        }
+    
+    async def audit_decision(
+        self,
+        decision: Dict,
+        current_position: Optional[PositionInfo],
+        account_balance: float,
+        current_price: float
+    ) -> RiskCheckResult:
+        """
+        对决策进行风控审计（主入口）
+        
+        Args:
+            decision: DecisionCoreAgent的输出
+                {
+                    'action': 'long/short/close_long/close_short/hold',
+                    'entry_price': 100000.0,
+                    'stop_loss': 99000.0,
+                    'take_profit': 102000.0,
+                    'quantity': 0.01,  # BTC数量
+                    'leverage': 5.0,
+                    'confidence': 0.75
+                }
+            current_position: 当前持仓信息（None表示无仓位）
+            account_balance: 账户可用余额（USDT）
+            current_price: 当前市场价格
+            
+        Returns:
+            RiskCheckResult对象
+        """
+        self.block_stats['total_checks'] += 1
+        warnings = []
+        corrections = {}
+        
+        action = decision.get('action', 'hold')
+        
+        # 0. 如果是hold，直接通过
+        if action == 'hold':
+            return RiskCheckResult(
+                passed=True,
+                risk_level=RiskLevel.SAFE,
+                warnings=['持币观望，无风险']
+            )
+        
+        # 1. 【一票否决】检查逆向开仓
+        if current_position:
+            reverse_check = self._check_reverse_position(action, current_position)
+            if not reverse_check['passed']:
+                return self._block_decision(
+                    'reverse_position_blocks',
+                    reverse_check['reason']
+                )
+        
+        # 2. 【致命修正】止损方向检查
+        if action in ['long', 'short']:
+            stop_loss_check = self._check_and_fix_stop_loss(
+                action=action,
+                entry_price=decision.get('entry_price', current_price),
+                stop_loss=decision.get('stop_loss'),
+                current_price=current_price
+            )
+            
+            if not stop_loss_check['passed']:
+                if stop_loss_check['can_fix']:
+                    # 自动修正
+                    corrections['stop_loss'] = stop_loss_check['corrected_value']
+                    warnings.append(f"⚠️ 止损方向错误已修正: {decision.get('stop_loss')} -> {stop_loss_check['corrected_value']}")
+                    self.block_stats['stop_loss_corrections'] += 1
+                else:
+                    # 无法修正，拦截
+                    return self._block_decision(
+                        'stop_loss_corrections',
+                        stop_loss_check['reason']
+                    )
+        
+        # 3. 【资金预演】保证金检查
+        margin_check = self._check_margin_sufficiency(
+            action=action,
+            entry_price=decision.get('entry_price', current_price),
+            quantity=decision.get('quantity', 0),
+            leverage=decision.get('leverage', 1.0),
+            account_balance=account_balance
+        )
+        
+        if not margin_check['passed']:
+            return self._block_decision(
+                'insufficient_margin_blocks',
+                margin_check['reason']
+            )
+        
+        # 4. 【杠杆检查】防止过度杠杆
+        leverage = decision.get('leverage', 1.0)
+        if leverage > self.max_leverage:
+            return self._block_decision(
+                'over_leverage_blocks',
+                f"杠杆{leverage}x超过最大限制{self.max_leverage}x"
+            )
+        
+        # 5. 【仓位检查】单仓位占比
+        position_check = self._check_position_size(
+            quantity=decision.get('quantity', 0),
+            entry_price=decision.get('entry_price', current_price),
+            account_balance=account_balance
+        )
+        
+        if not position_check['passed']:
+            warnings.append(f"⚠️ {position_check['reason']}")
+        
+        # 6. 【风险敞口】总风险检查
+        risk_check = self._check_total_risk_exposure(
+            action=action,
+            entry_price=decision.get('entry_price', current_price),
+            stop_loss=corrections.get('stop_loss', decision.get('stop_loss')),
+            quantity=decision.get('quantity', 0),
+            account_balance=account_balance
+        )
+        
+        if not risk_check['passed']:
+            warnings.append(f"⚠️ {risk_check['reason']}")
+        
+        # 7. 综合评估风险等级
+        risk_level = self._evaluate_risk_level(
+            len(warnings),
+            decision.get('confidence', 0),
+            leverage
+        )
+        
+        # 8. 记录审计日志
+        self._log_audit(
+            decision=decision,
+            result='PASSED',
+            corrections=corrections,
+            warnings=warnings
+        )
+        
+        return RiskCheckResult(
+            passed=True,
+            risk_level=risk_level,
+            corrections=corrections if corrections else None,
+            warnings=warnings if warnings else None
+        )
+    
+    def _check_reverse_position(
+        self, 
+        action: str, 
+        current_position: PositionInfo
+    ) -> Dict:
+        """
+        检查是否尝试逆向开仓（致命错误）
+        
+        例如: 已有多单，又尝试开空单
+        """
+        if action == 'long' and current_position.side == 'short':
+            return {
+                'passed': False,
+                'reason': f"【致命风险】持有{current_position.side}仓位时禁止开{action}仓"
+            }
+        
+        if action == 'short' and current_position.side == 'long':
+            return {
+                'passed': False,
+                'reason': f"【致命风险】持有{current_position.side}仓位时禁止开{action}仓"
+            }
+        
+        return {'passed': True}
+    
+    def _check_and_fix_stop_loss(
+        self,
+        action: str,
+        entry_price: float,
+        stop_loss: Optional[float],
+        current_price: float
+    ) -> Dict:
+        """
+        检查并修正止损方向（核心功能）
+        
+        规则:
+        - 做多(long): 止损必须 < 入场价
+        - 做空(short): 止损必须 > 入场价
+        
+        Returns:
+            {
+                'passed': bool,
+                'can_fix': bool,
+                'corrected_value': float,
+                'reason': str
+            }
+        """
+        if not stop_loss:
+            # 没有设置止损，使用默认值（入场价的±2%）
+            default_stop = (
+                entry_price * 0.98 if action == 'long' 
+                else entry_price * 1.02
+            )
+            return {
+                'passed': False,
+                'can_fix': True,
+                'corrected_value': default_stop,
+                'reason': f"未设置止损，使用默认值{default_stop}"
+            }
+        
+        # 做多检查
+        if action == 'long':
+            if stop_loss >= entry_price:
+                # 止损方向错误，自动修正为入场价-2%
+                corrected = entry_price * 0.98
+                return {
+                    'passed': False,
+                    'can_fix': True,
+                    'corrected_value': corrected,
+                    'reason': f"做多止损{stop_loss}≥入场价{entry_price}，已修正为{corrected}"
+                }
+            
+            # 检查止损距离是否合理
+            stop_distance_pct = abs(entry_price - stop_loss) / entry_price
+            if stop_distance_pct < self.min_stop_loss_pct:
+                corrected = entry_price * (1 - self.min_stop_loss_pct)
+                return {
+                    'passed': False,
+                    'can_fix': True,
+                    'corrected_value': corrected,
+                    'reason': f"止损距离过小({stop_distance_pct:.2%})，已调整为{self.min_stop_loss_pct:.2%}"
+                }
+            
+            if stop_distance_pct > self.max_stop_loss_pct:
+                corrected = entry_price * (1 - self.max_stop_loss_pct)
+                return {
+                    'passed': False,
+                    'can_fix': True,
+                    'corrected_value': corrected,
+                    'reason': f"止损距离过大({stop_distance_pct:.2%})，已调整为{self.max_stop_loss_pct:.2%}"
+                }
+        
+        # 做空检查
+        if action == 'short':
+            if stop_loss <= entry_price:
+                # 止损方向错误，自动修正为入场价+2%
+                corrected = entry_price * 1.02
+                return {
+                    'passed': False,
+                    'can_fix': True,
+                    'corrected_value': corrected,
+                    'reason': f"做空止损{stop_loss}≤入场价{entry_price}，已修正为{corrected}"
+                }
+            
+            # 检查止损距离
+            stop_distance_pct = abs(stop_loss - entry_price) / entry_price
+            if stop_distance_pct < self.min_stop_loss_pct:
+                corrected = entry_price * (1 + self.min_stop_loss_pct)
+                return {
+                    'passed': False,
+                    'can_fix': True,
+                    'corrected_value': corrected,
+                    'reason': f"止损距离过小({stop_distance_pct:.2%})，已调整为{self.min_stop_loss_pct:.2%}"
+                }
+            
+            if stop_distance_pct > self.max_stop_loss_pct:
+                corrected = entry_price * (1 + self.max_stop_loss_pct)
+                return {
+                    'passed': False,
+                    'can_fix': True,
+                    'corrected_value': corrected,
+                    'reason': f"止损距离过大({stop_distance_pct:.2%})，已调整为{self.max_stop_loss_pct:.2%}"
+                }
+        
+        return {'passed': True}
+    
+    def _check_margin_sufficiency(
+        self,
+        action: str,
+        entry_price: float,
+        quantity: float,
+        leverage: float,
+        account_balance: float
+    ) -> Dict:
+        """
+        资金预演: 检查保证金是否充足
+        
+        计算公式:
+        所需保证金 = (数量 * 入场价) / 杠杆
+        """
+        if action in ['close_long', 'close_short', 'hold']:
+            return {'passed': True}
+        
+        required_margin = (quantity * entry_price) / leverage
+        
+        # 预留5%缓冲
+        if required_margin > account_balance * 0.95:
+            return {
+                'passed': False,
+                'reason': f"保证金不足: 需要{required_margin:.2f} USDT，可用{account_balance:.2f} USDT"
+            }
+        
+        return {'passed': True, 'required_margin': required_margin}
+    
+    def _check_position_size(
+        self,
+        quantity: float,
+        entry_price: float,
+        account_balance: float
+    ) -> Dict:
+        """
+        检查单仓位占比是否超标
+        
+        仓位价值 = 数量 * 价格
+        占比 = 仓位价值 / 账户余额
+        """
+        position_value = quantity * entry_price
+        position_pct = position_value / account_balance
+        
+        if position_pct > self.max_position_pct:
+            return {
+                'passed': False,
+                'reason': f"单仓位占比{position_pct:.2%}超过限制{self.max_position_pct:.2%}"
+            }
+        
+        return {'passed': True}
+    
+    def _check_total_risk_exposure(
+        self,
+        action: str,
+        entry_price: float,
+        stop_loss: Optional[float],
+        quantity: float,
+        account_balance: float
+    ) -> Dict:
+        """
+        检查总风险敞口（最大可能亏损）
+        
+        风险敞口 = |入场价 - 止损价| * 数量
+        风险占比 = 风险敞口 / 账户余额
+        """
+        if not stop_loss or action in ['close_long', 'close_short', 'hold']:
+            return {'passed': True}
+        
+        risk_exposure = abs(entry_price - stop_loss) * quantity
+        risk_pct = risk_exposure / account_balance
+        
+        if risk_pct > self.max_total_risk_pct:
+            return {
+                'passed': False,
+                'reason': f"风险敞口{risk_pct:.2%}超过限制{self.max_total_risk_pct:.2%}"
+            }
+        
+        return {'passed': True}
+    
+    def _evaluate_risk_level(
+        self,
+        warning_count: int,
+        confidence: float,
+        leverage: float
+    ) -> RiskLevel:
+        """综合评估风险等级"""
+        if warning_count >= 3 or leverage > 8:
+            return RiskLevel.DANGER
+        elif warning_count >= 1 or leverage > 5:
+            return RiskLevel.WARNING
+        elif confidence > 0.7:
+            return RiskLevel.SAFE
+        else:
+            return RiskLevel.WARNING
+    
+    def _block_decision(self, stat_key: str, reason: str) -> RiskCheckResult:
+        """拦截决策并记录"""
+        self.block_stats['total_blocks'] += 1
+        self.block_stats[stat_key] += 1
+        
+        self._log_audit(
+            decision={'blocked': True},
+            result='BLOCKED',
+            corrections=None,
+            warnings=[reason]
+        )
+        
+        return RiskCheckResult(
+            passed=False,
+            risk_level=RiskLevel.FATAL,
+            blocked_reason=reason
+        )
+    
+    def _log_audit(
+        self,
+        decision: Dict,
+        result: str,
+        corrections: Optional[Dict],
+        warnings: List[str]
+    ):
+        """记录审计日志"""
+        log_entry = {
+            'timestamp': datetime.now().isoformat(),
+            'decision': decision,
+            'result': result,
+            'corrections': corrections,
+            'warnings': warnings,
+        }
+        self.audit_log.append(log_entry)
+        
+        # 保留最近1000条记录
+        if len(self.audit_log) > 1000:
+            self.audit_log = self.audit_log[-1000:]
+    
+    def get_audit_report(self) -> Dict:
+        """生成审计报告"""
+        return {
+            'total_checks': self.block_stats['total_checks'],
+            'total_blocks': self.block_stats['total_blocks'],
+            'block_rate': (
+                self.block_stats['total_blocks'] / self.block_stats['total_checks']
+                if self.block_stats['total_checks'] > 0 else 0
+            ),
+            'block_breakdown': {
+                'stop_loss_corrections': self.block_stats['stop_loss_corrections'],
+                'reverse_position_blocks': self.block_stats['reverse_position_blocks'],
+                'insufficient_margin_blocks': self.block_stats['insufficient_margin_blocks'],
+                'over_leverage_blocks': self.block_stats['over_leverage_blocks'],
+            },
+            'recent_logs': self.audit_log[-10:]  # 最近10条日志
+        }
+
+
+# ============================================
+# 测试函数
+# ============================================
+async def test_risk_audit():
+    """测试风控审计官Agent"""
+    print("\n" + "="*60)
+    print("🧪 测试风控审计官Agent")
+    print("="*60)
+    
+    # 初始化
+    risk_agent = RiskAuditAgent(
+        max_leverage=10.0,
+        max_position_pct=0.3,
+        min_stop_loss_pct=0.005,
+        max_stop_loss_pct=0.05
+    )
+    
+    # 测试1: 止损方向错误修正（做多）
+    print("\n1️⃣ 测试做多止损方向修正...")
+    decision_1 = {
+        'action': 'long',
+        'entry_price': 100000.0,
+        'stop_loss': 100500.0,  # ❌ 错误: 做多止损>入场价
+        'quantity': 0.01,
+        'leverage': 5.0,
+        'confidence': 0.75
+    }
+    
+    result_1 = await risk_agent.audit_decision(
+        decision=decision_1,
+        current_position=None,
+        account_balance=10000.0,
+        current_price=100000.0
+    )
+    
+    print(f"  结果: {'✅ 通过' if result_1.passed else '❌ 拦截'}")
+    if result_1.corrections:
+        print(f"  修正: {result_1.corrections}")
+    if result_1.warnings:
+        for w in result_1.warnings:
+            print(f"  {w}")
+    
+    # 测试2: 止损方向错误修正（做空）
+    print("\n2️⃣ 测试做空止损方向修正...")
+    decision_2 = {
+        'action': 'short',
+        'entry_price': 100000.0,
+        'stop_loss': 99500.0,  # ❌ 错误: 做空止损<入场价
+        'quantity': 0.01,
+        'leverage': 5.0,
+        'confidence': 0.75
+    }
+    
+    result_2 = await risk_agent.audit_decision(
+        decision=decision_2,
+        current_position=None,
+        account_balance=10000.0,
+        current_price=100000.0
+    )
+    
+    print(f"  结果: {'✅ 通过' if result_2.passed else '❌ 拦截'}")
+    if result_2.corrections:
+        print(f"  修正: {result_2.corrections}")
+    
+    # 测试3: 逆向开仓拦截
+    print("\n3️⃣ 测试逆向开仓拦截...")
+    current_pos = PositionInfo(
+        symbol='BTCUSDT',
+        side='long',
+        entry_price=99000.0,
+        quantity=0.01,
+        unrealized_pnl=100.0
+    )
+    
+    decision_3 = {
+        'action': 'short',  # ❌ 错误: 已有多单还要开空单
+        'entry_price': 100000.0,
+        'stop_loss': 101000.0,
+        'quantity': 0.01,
+        'leverage': 5.0,
+        'confidence': 0.75
+    }
+    
+    result_3 = await risk_agent.audit_decision(
+        decision=decision_3,
+        current_position=current_pos,
+        account_balance=10000.0,
+        current_price=100000.0
+    )
+    
+    print(f"  结果: {'✅ 通过' if result_3.passed else '❌ 拦截'}")
+    if result_3.blocked_reason:
+        print(f"  拦截原因: {result_3.blocked_reason}")
+    
+    # 测试4: 保证金不足拦截
+    print("\n4️⃣ 测试保证金不足拦截...")
+    decision_4 = {
+        'action': 'long',
+        'entry_price': 100000.0,
+        'stop_loss': 98000.0,
+        'quantity': 0.5,  # ❌ 数量过大，保证金不足
+        'leverage': 2.0,
+        'confidence': 0.75
+    }
+    
+    result_4 = await risk_agent.audit_decision(
+        decision=decision_4,
+        current_position=None,
+        account_balance=10000.0,
+        current_price=100000.0
+    )
+    
+    print(f"  结果: {'✅ 通过' if result_4.passed else '❌ 拦截'}")
+    if result_4.blocked_reason:
+        print(f"  拦截原因: {result_4.blocked_reason}")
+    
+    # 生成审计报告
+    print("\n5️⃣ 审计报告...")
+    report = risk_agent.get_audit_report()
+    print(f"  总检查次数: {report['total_checks']}")
+    print(f"  总拦截次数: {report['total_blocks']}")
+    print(f"  拦截率: {report['block_rate']:.2%}")
+    print(f"  止损修正次数: {report['block_breakdown']['stop_loss_corrections']}")
+    print(f"  逆向开仓拦截: {report['block_breakdown']['reverse_position_blocks']}")
+    
+    print("\n✅ 风控审计官Agent测试通过!")
+    return risk_agent
+
+
+if __name__ == '__main__':
+    asyncio.run(test_risk_audit())

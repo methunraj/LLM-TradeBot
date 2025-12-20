@@ -12,8 +12,7 @@ from src.features.builder import FeatureBuilder
 from src.strategy.deepseek_engine import StrategyEngine
 from src.risk.manager import RiskManager
 from src.execution.engine import ExecutionEngine
-from src.monitoring.logger import TradingLogger
-
+from src.utils.data_saver import DataSaver
 
 class AITrader:
     """AI交易主程序"""
@@ -37,6 +36,7 @@ class AITrader:
         self.risk_manager = RiskManager()
         self.execution_engine = ExecutionEngine(self.binance, self.risk_manager)
         self.trading_logger = TradingLogger()
+        self.saver = DataSaver()  # ✅ 初始化数据保存器
         
         # 交易配置
         self.symbol = config.trading.get('symbol', 'BTCUSDT')
@@ -75,6 +75,8 @@ class AITrader:
                 
                 # 2. 处理多周期K线
                 multi_timeframe_states = {}
+                primary_snapshot_id = "unknown"
+                
                 for tf in self.timeframes:
                     klines = self.binance.get_klines(self.symbol, tf, limit=200)
                     df = self.processor.process_klines(klines, self.symbol, tf)
@@ -82,6 +84,11 @@ class AITrader:
                     if not df.empty:
                         state = self.processor.get_market_state(df)
                         multi_timeframe_states[tf] = state
+                        
+                        # Capture snapshot_id from 5m or first available
+                        if tf == '5m' or primary_snapshot_id == "unknown":
+                             primary_snapshot_id = state.get('snapshot_id', "unknown")
+                             
                         log.info(f"{tf} 趋势: {state.get('trend')}, RSI: {state.get('rsi')}")
                 
                 # 3. 构建特征
@@ -93,12 +100,21 @@ class AITrader:
                     position_info=position_info
                 )
                 
+                # ✅ Save Step 4: Context
+                self.saver.save_step4_context(market_context, self.symbol, 'mixed', primary_snapshot_id)
+                
                 # 格式化为文本
                 context_text = self.feature_builder.format_for_llm(market_context)
+                
+                # ✅ Save Step 5: Prompt
+                self.saver.save_step5_markdown(context_text, self.symbol, 'mixed', primary_snapshot_id)
                 
                 # 4. LLM决策
                 log.info("调用DeepSeek进行决策...")
                 decision = self.strategy_engine.make_decision(context_text, market_context)
+                
+                # ✅ Save Step 6: Decision
+                self.saver.save_step6_decision(decision, self.symbol, 'mixed', primary_snapshot_id)
                 
                 # 验证决策格式
                 if not self.strategy_engine.validate_decision(decision):
@@ -141,6 +157,9 @@ class AITrader:
                         position_info,
                         current_price
                     )
+                    
+                    # ✅ Save Step 7: Execution
+                    self.saver.save_step7_execution(execution_result, self.symbol, 'mixed')
                     
                     # 记录执行结果
                     self.trading_logger.log_execution(execution_result)
