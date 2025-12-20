@@ -410,7 +410,9 @@ class MarketDataProcessor:
 
         # 只对小 gap 进行线性时间插值（limit=allowed_gap_bars）
         # 使用 method='time' 要求 DatetimeIndex
-        df_re.interpolate(method='time', limit=allowed_gap_bars, inplace=True)
+        # Fix: Ensure numeric types for interpolation to avoid FutureWarning
+        cols_to_interpolate = df_re.select_dtypes(include=[np.number]).columns
+        df_re[cols_to_interpolate] = df_re[cols_to_interpolate].interpolate(method='time', limit=allowed_gap_bars)
 
         # 标记插值成功的行（原本是NaN，现在有值）
         imputed_mask = orig_na.astype(bool) & df_re['close'].notna().astype(bool)

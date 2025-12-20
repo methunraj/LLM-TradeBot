@@ -133,7 +133,12 @@ class TrendSubAgent:
         return {
             'score': score,
             'details': details,
-            'confidence': abs(score)  # 得分越极端，置信度越高
+            'confidence': abs(score),
+            'total_trend_score': score,
+            # Granular scores for DecisionCoreAgent
+            'trend_1h_score': trend_1h_score if 'trend_1h_score' in locals() else 0,
+            'trend_15m_score': trend_15m_score if 'trend_15m_score' in locals() else 0,
+            'trend_5m_score': live_correction if 'live_correction' in locals() else 0
         }
 
 
@@ -234,7 +239,14 @@ class OscillatorSubAgent:
             'score': score,
             'details': details,
             'confidence': abs(score),
-            'total_oscillator_score': score # Add this for new integration
+            'total_oscillator_score': score,
+            # Granular scores for DecisionCoreAgent
+            'osc_1h_score': score - rsi_score if 'rsi_score' in locals() else 0, # Approximation for 1h part? 
+            # Wait, rsi_score is 5m score. 1h logic modifies 'score' directly (-= 20).
+            # Let's be precise:
+            'osc_5m_score': rsi_score if 'rsi_score' in locals() else 0,
+            'osc_1h_score': score - (rsi_score if 'rsi_score' in locals() else 0), # The rest is 1h score
+            'osc_15m_score': 0 # No 15m logic yet
         }
 
 
@@ -366,7 +378,7 @@ class QuantAnalystAgent:
     async def analyze(self, snapshot: MarketSnapshot) -> Dict:
         """兼容性接口，返回综合分析内容"""
         result = await self.analyze_all_timeframes(snapshot)
-        return result['comprehensive']
+        return result # Return full report for DecisionCoreAgent access to granular data
 
     def _calculate_volatility(self, snapshot: MarketSnapshot) -> float:
         """

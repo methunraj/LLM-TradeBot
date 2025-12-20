@@ -95,14 +95,20 @@ class DecisionCoreAgent:
             VoteResult对象
         """
         # 1. 提取各信号分数
+        # 1. 提取各信号分数
+        # Fix: Read from granular scores provided by QuantAnalystAgent
+        trend_data = quant_analysis.get('trend', {})
+        osc_data = quant_analysis.get('oscillator', {})
+        sentiment_data = quant_analysis.get('sentiment', {})
+        
         scores = {
-            'trend_5m': quant_analysis.get('trend_5m', {}).get('score', 0),
-            'trend_15m': quant_analysis.get('trend_15m', {}).get('score', 0),
-            'trend_1h': quant_analysis.get('trend_1h', {}).get('score', 0),
-            'oscillator_5m': quant_analysis.get('oscillator_5m', {}).get('score', 0),
-            'oscillator_15m': quant_analysis.get('oscillator_15m', {}).get('score', 0),
-            'oscillator_1h': quant_analysis.get('oscillator_1h', {}).get('score', 0),
-            'sentiment': quant_analysis.get('comprehensive', {}).get('details', {}).get('sentiment', {}).get('total_sentiment_score', 0)
+            'trend_5m': trend_data.get('trend_5m_score', 0),
+            'trend_15m': trend_data.get('trend_15m_score', 0),
+            'trend_1h': trend_data.get('trend_1h_score', 0),
+            'oscillator_5m': osc_data.get('osc_5m_score', 0),
+            'oscillator_15m': osc_data.get('osc_15m_score', 0),
+            'oscillator_1h': osc_data.get('osc_1h_score', 0),
+            'sentiment': sentiment_data.get('total_sentiment_score', 0)
         }
         
         # 2. 市场状态与位置分析
