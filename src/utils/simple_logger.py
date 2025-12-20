@@ -10,7 +10,7 @@ class SimpleLogger:
     """简化的日志记录器 - 只输出关键信息"""
     
     def __init__(self):
-        self.logger = logging.getLogger('ai_trader')
+        self.logger = logging.getLogger('llm_tradebot')
         self.logger.setLevel(logging.INFO)
         
         # 静默的模式列表
