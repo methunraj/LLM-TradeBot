@@ -139,18 +139,19 @@ class MultiAgentTradingBot:
             }
         """
         print(f"\n{'='*80}")
-        print(f"🔄 交易循环 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"🔄 启动交易审计循环 | {datetime.now().strftime('%H:%M:%S')} | {self.symbol}")
         print(f"{'='*80}")
         
         try:
             # ✅ Generate snapshot_id for this cycle
             snapshot_id = f"snap_{int(time.time())}"
 
-            # Step 1: 异步数据采集
-            print("\n[Step 1/5] 🕵️ DataSyncAgent - 异步数据采集...")
+            # Step 1: 采样 - 数据先知 (The Oracle)
+            print("\n[Step 1/4] 🕵️ 数据先知 (The Oracle) - 异步数据采集...")
             market_snapshot = await self.data_sync_agent.fetch_all_timeframes(self.symbol)
             
             # ✅ Save Market Data & Process Indicators
+            processed_dfs = {}
             for tf in ['5m', '15m', '1h']:
                 raw_klines = getattr(market_snapshot, f'raw_{tf}')
                 # 保存原始数据
@@ -163,25 +164,33 @@ class MultiAgentTradingBot:
                 # 提取并保存特征 (Extract features)
                 features_df = self.processor.extract_feature_snapshot(df_with_indicators)
                 self.saver.save_features(features_df, self.symbol, tf, snapshot_id)
+                
+                # 存入字典供后续步骤复用
+                processed_dfs[tf] = df_with_indicators
+                
+            # ✅ 重要优化：更新快照中的 DataFrame，使其携带技术指标
+            # 这样 QuantAnalystAgent 内部就不需要再次计算指标了
+            market_snapshot.stable_5m = processed_dfs['5m']
+            market_snapshot.stable_15m = processed_dfs['15m']
+            market_snapshot.stable_1h = processed_dfs['1h']
             
             current_price = market_snapshot.live_5m.get('close')
-            print(f"  ✅ 当前价格: ${current_price:,.2f}")
-            print(f"  ✅ 数据时间: {market_snapshot.timestamp}")
+            print(f"  ✅ 采样完毕: ${current_price:,.2f} ({market_snapshot.timestamp.strftime('%H:%M:%S')})")
             
-            # Step 2: 量化分析
-            print("\n[Step 2/5] 👨‍🔬 QuantAnalystAgent - 量化分析...")
+            # Step 2: 假设 - 量化策略师 (The Strategist)
+            print("[Step 2/4] 👨‍🔬 量化策略师 (The Strategist) - 评估数据中...")
             quant_analysis = await self.quant_analyst.analyze_all_timeframes(market_snapshot)
             
             # ✅ Save Quant Analysis (Analytics)
             self.saver.save_context(quant_analysis, self.symbol, 'analytics', snapshot_id)
             
-            # Step 3: 决策中枢
-            print("\n[Step 3/5] ⚖️ DecisionCoreAgent - 加权投票决策...")
-            # 准备增强市场数据
+            # Step 3: 对抗 - 对抗评论员 (The Critic)
+            print("[Step 3/4] ⚖️ 对抗评论员 (The Critic) - 极速审理信号...")
+            # ✅ 复用 Step 1 已处理的数据，避免第三次计算
             market_data = {
-                'df_5m': df_with_indicators if tf == '5m' else self.processor.process_klines(market_snapshot.raw_5m, self.symbol, '5m'),
-                'df_15m': self.processor.process_klines(market_snapshot.raw_15m, self.symbol, '15m'),
-                'df_1h': self.processor.process_klines(market_snapshot.raw_1h, self.symbol, '1h'),
+                'df_5m': processed_dfs['5m'],
+                'df_15m': processed_dfs['15m'],
+                'df_1h': processed_dfs['1h'],
                 'current_price': current_price
             }
             
@@ -217,37 +226,27 @@ class MultiAgentTradingBot:
                     }
                 }
             
-            # Step 4: 构建订单
-            print(f"\n[Step 4/5] 📝 构建订单参数...")
+            # Step 4: 审计 - 风控守护者 (The Guardian)
+            print(f"[Step 4/4] 👮 风控守护者 (The Guardian) - 进行终审...")
             order_params = self._build_order_params(
                 action=vote_result.action,
                 current_price=current_price,
                 confidence=vote_result.confidence
             )
             
-            print(f"  ✅ 决策动作: {vote_result.action}")
-            print(f"  ✅ 置信度: {vote_result.confidence:.1f}%")
-            print(f"  ✅ 加权得分: {vote_result.weighted_score:.1f}")
-            print(f"  ✅ 周期对齐: {'是' if vote_result.multi_period_aligned else '否'}")
-            print(f"  ✅ 决策原因: {vote_result.reason}")
+            print(f"  ✅ 信号方向: {vote_result.action}")
+            print(f"  ✅ 综合信心: {vote_result.confidence:.1f}%")
             if vote_result.regime:
-                print(f"  📊 市场状态: {vote_result.regime['regime']} (ADX: {vote_result.regime['adx']:.1f})")
+                print(f"  📊 市场状态: {vote_result.regime['regime']}")
             if vote_result.position:
                 print(f"  📍 价格位置: {vote_result.position['position_pct']:.1f}% ({vote_result.position['location']})")
-            print(f"  ✅ 动作: {order_params['action']}")
-            print(f"  ✅ 入场价: ${order_params['entry_price']:,.2f}")
-            print(f"  ✅ 止损价: ${order_params['stop_loss']:,.2f}")
-            print(f"  ✅ 止盈价: ${order_params['take_profit']:,.2f}")
-            print(f"  ✅ 数量: {order_params['quantity']:.4f} {self.symbol.replace('USDT', '')}")
-            print(f"  ✅ 杠杆: {order_params['leverage']}x")
             
             # 将对抗式上下文注入订单参数，以便风控审计使用
             order_params['regime'] = vote_result.regime
             order_params['position'] = vote_result.position
             order_params['confidence'] = vote_result.confidence
             
-            # Step 5: 风控审计
-            print(f"\n[Step 5/5] 👮 RiskAuditAgent - 风控审计...")
+            # Step 5 (Embedded in Step 4 for clean output)
             
             # 获取账户信息
             account_balance = self._get_account_balance()
@@ -317,6 +316,19 @@ class MultiAgentTradingBot:
                     'timestamp': datetime.now().isoformat()
                 }, self.symbol)
                 
+                # ✅ Save Trade in persistent history
+                self.saver.save_trade({
+                    'action': order_params['action'].upper(),
+                    'symbol': self.symbol,
+                    'price': current_price,
+                    'quantity': order_params['quantity'],
+                    'cost': current_price * order_params['quantity'],
+                    'exit_price': 0,
+                    'pnl': 0,
+                    'confidence': order_params['confidence'],
+                    'status': 'SIMULATED'
+                })
+                
                 return {
                     'status': 'success',
                     'action': vote_result.action,
@@ -354,6 +366,30 @@ class MultiAgentTradingBot:
                     market_state=market_snapshot.live_5m,
                     account_info={'available_balance': account_balance}
                 )
+                
+                # 计算盈亏 (如果是平仓)
+                pnl = 0.0
+                exit_price = 0.0
+                entry_price = order_params['entry_price']
+                if order_params['action'] == 'close_position' and current_position:
+                    exit_price = current_price
+                    entry_price = current_position.entry_price
+                    # PnL = (Exit - Entry) * Qty (Multiplied by 1 if long, -1 if short)
+                    direction = 1 if current_position.side == 'long' else -1
+                    pnl = (exit_price - entry_price) * current_position.quantity * direction
+                
+                # ✅ Save Trade in persistent history
+                self.saver.save_trade({
+                    'action': order_params['action'].upper(),
+                    'symbol': self.symbol,
+                    'price': entry_price,
+                    'quantity': order_params['quantity'],
+                    'cost': entry_price * order_params['quantity'],
+                    'exit_price': exit_price,
+                    'pnl': pnl,
+                    'confidence': order_params['confidence'],
+                    'status': 'EXECUTED'
+                })
                 
                 return {
                     'status': 'success',
@@ -420,14 +456,7 @@ class MultiAgentTradingBot:
     def _get_account_balance(self) -> float:
         """获取账户可用余额"""
         try:
-            balance_info = self.client.get_futures_balance()
-            usdt_balance = next(
-                (b for b in balance_info if b['asset'] == 'USDT'),
-                None
-            )
-            if usdt_balance:
-                return float(usdt_balance['availableBalance'])
-            return 0.0
+            return self.client.get_account_balance()
         except Exception as e:
             log.error(f"获取余额失败: {e}")
             return 0.0
@@ -435,18 +464,15 @@ class MultiAgentTradingBot:
     def _get_current_position(self) -> Optional[PositionInfo]:
         """获取当前持仓"""
         try:
-            positions = self.client.get_futures_positions()
-            for pos in positions:
-                if pos['symbol'] == self.symbol:
-                    amt = float(pos['positionAmt'])
-                    if abs(amt) > 0:
-                        return PositionInfo(
-                            symbol=self.symbol,
-                            side='long' if amt > 0 else 'short',
-                            entry_price=float(pos['entryPrice']),
-                            quantity=abs(amt),
-                            unrealized_pnl=float(pos['unRealizedProfit'])
-                        )
+            pos = self.client.get_futures_position(self.symbol)
+            if pos and abs(pos['position_amt']) > 0:
+                return PositionInfo(
+                    symbol=self.symbol,
+                    side='long' if pos['position_amt'] > 0 else 'short',
+                    entry_price=pos['entry_price'],
+                    quantity=abs(pos['position_amt']),
+                    unrealized_pnl=pos['unrealized_profit']
+                )
             return None
         except Exception as e:
             log.error(f"获取持仓失败: {e}")
@@ -496,7 +522,40 @@ class MultiAgentTradingBot:
     
     def run_once(self) -> Dict:
         """运行一次交易循环（同步包装）"""
-        return asyncio.run(self.run_trading_cycle())
+        result = asyncio.run(self.run_trading_cycle())
+        self._display_recent_trades()
+        return result
+
+    def _display_recent_trades(self):
+        """显示最近的交易记录 (增强版表格)"""
+        trades = self.saver.get_recent_trades(limit=10)
+        if not trades:
+            return
+            
+        print("\n" + "─"*100)
+        print("📜 最近 10 次成交审计 (The Executor History)")
+        print("─"*100)
+        header = f"{'时间':<12} | {'币种':<8} | {'方向':<10} | {'成交价':<10} | {'成本':<10} | {'卖出价':<10} | {'盈亏':<10} | {'状态'}"
+        print(header)
+        print("─"*100)
+        
+        for t in trades:
+            # 简化时间
+            fmt_time = str(t.get('record_time', 'N/A'))[5:16]
+            symbol = t.get('symbol', 'BTC')[:7]
+            action = t.get('action', 'N/A')
+            price = f"${float(t.get('price', 0)):,.1f}"
+            cost = f"${float(t.get('cost', 0)):,.1f}"
+            exit_p = f"${float(t.get('exit_price', 0)):,.1f}" if float(t.get('exit_price', 0)) > 0 else "-"
+            
+            pnl_val = float(t.get('pnl', 0))
+            pnl_str = f"{'+' if pnl_val > 0 else ''}${pnl_val:,.2f}" if pnl_val != 0 else "-"
+            
+            status = t.get('status', 'N/A')
+            
+            row = f"{fmt_time:<12} | {symbol:<8} | {action:<10} | {price:<10} | {cost:<10} | {exit_p:<10} | {pnl_str:<10} | {status}"
+            print(row)
+        print("─"*100)
     
     def run_continuous(self, interval_minutes: int = 5):
         """

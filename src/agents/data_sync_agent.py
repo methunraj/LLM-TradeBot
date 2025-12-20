@@ -1,5 +1,5 @@
 """
-数据同步官 Agent (Data Sync Agent)
+数据先知 (The Oracle) Agent
 
 职责：
 1. 异步并发请求多周期K线数据
@@ -54,7 +54,7 @@ class MarketSnapshot:
 
 class DataSyncAgent:
     """
-    数据同步官
+    数据先知 (The Oracle)
     
     核心优化：
     1. 异步并发请求（asyncio.gather）
@@ -71,7 +71,7 @@ class DataSyncAgent:
         """
         self.client = client or BinanceClient()
         self.last_snapshot = None
-        log.info("🕵️ 数据同步官初始化完成")
+        log.info("🕵️ 数据先知 (The Oracle) 初始化完成")
     
     async def fetch_all_timeframes(
         self,
@@ -90,7 +90,7 @@ class DataSyncAgent:
         """
         start_time = datetime.now()
         
-        log.info(f"📊 开始并发获取 {symbol} 数据...")
+        log.oracle(f"📊 开始并发获取 {symbol} 数据...")
         
         # 并发请求（关键优化：节省60% IO时间）
         loop = asyncio.get_event_loop()
@@ -117,7 +117,7 @@ class DataSyncAgent:
         k5m, k15m, k1h = await asyncio.gather(*tasks)
         
         fetch_duration = (datetime.now() - start_time).total_seconds()
-        log.info(f"✅ 数据获取完成，耗时: {fetch_duration:.2f}秒")
+        log.oracle(f"✅ 数据获取完成，耗时: {fetch_duration:.2f}秒")
         
         # 拆分双视图
         snapshot = MarketSnapshot(
@@ -220,7 +220,7 @@ class DataSyncAgent:
                 )
                 return False
             
-            log.info("✅ 时间对齐验证通过")
+            log.oracle("✅ 时间对齐验证通过")
             return True
             
         except Exception as e:
@@ -229,12 +229,12 @@ class DataSyncAgent:
     
     def _log_snapshot_info(self, snapshot: MarketSnapshot):
         """记录快照信息"""
-        log.info(f"📸 快照信息:")
-        log.info(f"  - 5m:  {len(snapshot.stable_5m)} 已完成 + 1 实时")
-        log.info(f"  - 15m: {len(snapshot.stable_15m)} 已完成 + 1 实时")
-        log.info(f"  - 1h:  {len(snapshot.stable_1h)} 已完成 + 1 实时")
-        log.info(f"  - 时间对齐: {'✅' if snapshot.alignment_ok else '❌'}")
-        log.info(f"  - 获取耗时: {snapshot.fetch_duration:.2f}秒")
+        log.oracle(f"📸 快照信息:")
+        log.oracle(f"  - 5m:  {len(snapshot.stable_5m)} 已完成 + 1 实时")
+        log.oracle(f"  - 15m: {len(snapshot.stable_15m)} 已完成 + 1 实时")
+        log.oracle(f"  - 1h:  {len(snapshot.stable_1h)} 已完成 + 1 实时")
+        log.oracle(f"  - 时间对齐: {'✅' if snapshot.alignment_ok else '❌'}")
+        log.oracle(f"  - 获取耗时: {snapshot.fetch_duration:.2f}秒")
         
         # 记录实时价格
         if snapshot.live_5m:

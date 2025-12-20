@@ -12,41 +12,39 @@ from src.utils.logger import log
 class DataSaver:
     """数据保存工具类 - 按业务领域和日期自动组织文件
     
-    目录结构 (Multi-Agent Architecture):
+    目录结构 (Adversarial Intelligence Framework - AIF):
     data/
-      market_data/       (原 step1)
-      indicators/        (原 step2)
-      features/          (原 step3)
-      agent_context/     (原 step4)
-      llm_logs/          (原 step5)
-      decisions/         (原 step6)
-      executions/        (原 step7)
-      backtest/          (原 step8)
+      the_oracle/        (数据先知 - DataSync)
+      the_strategist/    (量化策略师 - QuantAnalyst)
+      the_critic/        (对抗评论员 - DecisionCore)
+      the_guardian/      (风控守护者 - RiskAudit)
+      the_executor/      (执行指挥官 - ExecutionEngine)
     """
     
     def __init__(self, base_dir: str = 'data'):
         self.base_dir = base_dir
         
-        # 定义业务目录映射 (Advanced Multi-Agent Hierarchy)
+        # 定义业务目录映射 (Unified AIF Hierarchy)
         self.dirs = {
-            # 1. 数据同步层
-            'market_data': os.path.join(base_dir, 'data_sync_agent', 'market_data'),
+            # 1. 采样层 - 数据先知 (The Oracle)
+            'market_data': os.path.join(base_dir, 'the_oracle', 'market_data'),
             
-            # 2. 量化分析层
-            'indicators': os.path.join(base_dir, 'quant_analyst_agent', 'indicators'),
-            'features': os.path.join(base_dir, 'quant_analyst_agent', 'features'),
-            'analytics': os.path.join(base_dir, 'quant_analyst_agent', 'analytics'),
+            # 2. 假设层 - 量化策略师 (The Strategist)
+            'indicators': os.path.join(base_dir, 'the_strategist', 'indicators'),
+            'features': os.path.join(base_dir, 'the_strategist', 'features'),
+            'analytics': os.path.join(base_dir, 'the_strategist', 'analytics'),
             
-            # 3. 决策中心层
-            'llm_logs': os.path.join(base_dir, 'decision_core_agent', 'llm_logs'),
-            'decisions': os.path.join(base_dir, 'decision_core_agent', 'decisions'),
+            # 3. 对抗层 - 对抗评论员 (The Critic)
+            'llm_logs': os.path.join(base_dir, 'the_critic', 'llm_logs'),
+            'decisions': os.path.join(base_dir, 'the_critic', 'decisions'),
             
-            # 4. 风控审计层
-            'risk_audits': os.path.join(base_dir, 'risk_audit_agent', 'audits'),
+            # 4. 审计层 - 风控守护者 (The Guardian)
+            'risk_audits': os.path.join(base_dir, 'the_guardian', 'audits'),
             
-            # 5. 交易执行层
-            'orders': os.path.join(base_dir, 'execution_engine', 'orders'),
-            'backtest': os.path.join(base_dir, 'execution_engine', 'backtest')
+            # 5. 执行层 - 执行指挥官 (The Executor)
+            'orders': os.path.join(base_dir, 'the_executor', 'orders'),
+            'trades': os.path.join(base_dir, 'the_executor', 'trades'),
+            'backtest': os.path.join(base_dir, 'the_executor', 'backtests')
         }
         
         # 兼容旧路径映射 (Alias for legacy methods)
@@ -276,3 +274,55 @@ class DataSaver:
     save_step5_markdown = save_llm_log
     save_step6_decision = save_decision
     save_step7_execution = save_execution
+
+    # --- 交易历史记录扩展 ---
+    TRADE_COLUMNS = [
+        'record_time', 'action', 'symbol', 'price', 'quantity', 
+        'cost', 'exit_price', 'pnl', 'confidence', 'status'
+    ]
+
+    def save_trade(self, trade_data: Dict):
+        """保存交易记录（持久化追加至单一CSV，标准化 Schema）"""
+        try:
+            category = 'trades'
+            base_path = self.dirs.get(category)
+            if not os.path.exists(base_path):
+                os.makedirs(base_path, exist_ok=True)
+            
+            file_path = os.path.join(base_path, 'all_trades.csv')
+            
+            # 1. 完善基础字段
+            trade_data['record_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            
+            # 2. 补全缺失字段 (Schema 稳定性)
+            for col in self.TRADE_COLUMNS:
+                if col not in trade_data:
+                    trade_data[col] = 0.0 if col in ['cost', 'pnl', 'exit_price', 'price', 'quantity'] else 'N/A'
+            
+            # 3. 按标准顺序转换为 DataFrame
+            df = pd.DataFrame([{col: trade_data[col] for col in self.TRADE_COLUMNS}])
+            
+            # 4. 保存
+            if os.path.exists(file_path):
+                df.to_csv(file_path, mode='a', header=False, index=False)
+            else:
+                df.to_csv(file_path, mode='w', header=True, index=False)
+            
+            log.debug(f"交易记录已保存 (标准化): {file_path}")
+        except Exception as e:
+            log.error(f"保存标准化交易记录失败: {e}")
+
+    def get_recent_trades(self, limit: int = 10) -> List[Dict]:
+        """获取最近的交易记录"""
+        try:
+            file_path = os.path.join(self.dirs.get('trades'), 'all_trades.csv')
+            if not os.path.exists(file_path):
+                return []
+            
+            df = pd.read_csv(file_path)
+            # 获取最后N条并按时间反序（或者保持原序由展示层决定）
+            recent = df.tail(limit).to_dict('records')
+            return recent
+        except Exception as e:
+            log.error(f"获取最近交易记录失败: {e}")
+            return []

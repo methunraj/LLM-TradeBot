@@ -79,21 +79,43 @@ class ColoredLogger:
             f"<bold><{color}>{'=' * 60}</{color}></bold>\n"
         )
     
-    def market_data(self, message: str):
-        """记录市场数据（蓝色）"""
-        self._logger.opt(colors=True).info(f"<blue>📈 {message}</blue>")
-    
-    def trade_execution(self, message: str, success: bool = True):
-        """记录交易执行（成功浅绿色/失败浅红色）"""
-        color = 'light-green' if success else 'light-red'
-        icon = '✅' if success else '❌'
-        self._logger.opt(colors=True).info(f"<bold><{color}>{icon} {message}</{color}></bold>")
-    
     def risk_alert(self, message: str):
         """记录风险警报（浅红色）"""
         self._logger.opt(colors=True).warning(
             f"<bold><light-red>⚠️  风险警报: {message}</light-red></bold>"
         )
+    
+    # === AIF 语义化日志方法 (Adversarial Intelligence Framework) ===
+    
+    def oracle(self, message: str):
+        """[THE ORACLE] 记录数据采样日志 (蓝色)"""
+        self._logger.opt(colors=True).info(f"<blue>🕵️ [Oracle] {message}</blue>")
+        
+    def strategist(self, message: str):
+        """[THE STRATEGIST] 记录策略假设日志 (紫色)"""
+        self._logger.opt(colors=True).info(f"<magenta>👨‍🔬 [Strategist] {message}</magenta>")
+        
+    def critic(self, message: str, challenge: bool = False):
+        """[THE CRITIC] 记录对抗审计日志 (橙色)"""
+        icon = "⚖️" if not challenge else "⚔️"
+        color = "yellow" if not challenge else "red"
+        self._logger.opt(colors=True).info(f"<{color}>{icon} [Critic] {message}</{color}>")
+        
+    def guardian(self, message: str, blocked: bool = False):
+        """[THE GUARDIAN] 记录风控审计日志 (绿色/红色)"""
+        icon = "👮" if not blocked else "🚫"
+        color = "green" if not blocked else "light-red"
+        self._logger.opt(colors=True).info(f"<{color}>{icon} [Guardian] {message}</{color}>")
+        
+    def executor(self, message: str, success: bool = True):
+        """[THE EXECUTOR] 记录执行指挥日志 (高亮)"""
+        icon = "🚀" if success else "❌"
+        color = "light-green" if success else "light-red"
+        self._logger.opt(colors=True).info(f"<bold><{color}>{icon} [Executor] {message}</{color}></bold>")
+
+    # 兼容性别名 (Alias for consistency)
+    market_data = oracle
+    trade_execution = executor
 
 
 def setup_logger():

@@ -1,5 +1,5 @@
 """
-交易执行引擎
+执行指挥官 (The Executor) 模块
 """
 from typing import Dict, Optional, List
 from src.api.binance_client import BinanceClient
@@ -10,13 +10,15 @@ import time
 
 
 class ExecutionEngine:
-    """交易执行引擎"""
+    """
+    执行指挥官 (The Executor)
+"""
     
     def __init__(self, binance_client: BinanceClient, risk_manager: RiskManager):
         self.client = binance_client
         self.risk_manager = risk_manager
         
-        log.info("交易执行引擎初始化完成")
+        log.info("🚀 执行指挥官 (The Executor) 初始化完成")
     
     def execute_decision(
         self,
@@ -99,9 +101,9 @@ class ExecutionEngine:
                 symbol=symbol,
                 leverage=decision['leverage']
             )
-            log.info(f"杠杆已设置为 {decision['leverage']}x")
+            log.executor(f"杠杆已设置为 {decision['leverage']}x")
         except Exception as e:
-            log.warning(f"设置杠杆失败: {e}")
+            log.executor(f"设置杠杆失败: {e}", success=False)
         
         # 下市价买单（开多仓）
         order = self.client.place_market_order(
@@ -134,7 +136,7 @@ class ExecutionEngine:
             position_side='LONG'  # 明确指定多仓
         )
         
-        log.info(f"开多仓成功: {quantity} {symbol} @ {entry_price}")
+        log.executor(f"开多仓成功: {quantity} {symbol} @ {entry_price}")
         
         return {
             'success': True,
@@ -166,7 +168,7 @@ class ExecutionEngine:
                 leverage=decision['leverage']
             )
         except Exception as e:
-            log.warning(f"设置杠杆失败: {e}")
+            log.executor(f"设置杠杆失败: {e}", success=False)
         
         # 下市价卖单（开空仓）
         order = self.client.place_market_order(
@@ -197,7 +199,7 @@ class ExecutionEngine:
             position_side='SHORT'  # 明确指定空仓
         )
         
-        log.info(f"开空仓成功: {quantity} {symbol} @ {entry_price}")
+        log.executor(f"开空仓成功: {quantity} {symbol} @ {entry_price}")
         
         return {
             'success': True,
@@ -231,6 +233,8 @@ class ExecutionEngine:
         side = 'SELL' if position_amt > 0 else 'BUY'
         quantity = abs(position_amt)
         
+        log.executor(f"开始执行平仓: {side} {quantity} {symbol}")
+        
         order = self.client.place_market_order(
             symbol=symbol,
             side=side,
@@ -238,7 +242,7 @@ class ExecutionEngine:
             reduce_only=True
         )
         
-        log.info(f"平仓成功: {quantity} {symbol}")
+        log.executor(f"平仓成功: {quantity} {symbol}")
         
         return {
             'success': True,
@@ -295,7 +299,7 @@ class ExecutionEngine:
             reduce_only=True
         )
         
-        log.info(f"减仓成功: {reduce_qty} {symbol}")
+        log.executor(f"减仓成功: {reduce_qty} {symbol}")
         
         return {
             'success': True,

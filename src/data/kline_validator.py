@@ -64,7 +64,7 @@ class KlineValidator:
         n_original = len(klines)
         
         # 1. 检测所有问题
-        log.info(f"[{symbol}] 开始验证 {n_original} 根K线...")
+        log.debug(f"[{symbol}] 开始验证 {n_original} 根K线...")
         
         issues = []
         issues.extend(self._check_basic_validity(klines, symbol))
@@ -112,7 +112,7 @@ class KlineValidator:
             for issue in issues[:3]:
                 log.warning(f"  详情: {issue}")
         else:
-            log.info(f"[{symbol}] ✅ 数据验证通过，无问题发现")
+            log.debug(f"[{symbol}] ✅ 数据验证通过，无问题发现")
         
         return cleaned_klines, report
     

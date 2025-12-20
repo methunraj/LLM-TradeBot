@@ -1,5 +1,5 @@
 """
-量化分析师 Agent (Quant Analyst Agent)
+量化策略师 (The Strategist) Agent
 
 职责：
 1. 趋势分析员：基于EMA/MACD计算趋势得分
@@ -239,7 +239,7 @@ class OscillatorSubAgent:
 
 class QuantAnalystAgent:
     """
-    量化分析师（协调者）
+    量化策略师 (The Strategist)
     
     职责：协调趋势分析员和震荡分析员
     输出：综合分析报告
@@ -248,7 +248,7 @@ class QuantAnalystAgent:
     def __init__(self):
         self.trend_agent = TrendSubAgent()
         self.osc_agent = OscillatorSubAgent()
-        log.info("👨‍🔬 量化分析师初始化完成")
+        log.info("👨‍🔬 量化策略师 (The Strategist) 初始化完成")
     
     async def analyze_all_timeframes(self, snapshot: MarketSnapshot) -> Dict:
         """
@@ -346,15 +346,15 @@ class QuantAnalystAgent:
         Returns:
             综合分析结果
         """
-        log.info("📊 开始量化分析...")
+        log.strategist("📊 开始量化分析...")
         
         # 1. 趋势分析
         trend_result = self.trend_agent.analyze(snapshot)
-        log.info(f"  ├─ 趋势得分: {trend_result['score']}")
+        log.strategist(f"  ├─ 趋势得分: {trend_result['score']}")
         
         # 2. 震荡分析
         osc_result = self.osc_agent.analyze(snapshot)
-        log.info(f"  └─ 反转得分: {osc_result['score']}")
+        log.strategist(f"  └─ 反转得分: {osc_result['score']}")
         
         # 3. 计算波动率（用于动态权重）
         volatility = self._calculate_volatility(snapshot)
@@ -374,7 +374,7 @@ class QuantAnalystAgent:
             'alignment_ok': snapshot.alignment_ok
         }
         
-        log.info(f"✅ 量化分析完成，波动率: {volatility:.2f}")
+        log.strategist(f"✅ 量化分析完成，波动率: {volatility:.2f}")
         
         return analysis
     

@@ -98,7 +98,7 @@ class MarketDataProcessor:
             )
             return pd.DataFrame()
         
-        log.info(
+        log.debug(
             f"[{symbol}] 处理K线: timeframe={timeframe}, "
             f"bars={len(klines)}, params={self.INDICATOR_PARAMS}"
         )
@@ -140,7 +140,7 @@ class MarketDataProcessor:
             'anomaly_details': anomaly_details
         }
         
-        log.info(
+        log.debug(
             f"[{symbol}] 快照生成: id={snapshot_id}, "
             f"timestamp={latest.name}, price={latest['close']:.2f}"
         )
@@ -342,7 +342,7 @@ class MarketDataProcessor:
         
         # 日志输出
         valid_count = df['is_valid'].sum()
-        log.info(
+        log.debug(
             f"✅ Warm-up标记（修正版）: 总数={len(df)}, "
             f"warm-up期={effective_warmup}根（MACD完全收敛）, "
             f"有效数据={valid_count}根"

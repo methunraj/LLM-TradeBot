@@ -1,5 +1,5 @@
 """
-👮 风控审计官 Agent (Risk Audit Agent)
+👮 风控守护者 (The Guardian) Agent
 ===========================================
 
 职责:
@@ -18,6 +18,7 @@ from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
+from src.utils.logger import log
 
 
 class RiskLevel(Enum):
@@ -50,7 +51,7 @@ class PositionInfo:
 
 class RiskAuditAgent:
     """
-    👮 风控审计官 Agent
+    风控守护者 (The Guardian)
     
     核心功能:
     - 止损方向自动修正: 做多止损必须<入场价，做空止损必须>入场价
@@ -68,7 +69,7 @@ class RiskAuditAgent:
         max_stop_loss_pct: float = 0.05,  # 最大止损距离（5%）
     ):
         """
-        初始化风控审计官
+        初始化风控守护者 (The Guardian)
         
         Args:
             max_leverage: 最大杠杆倍数
@@ -95,6 +96,7 @@ class RiskAuditAgent:
             'insufficient_margin_blocks': 0,
             'over_leverage_blocks': 0,
         }
+        log.info("👮 风控守护者 (The Guardian) 初始化完成")
     
     async def audit_decision(
         self,
@@ -107,7 +109,7 @@ class RiskAuditAgent:
         对决策进行风控审计（主入口）
         
         Args:
-            decision: DecisionCoreAgent的输出
+            decision: 对抗评论员 (The Critic) 的输出
                 {
                     'action': 'long/short/close_long/close_short/hold',
                     'entry_price': 100000.0,
@@ -262,6 +264,7 @@ class RiskAuditAgent:
         )
         
         # 8. 记录审计日志
+        log.guardian(f"审计通过: {action.upper()} (信心: {confidence:.1f}%)")
         self._log_audit(
             decision=decision,
             result='PASSED',
@@ -501,6 +504,8 @@ class RiskAuditAgent:
         self.block_stats['total_blocks'] += 1
         self.block_stats[stat_key] += 1
         
+        log.guardian(f"决策拦截: {reason}", blocked=True)
+        
         self._log_audit(
             decision={'blocked': True},
             result='BLOCKED',
@@ -590,8 +595,6 @@ async def test_risk_audit():
     )
     
     print(f"  结果: {'✅ 通过' if result_1.passed else '❌ 拦截'}")
-    if result_1.corrections:
-        print(f"  修正: {result_1.corrections}")
     if result_1.warnings:
         for w in result_1.warnings:
             print(f"  {w}")

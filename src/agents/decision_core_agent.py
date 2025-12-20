@@ -1,5 +1,5 @@
 """
-⚖️ 决策中枢 Agent (Decision Core Agent)
+⚖️ 对抗评论员 (The Critic) Agent
 ===========================================
 
 职责:
@@ -51,7 +51,7 @@ class VoteResult:
 
 
 class DecisionCoreAgent:
-    """⚖️ 决策中枢 Agent
+    """对抗评论员 (The Critic)
     
     核心功能:
     - 加权投票: 根据可配置权重整合多个信号
@@ -62,7 +62,7 @@ class DecisionCoreAgent:
     
     def __init__(self, weights: Optional[SignalWeight] = None):
         """
-        初始化决策中枢
+        初始化对抗评论员 (The Critic)
         
         Args:
             weights: 自定义信号权重（默认使用内置配置）
@@ -113,7 +113,7 @@ class DecisionCoreAgent:
             if df_5m is not None and curr_price is not None:
                 regime = self.regime_detector.detect_regime(df_5m)
                 position = self.position_analyzer.analyze_position(df_5m, curr_price)
-                log.info(f"市场检测: 状态={regime['regime']}, 位置={position['position_pct']:.1f}%")
+                log.critic(f"市场检测: 状态={regime.get('regime')}, 位置={position.get('position_pct', 0):.1f}%", challenge=True)
 
         # 3. 提前过滤逻辑：震荡市+位置不佳
         if regime and position:
@@ -195,6 +195,8 @@ class DecisionCoreAgent:
         
         # 11. 记录历史
         self.history.append(result)
+        
+        log.critic(f"最终决策: {action.upper()} (综合信心: {final_confidence:.1f}%)")
         
         return result
 
