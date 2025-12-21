@@ -143,7 +143,7 @@ LLM-TradeBot/
 
 ### 数据流转架构
 
-![数据流转架构](./docs/data_flow_architecture_enhanced.png)
+![数据流转架构](./docs/data_flow_diagram_1766231460411.png)
 
 **架构说明**:
 

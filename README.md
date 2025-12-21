@@ -143,7 +143,7 @@ LLM-TradeBot/
 
 ### Data Flow Architecture
 
-![Data Flow Architecture](./docs/data_flow_architecture_enhanced.png)
+![Data Flow Architecture](./docs/data_flow_diagram_1766231460411.png)
 
 **Architecture Details**:
 
