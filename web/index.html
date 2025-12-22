@@ -28,8 +28,9 @@
                     <button id="btn-start" class="btn-control start" title="Start Trading">▶</button>
                     <button id="btn-pause" class="btn-control pause" title="Pause Trading">⏸</button>
                     <button id="btn-stop" class="btn-control stop" title="Stop System">⏹</button>
-                    <button id="btn-restart" class="btn-control restart" title="Restart System">🔄</button>
+
                     <select id="interval-selector" class="interval-selector" title="Cycle Interval">
+                        <option value="0.5">30s</option>
                         <option value="1">1 min</option>
                         <option value="3" selected>3 min</option>
                         <option value="5">5 min</option>
@@ -143,11 +144,10 @@
             <section class="row-decisions">
                 <!-- Decisions -->
                 <div class="glass-panel card decision-table-card">
-                    <div
-                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 10px;">
+                    <div style="display: flex; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 20px;">
                         <h2 style="margin: 0;">📋 Recent Decisions</h2>
 
-                        <!-- 🔍 Filter Controls -->
+                        <!-- 🔍 Filter Controls (Fixed next to Title) -->
                         <div id="decision-filters" style="display: flex; gap: 10px; align-items: center;">
                             <select id="filter-symbol"
                                 style="padding: 4px 8px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: #fff; font-size: 0.8rem; cursor: pointer;">
@@ -166,13 +166,15 @@
                             </select>
                         </div>
 
+                        <!-- Position Info (Pushed to Far Right) -->
                         <div id="position-info"
-                            style="font-size: 0.85rem; color: #a0aec0; display: flex; gap: 20px; align-items: center;">
+                            style="font-size: 0.85rem; color: #a0aec0; display: flex; gap: 20px; align-items: center; margin-left: auto;">
                             <span id="position-count" style="color: #e0e6ed;">📊 Positions: 0</span>
                             <div id="position-details" style="display: flex; gap: 15px;">
                                 <!-- Dynamic position details will be inserted here -->
                             </div>
-                            <span id="position-pnl" class="val neutral">Total PnL: $0.00</span>
+
+
                         </div>
                     </div>
                     <div class="table-container">
@@ -182,10 +184,9 @@
                                 <tr class="agent-group-row">
                                     <th colspan="3" class="group-system">📊 System</th>
                                     <th colspan="3" class="group-critic">⚖️ Critic</th>
-                                    <th colspan="5" class="group-strategist">👨‍🔬 Strategist</th>
+                                    <th colspan="7" class="group-strategist">👨‍🔬 Strategist</th>
                                     <th class="group-prophet">🔮 Prophet</th>
-                                    <th colspan="2" class="group-guardian">🛡️ Guardian</th>
-                                    <th colspan="4" class="group-context">📈 Context</th>
+                                    <th colspan="3" class="group-guardian">🛡️ Guardian</th>
                                 </tr>
                                 <!-- Column Header Row -->
                                 <tr>
@@ -200,13 +201,13 @@
                                     <th title="15分钟周期信号 (趋势T + 震荡O)">15m</th>
                                     <th title="5分钟周期信号 (趋势T + 震荡O)">5m</th>
                                     <th title="情绪信号 (资金流向 + 资金费率)">Sent</th>
+                                    <th title="市场状态 (TREND_UP/TREND_DOWN/CHOPPY)">Regime</th>
+                                    <th title="价格位置 (HIGH/MIDDLE/LOW)">Position</th>
                                     <th title="PredictAgent 上涨概率 (0-100%)">P(Up)</th>
                                     <th title="风险等级 (SAFE/WARNING/DANGER)">Risk</th>
                                     <th title="Guardian 审核结果 (✅通过 / ⛔拦截)">Guard</th>
-                                    <th title="价格精确百分位 (0-100%, 当前价在历史区间的位置)">Pos%</th>
                                     <th title="多周期对齐状态 (✅一致 / ➖分歧)">Aligned</th>
-                                    <th title="市场状态 (TREND_UP/TREND_DOWN/CHOPPY)">Regime</th>
-                                    <th title="价格位置 (HIGH/MIDDLE/LOW)">Position</th>
+
                                 </tr>
                             </thead>
                             <tbody>
@@ -226,15 +227,14 @@
                             <thead>
                                 <tr>
                                     <th title="交易记录时间">Time</th>
-                                    <th title="交易动作 (BUY/SELL/CLOSE)">Action</th>
+                                    <th title="开仓周期">Open</th>
+                                    <th title="平仓周期">Close</th>
                                     <th title="交易对">Symbol</th>
-                                    <th title="交易价格">Price</th>
-                                    <th title="交易数量">Quantity</th>
-                                    <th title="交易成本 (价格 × 数量)">Cost</th>
+                                    <th title="开仓价格">Entry Price</th>
+                                    <th title="持仓金额 (含杠杆)">Pos Value</th>
                                     <th title="平仓价格">Exit Price</th>
                                     <th title="盈亏金额">PnL</th>
-                                    <th title="决策信心度 (0-100%)">Confidence</th>
-                                    <th title="交易状态 (OPEN/CLOSED/PENDING)">Status</th>
+                                    <th title="盈亏比例">PnL %</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -256,47 +256,48 @@
                         <div class="agent-docs-sidebar custom-scroll">
                             <div class="agent-doc-item">
                                 <h4 class="agent-title oracle">🕵️ DataSyncAgent (The Oracle)</h4>
-                                <p class="role"><strong>职责:</strong> 全知全能的数据源，负责对齐时空。</p>
+                                <p class="role"><strong>Role:</strong> Unified data provider, aligns time-space.</p>
                                 <ul>
-                                    <li><strong>异步并发:</strong> 拉取多周期(5m/15m/1h) K线 + 资金费率。</li>
-                                    <li><strong>快照对齐:</strong> 确保所有数据属于同一“时间切片”。</li>
-                                    <li><strong>双视图:</strong> 提供 Stable (收盘) 和 Live (实时) 视图。</li>
+                                    <li><strong>Async Fetch:</strong> Multi-timeframe (5m/15m/1h) + Funding Rates.</li>
+                                    <li><strong>Snapshot Alignment:</strong> All data from same "time slice".</li>
+                                    <li><strong>Dual View:</strong> Stable (closed) and Live (real-time) views.</li>
                                 </ul>
                             </div>
                             <div class="agent-doc-item">
                                 <h4 class="agent-title strategist">👨‍🔬 QuantAnalystAgent (The Strategist)</h4>
-                                <p class="role"><strong>职责:</strong> 信号生成器，生成多维度技术信号。</p>
+                                <p class="role"><strong>Role:</strong> Signal generator with multi-dimensional analysis.
+                                </p>
                                 <ul>
-                                    <li><strong>TrendSubAgent:</strong> 专注趋势 (EMA/MACD)。</li>
-                                    <li><strong>OscillatorSubAgent:</strong> 专注反转 (RSI/BB)。</li>
-                                    <li><strong>SentimentSubAgent:</strong> 专注情绪 (费率/持仓)。</li>
+                                    <li><strong>TrendSubAgent:</strong> Focus on trends (EMA/MACD).</li>
+                                    <li><strong>OscillatorSubAgent:</strong> Focus on reversals (RSI/BB).</li>
+                                    <li><strong>SentimentSubAgent:</strong> Focus on sentiment (Funding/OI).</li>
                                 </ul>
                             </div>
                             <div class="agent-doc-item">
                                 <h4 class="agent-title prophet">🔮 PredictAgent (The Prophet)</h4>
-                                <p class="role"><strong>职责:</strong> 预测预言家，输出概率预测。</p>
+                                <p class="role"><strong>Role:</strong> ML-powered predictor with probability output.</p>
                                 <ul>
-                                    <li><strong>特征工程:</strong> 构建 50+ 高级技术特征。</li>
-                                    <li><strong>概率输出:</strong> 预测未来上涨概率 (0-100%)。</li>
-                                    <li><strong>因子分解:</strong> 提供预测因子贡献分析。</li>
+                                    <li><strong>LightGBM Model:</strong> 50+ features, auto-train every 2h.</li>
+                                    <li><strong>Probability:</strong> Predicts 30-min price direction (0-100%).</li>
+                                    <li><strong>Factor Analysis:</strong> SHAP-based feature importance.</li>
                                 </ul>
                             </div>
                             <div class="agent-doc-item">
                                 <h4 class="agent-title critic">⚖️ DecisionCoreAgent (The Critic)</h4>
-                                <p class="role"><strong>职责:</strong> 决策大脑，对抗式判官。</p>
+                                <p class="role"><strong>Role:</strong> Adversarial judge with final decision.</p>
                                 <ul>
-                                    <li><strong>环境感知:</strong> 区分趋势市/震荡市。</li>
-                                    <li><strong>位置感知:</strong> 识别价格在历史区间的相对位置。</li>
-                                    <li><strong>加权投票:</strong> 动态调整权重，产出信心分数。</li>
+                                    <li><strong>Regime Detection:</strong> Identifies Trending vs Choppy markets.</li>
+                                    <li><strong>Position Awareness:</strong> Price location in historical range.</li>
+                                    <li><strong>Weighted Voting:</strong> Dynamic weight adjustment per regime.</li>
                                 </ul>
                             </div>
                             <div class="agent-doc-item">
                                 <h4 class="agent-title guardian">🛡️ RiskAuditAgent (The Guardian)</h4>
-                                <p class="role"><strong>职责:</strong> 物理隔离审计，拥有一票否决权。</p>
+                                <p class="role"><strong>Role:</strong> Independent auditor with veto power.</p>
                                 <ul>
-                                    <li><strong>R/R Check:</strong> 盈亏比检查。</li>
-                                    <li><strong>回撤保护:</strong> 触发最大回撤强制熔断。</li>
-                                    <li><strong>自动修正:</strong> 强制降低不合理的重仓建议。</li>
+                                    <li><strong>R/R Check:</strong> Minimum 2:1 reward-to-risk ratio.</li>
+                                    <li><strong>Drawdown Protection:</strong> Auto-halt on max drawdown.</li>
+                                    <li><strong>Contra-Trend Block:</strong> Prevents counter-trend trades.</li>
                                 </ul>
                             </div>
                         </div>

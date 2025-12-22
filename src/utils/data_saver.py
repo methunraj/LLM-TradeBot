@@ -313,7 +313,7 @@ class DataSaver:
 
     # --- 交易历史记录扩展 ---
     TRADE_COLUMNS = [
-        'record_time', 'action', 'symbol', 'price', 'quantity', 
+        'record_time', 'open_cycle', 'close_cycle', 'action', 'symbol', 'price', 'quantity', 
         'cost', 'exit_price', 'pnl', 'confidence', 'status'
     ]
 
@@ -362,3 +362,63 @@ class DataSaver:
         except Exception as e:
             log.error(f"获取最近交易记录失败: {e}")
             return []
+
+    def update_trade_exit(
+        self,
+        symbol: str,
+        exit_price: float,
+        pnl: float,
+        exit_time: str,
+        close_cycle: int = 0
+    ) -> bool:
+        """
+        更新交易记录的平仓信息 (原地更新)
+        
+        查找该 symbol 最近一条非 CLOSED 状态的记录，更新其 Exit Price 和 PnL。
+        这样可以保持 Trade History 表格的一致性（Round-Trip View）。
+        """
+        try:
+            file_path = os.path.join(self.dirs.get('trades'), 'all_trades.csv')
+            if not os.path.exists(file_path):
+                log.warning("交易记录文件不存在，无法更新平仓信息")
+                return False
+            
+            df = pd.read_csv(file_path)
+            if df.empty:
+                return False
+            
+            # 反向查找该 symbol 的 Open 记录
+            # 假设 Open 记录的 status 通常为 SENT, EXECUTED, SIMULATED 等，且 exit_price 为 0 或 NaN
+            # 我们查找 exit_price <= 0 或 NaN 的行
+            
+            # convert exit_price to numeric just in case
+            df['exit_price'] = pd.to_numeric(df['exit_price'], errors='coerce').fillna(0)
+            
+            # Find matching rows: symbol match AND (exit_price is 0)
+            mask = (df['symbol'] == symbol) & (df['exit_price'] == 0)
+            
+            if not mask.any():
+                log.warning(f"未找到 {symbol} 的活跃持仓记录，无法更新平仓")
+                return False
+            
+            # Get index of the LAST matching row
+            target_idx = df[mask].index[-1]
+            
+            # Update values
+            df.at[target_idx, 'exit_price'] = exit_price
+            df.at[target_idx, 'pnl'] = pnl
+            df.at[target_idx, 'close_cycle'] = close_cycle
+            df.at[target_idx, 'status'] = 'CLOSED'
+            
+            # Save back
+            df.to_csv(file_path, index=False)
+            log.info(f"✅ 已更新交易记录: {symbol} Closed @ ${exit_price:.2f}, PnL: ${pnl:.2f}, Cycle: {close_cycle}")
+            return True
+            
+        except Exception as e:
+            log.error(f"更新交易记录失败: {e}")
+            return False
+            
+        except Exception as e:
+            log.error(f"更新交易记录失败: {e}")
+            return False

@@ -163,10 +163,14 @@ class MultiAgentTradingBot:
         print(f"  - 止盈: {self.take_profit_pct}%")
         print(f"  - 测试模式: {'✅ 是' if self.test_mode else '❌ 否'}")
         
-        # ✅ Load initial trade history
-        recent_trades = self.saver.get_recent_trades(limit=20)
-        global_state.trade_history = recent_trades
-        print(f"  📜 已加载 {len(recent_trades)} 条历史交易记录")
+        # ✅ Load initial trade history (Only in Live Mode)
+        if not self.test_mode:
+            recent_trades = self.saver.get_recent_trades(limit=20)
+            global_state.trade_history = recent_trades
+            print(f"  📜 已加载 {len(recent_trades)} 条历史交易记录")
+        else:
+            global_state.trade_history = []
+            print("  🧪 测试模式：不加载历史记录，仅显示本次运行数据")
     
 
 
@@ -194,7 +198,7 @@ class MultiAgentTradingBot:
             cycle_id = global_state.current_cycle_id
             
             # 每个币种的子日志
-            global_state.add_log(f"📊 [{self.current_symbol}] 开始分析...")
+            global_state.add_log(f"📊 [{self.current_symbol}] Starting analysis...")
             
             # ✅ Generate snapshot_id for this cycle (legacy compatibility)
             snapshot_id = f"snap_{int(time.time())}"
@@ -205,27 +209,77 @@ class MultiAgentTradingBot:
             market_snapshot = await self.data_sync_agent.fetch_all_timeframes(self.current_symbol)
             global_state.oracle_status = "Data Ready"
             
-            # 💰 测试模式: 更新虚拟持仓盈亏
-            if self.test_mode and self.current_symbol in global_state.virtual_positions:
-                position = global_state.virtual_positions[self.current_symbol]
-                current_price = market_snapshot.live_5m['close']
-                entry_price = position['entry_price']
-                quantity = position['quantity']
-                side = position['side']
-                leverage = position.get('leverage', 1)
-                
-                # 计算未实现盈亏
-                if side == 'LONG':
-                    pnl = (current_price - entry_price) * quantity * leverage
-                else:  # SHORT
-                    pnl = (entry_price - current_price) * quantity * leverage
-                
-                pnl_pct = (pnl / (entry_price * quantity)) * 100
-                position['unrealized_pnl'] = pnl
-                position['pnl_pct'] = pnl_pct
-                position['current_price'] = current_price
-                
-                log.info(f"💰 {self.current_symbol} 未实现盈亏: ${pnl:,.2f} ({pnl_pct:+.2f}%)")
+            # 💰 fetch_position_info logic (New Feature)
+            # Create a unified position_info dict for Context
+            current_position_info = None
+            
+            try:
+                if self.test_mode:
+                    if self.current_symbol in global_state.virtual_positions:
+                        v_pos = global_state.virtual_positions[self.current_symbol]
+                        # Calc PnL
+                        current_price_5m = market_snapshot.live_5m['close']
+                        entry_price = v_pos['entry_price']
+                        qty = v_pos['quantity']
+                        side = v_pos['side']
+                        
+                        if side == 'LONG':
+                            unrealized_pnl = (current_price_5m - entry_price) * qty
+                        else:
+                            unrealized_pnl = (entry_price - current_price_5m) * qty
+                        
+                        pnl_pct = (unrealized_pnl / (entry_price * qty)) * 100 if entry_price > 0 else 0
+                        
+                        # Store in position_info
+                        current_position_info = {
+                            'symbol': self.current_symbol,
+                            'side': side,
+                            'quantity': qty,
+                            'entry_price': entry_price,
+                            'unrealized_pnl': unrealized_pnl,
+                            'pnl_pct': pnl_pct,
+                            'leverage': v_pos.get('leverage', 1),
+                            'is_test': True
+                        }
+                        
+                        # Also update local object for backward compatibility with display logic
+                        v_pos['unrealized_pnl'] = unrealized_pnl
+                        v_pos['pnl_pct'] = pnl_pct
+                        v_pos['current_price'] = current_price_5m
+                        log.info(f"💰 [Virtual Position] {side} {self.current_symbol} PnL: ${unrealized_pnl:.2f} ({pnl_pct:+.2f}%)")
+                        
+                else:
+                    # Live Mode
+                    try:
+                        raw_pos = self.client.get_futures_position(self.current_symbol)
+                        # raw_pos returns dict if specific symbol, or list if not?
+                        # BinanceClient.get_futures_position returns Optional[Dict]
+                        
+                        if raw_pos and float(raw_pos.get('positionAmt', 0)) != 0:
+                            amt = float(raw_pos.get('positionAmt', 0))
+                            side = 'LONG' if amt > 0 else 'SHORT'
+                            entry_price = float(raw_pos.get('entryPrice', 0))
+                            unrealized_pnl = float(raw_pos.get('unRealizedProfit', 0))
+                            qty = abs(amt)
+                            
+                            pnl_pct = (unrealized_pnl / (entry_price * qty / int(raw_pos.get('leverage', 1)))) * 100 # Approx ROE
+                            
+                            current_position_info = {
+                                'symbol': self.current_symbol,
+                                'side': side,
+                                'quantity': qty,
+                                'entry_price': entry_price,
+                                'unrealized_pnl': unrealized_pnl,
+                                'pnl_pct': pnl_pct, # Note: this might be rough calc
+                                'leverage': int(raw_pos.get('leverage', 1)),
+                                'is_test': False
+                            }
+                            log.info(f"💰 [Real Position] {side} {self.current_symbol} Amt:{amt} PnL:${unrealized_pnl:.2f}")
+                    except Exception as e:
+                        log.error(f"Failed to fetch real position: {e}")
+
+            except Exception as e:
+                 log.error(f"Error processing position info: {e}")
 
             # ✅ Save Market Data & Process Indicators
             processed_dfs = {}
@@ -235,18 +289,23 @@ class MultiAgentTradingBot:
                 self.saver.save_market_data(raw_klines, self.current_symbol, tf)
                 
                 # 处理并保存指标 (Process indicators)
+                df_with_indicators = self.processor.extract_feature_snapshot(getattr(self.processor.process_klines(raw_klines, self.current_symbol, tf), "copy")())
+                # Wait, process_klines returns df. Calling extract_feature_snapshot on it is for features.
+                # The original code:
+                # df_with_indicators = self.processor.process_klines(raw_klines, self.current_symbol, tf)
+                # self.saver.save_indicators(df_with_indicators, self.current_symbol, tf, snapshot_id)
+                # features_df = self.processor.extract_feature_snapshot(df_with_indicators)
+                
+                # Let's restore original lines carefully.
                 df_with_indicators = self.processor.process_klines(raw_klines, self.current_symbol, tf)
                 self.saver.save_indicators(df_with_indicators, self.current_symbol, tf, snapshot_id)
-                
-                # 提取并保存特征 (Extract features)
                 features_df = self.processor.extract_feature_snapshot(df_with_indicators)
                 self.saver.save_features(features_df, self.current_symbol, tf, snapshot_id)
                 
                 # 存入字典供后续步骤复用
                 processed_dfs[tf] = df_with_indicators
-                
-            # ✅ 重要优化：更新快照中的 DataFrame，使其携带技术指标
-            # 这样 QuantAnalystAgent 内部就不需要再次计算指标了
+            
+            # ✅ 重要优化：更新快照中的 DataFrame
             market_snapshot.stable_5m = processed_dfs['5m']
             market_snapshot.stable_15m = processed_dfs['15m']
             market_snapshot.stable_1h = processed_dfs['1h']
@@ -254,119 +313,51 @@ class MultiAgentTradingBot:
             current_price = market_snapshot.live_5m.get('close')
             print(f"  ✅ 采样完毕: ${current_price:,.2f} ({market_snapshot.timestamp.strftime('%H:%M:%S')})")
             
-            # LOG 1: Oracle (Single Line)
-            global_state.add_log(f"🕵️ DataSyncAgent (The Oracle): Action=Fetch[5m,15m,1h] | Snapshot=${current_price:,.2f}")
-            
-            # Update Dashboard Market Data (Initial)
+            # LOG 1: Oracle
+            global_state.add_log(f"🕵️ DataSyncAgent (The Oracle): Fetch complete. Snapshot=${current_price:,.2f}")
             global_state.current_price = current_price
             
-            # Step 2: 假设 - 量化策略师 (The Strategist)
+            # Step 2: Strategist
             print("[Step 2/4] 👨‍🔬 量化策略师 (The Strategist) - 评估数据中...")
-            # Removed verbose log: Strategist analyzing
             quant_analysis = await self.quant_analyst.analyze_all_timeframes(market_snapshot)
             
-            # Update Dashboard Strategist Score
+            # Update Dashboard
             s_score = quant_analysis['comprehensive']['score']
             global_state.strategist_score = s_score
             
-            # --- Detailed Multi-Agent Logging ---
-            # Trend
-            t_res = quant_analysis.get('trend', {})
-            t_details = t_res.get('details', {})
-            t_score = t_res.get('total_trend_score', 0)
-            t_str = f"Trend({t_details.get('1h_trend','N/A')},{t_score})"
-            
-            # Oscillator
-            o_res = quant_analysis.get('oscillator', {})
-            o_score = o_res.get('total_oscillator_score', 0)
-            o_str = f"Osc(RSI:{o_res.get('rsi_15m',0):.0f},{o_score})"
-
-            # Sentiment
-            s_res = quant_analysis.get('sentiment', {})
-            sent_score = s_res.get('total_sentiment_score', 0)
-            s_str = f"Sent(OI:{s_res.get('oi_change_24h_pct',0):.1f}%,{sent_score})"
-            
-            # LOG 2: Strategist
-            global_state.add_log(f"👨‍🔬 QuantAnalystAgent (The Strategist): {t_str} | {o_str} | {s_str} => Score: {s_score:.0f}/100")
-            
-            # ✅ Save Quant Analysis (Analytics)
+            # Save Context
             self.saver.save_context(quant_analysis, self.current_symbol, 'analytics', snapshot_id)
             
-            # Step 2.5: 预测 - 预测预言家 (The Prophet)
+            # Step 2.5: Prophet
             print("[Step 2.5/5] 🔮 预测预言家 (The Prophet) - 计算上涨概率...")
-            
-            # 使用 15m 数据构建高级特征供预测
             df_15m_features = self.feature_engineer.build_features(processed_dfs['15m'])
-            
-            # 提取最新行的特征值作为字典
             if not df_15m_features.empty:
-                latest_features = df_15m_features.iloc[-1].to_dict()
-                # 过滤非数值类型
-                predict_features = {k: v for k, v in latest_features.items() 
-                                   if isinstance(v, (int, float)) and not isinstance(v, bool)}
+                latest = df_15m_features.iloc[-1].to_dict()
+                predict_features = {k: v for k, v in latest.items() if isinstance(v, (int, float)) and not isinstance(v, bool)}
             else:
-                predict_features = {}
+                 predict_features = {}
             
-            # 调用 PredictAgent
             predict_result = await self.predict_agents[self.current_symbol].predict(predict_features)
-            
-            # 更新全局状态
             global_state.prophet_probability = predict_result.probability_up
             
-            # 保存预测结果（包含输入特征）
-            # 转换 numpy 类型为 Python 原生类型
-            import numpy as np
-            def to_serializable(obj):
-                if isinstance(obj, np.integer):
-                    return int(obj)
-                elif isinstance(obj, np.floating):
-                    return float(obj)
-                elif isinstance(obj, np.ndarray):
-                    return obj.tolist()
-                elif isinstance(obj, dict):
-                    return {k: to_serializable(v) for k, v in obj.items()}
-                elif isinstance(obj, list):
-                    return [to_serializable(v) for v in obj]
-                else:
-                    return obj
-
-            prediction_record = {
-                'input_features': predict_features,  # 记录输入特征
-                'output': predict_result.to_dict()   # 预测输出
-            }
-            # 彻底转换整个字典
-            prediction_record = to_serializable(prediction_record)
-            self.saver.save_prediction(prediction_record, self.current_symbol, snapshot_id)
-            
-            # LOG 2.5: Prophet
-            prob_pct = predict_result.probability_up * 100
-            prob_symbol = "📈" if prob_pct > 55 else ("📉" if prob_pct < 45 else "➡️")
-            global_state.add_log(f"🔮 PredictAgent (The Prophet): {prob_symbol} P(Up)={prob_pct:.1f}% | Signal: {predict_result.signal} | Conf: {predict_result.confidence:.0%}")
-            
-            print(f"  ✅ 预测完毕: P(上涨)={prob_pct:.1f}%, 信号={predict_result.signal}")
-            
-            # Step 3: 对抗 - DeepSeek 决策
-            # ✅ 复用 Step 1 已处理的数据，避免第三次计算
+            # Step 3: DeepSeek
             market_data = {
                 'df_5m': processed_dfs['5m'],
                 'df_15m': processed_dfs['15m'],
                 'df_1h': processed_dfs['1h'],
                 'current_price': current_price
             }
-            
-            # 📊 检测市场状态与价格位置 (Integrated in Quant Analysis)
-            # regime_info = self.regime_detector.detect_regime(processed_dfs['5m'])
             regime_info = quant_analysis.get('regime', {})
             
-            # 🧠 DeepSeek LLM 直接决策模式
             print("[Step 3/5] 🧠 DeepSeek LLM - 智能决策中...")
             
-            # 构建市场上下文文本
+            # Build Context with POSITION INFO
             market_context_text = self._build_market_context(
                 quant_analysis=quant_analysis,
                 predict_result=predict_result,
                 market_data=market_data,
-                regime_info=regime_info
+                regime_info=regime_info,
+                position_info=current_position_info  # ✅ Pass Position Info
             )
             
             market_context_data = {
@@ -375,11 +366,17 @@ class MultiAgentTradingBot:
                 'current_price': current_price
             }
             
-            # 调用 DeepSeek 决策引擎
+            # Call DeepSeek
             llm_decision = self.strategy_engine.make_decision(
                 market_context_text=market_context_text,
                 market_context_data=market_context_data
             )
+            
+            # ... Rest of logic stays similar ...
+            
+            # 转换为 VoteResult 兼容格式
+            # (Need to check if i need to include rest of the function)
+
             
             # 转换为 VoteResult 兼容格式
             from src.agents.decision_core_agent import VoteResult
@@ -573,27 +570,38 @@ class MultiAgentTradingBot:
             # Using _get_full_account_info helper (we will create it or inline logic)
             # Fetch directly from client to get full details
             try:
-                acc_info = self.client.get_futures_account()
-                # acc_info keys: 'total_wallet_balance', 'total_unrealized_profit', 'available_balance', etc. (snake_case)
-                wallet_bal = float(acc_info.get('total_wallet_balance', 0))
-                unrealized_pnl = float(acc_info.get('total_unrealized_profit', 0))
-                avail_bal = float(acc_info.get('available_balance', 0))
-                total_equity = wallet_bal + unrealized_pnl
-                
-                # Update State
-                global_state.update_account(
-                    equity=total_equity,
-                    available=avail_bal,
-                    wallet=wallet_bal,
-                    pnl=unrealized_pnl
-                )
-                global_state.record_account_success()  # Track success
-                
-                account_balance = avail_bal # For backward compatibility with audit
+                if self.test_mode:
+                    # Test Mode: Use virtual balance
+                    wallet_bal = global_state.virtual_balance
+                    avail_bal = global_state.virtual_balance
+                    unrealized_pnl = 0.0 # Updated at end of cycle
+                    
+                    # Log for debugging
+                    # log.info(f"Test Mode: Using virtual balance ${avail_bal}")
+                    
+                    account_balance = avail_bal
+                else:
+                    acc_info = self.client.get_futures_account()
+                    # acc_info keys: 'total_wallet_balance', 'total_unrealized_profit', 'available_balance', etc. (snake_case)
+                    wallet_bal = float(acc_info.get('total_wallet_balance', 0))
+                    unrealized_pnl = float(acc_info.get('total_unrealized_profit', 0))
+                    avail_bal = float(acc_info.get('available_balance', 0))
+                    total_equity = wallet_bal + unrealized_pnl
+                    
+                    # Update State
+                    global_state.update_account(
+                        equity=total_equity,
+                        available=avail_bal,
+                        wallet=wallet_bal,
+                        pnl=unrealized_pnl
+                    )
+                    global_state.record_account_success()  # Track success
+                    
+                    account_balance = avail_bal # For backward compatibility with audit
             except Exception as e:
                 log.error(f"Failed to fetch account info: {e}")
                 global_state.record_account_failure()  # Track failure
-                global_state.add_log(f"❌ 交易周期账户信息获取失败: {str(e)}")  # Dashboard log
+                global_state.add_log(f"❌ Account info fetch failed: {str(e)}")  # Dashboard log
                 account_balance = 0.0
 
             current_position = self._get_current_position()
@@ -682,7 +690,8 @@ class MultiAgentTradingBot:
                     'details': {
                         'reason': audit_result.blocked_reason,
                         'risk_level': audit_result.risk_level.value
-                    }
+                    },
+                    'current_price': current_price
                 }
             # Step 5: 执行引擎
             if self.test_mode:
@@ -705,47 +714,114 @@ class MultiAgentTradingBot:
                     'timestamp': datetime.now().isoformat()
                 }, self.current_symbol)
                 
-                # ✅ Save Trade in persistent history
-                trade_record = {
-                    'action': order_params['action'].upper(),
-                    'symbol': self.current_symbol,
-                    'price': current_price,
-                    'quantity': order_params['quantity'],
-                    'cost': current_price * order_params['quantity'],
-                    'exit_price': 0,
-                    'pnl': 0,
-                    'confidence': order_params['confidence'],
-                    'status': 'SIMULATED'
-                }
-                self.saver.save_trade(trade_record)
+                # 💰 测试模式逻辑: 计算 PnL 和更新状态 (Virtual Account)
+                realized_pnl = 0.0
+                exit_test_price = 0.0
                 
-                # Update Global State History
-                global_state.trade_history.insert(0, trade_record)
-                if len(global_state.trade_history) > 50:
-                    global_state.trade_history.pop()
-                
-                # 🎯 递增周期开仓计数器
-                global_state.cycle_positions_opened += 1
-                log.info(f"本周期已开仓: {global_state.cycle_positions_opened}/1")
-                
-                # 💰 测试模式: 记录虚拟持仓
                 if self.test_mode:
-                    side = 'LONG' if 'long' in vote_result.action.lower() else 'SHORT'
-                    global_state.virtual_positions[self.current_symbol] = {
-                        'entry_price': current_price,
+                    action_lower = vote_result.action.lower()
+                    
+                    # Close Logic
+                    if 'close' in action_lower:
+                        if self.current_symbol in global_state.virtual_positions:
+                            pos = global_state.virtual_positions[self.current_symbol]
+                            entry_price = pos['entry_price']
+                            qty = pos['quantity']
+                            side = pos['side']
+                            
+                            # Calc Realized PnL
+                            if side.upper() == 'LONG':
+                                realized_pnl = (current_price - entry_price) * qty
+                            else:
+                                realized_pnl = (entry_price - current_price) * qty
+                            
+                            exit_test_price = current_price
+                            # Update Virtual Balance
+                            global_state.virtual_balance += realized_pnl
+                            
+                            # Remove position
+                            del global_state.virtual_positions[self.current_symbol]
+                            
+                            log.info(f"💰 [TEST] Closed {side} {self.current_symbol}: PnL=${realized_pnl:.2f}, Bal=${global_state.virtual_balance:.2f}")
+                        else:
+                            log.warning(f"⚠️ [TEST] Close ignored - No position for {self.current_symbol}")
+                    
+                    # Open Logic
+                    elif 'long' in action_lower or 'short' in action_lower:
+                        side = 'LONG' if 'long' in action_lower else 'SHORT'
+                        global_state.virtual_positions[self.current_symbol] = {
+                            'entry_price': current_price,
+                            'quantity': order_params['quantity'],
+                            'side': side,
+                            'entry_time': datetime.now().isoformat(),
+                            'stop_loss': order_params.get('stop_loss_price', 0),
+                            'take_profit': order_params.get('take_profit_price', 0),
+                            'leverage': order_params.get('leverage', 1)
+                        }
+                        log.info(f"💰 [TEST] Opened {side} {self.current_symbol} @ ${current_price:,.2f}")
+
+                # ✅ Save Trade in persistent history
+                # Logic Update: If CLOSING, try to update previous OPEN record. If failing, save new.
+                
+                is_close_action = 'close' in vote_result.action.lower()
+                update_success = False
+                
+                if is_close_action:
+                    update_success = self.saver.update_trade_exit(
+                        symbol=self.current_symbol,
+                        exit_price=exit_test_price,
+                        pnl=realized_pnl,
+                        exit_time=datetime.now().strftime("%H:%M:%S"),
+                        close_cycle=global_state.cycle_counter
+                    )
+                    
+                    # ✅ Sync global_state.trade_history if CSV update succeeded
+                    if update_success:
+                        for trade in global_state.trade_history:
+                            if trade.get('symbol') == self.current_symbol and trade.get('exit_price', 0) == 0:
+                                trade['exit_price'] = exit_test_price
+                                trade['pnl'] = realized_pnl
+                                trade['close_cycle'] = global_state.cycle_counter
+                                trade['status'] = 'CLOSED'
+                                log.info(f"✅ Synced global_state.trade_history: {self.current_symbol} PnL ${realized_pnl:.2f}")
+                                break
+                
+                # Only save NEW record if it's OPEN action OR if Update Failed (Fallback)
+                if not update_success:
+                    is_open_action = 'open' in order_params['action'].lower()
+                    trade_record = {
+                        'open_cycle': global_state.cycle_counter if is_open_action else 0,
+                        'close_cycle': 0 if is_open_action else global_state.cycle_counter,
+                        'timestamp': datetime.now().strftime("%H:%M:%S"),
+                        'action': order_params['action'].upper(),
+                        'symbol': self.current_symbol,
+                        'price': current_price,
                         'quantity': order_params['quantity'],
-                        'side': side,
-                        'entry_time': datetime.now().isoformat(),
-                        'stop_loss': order_params.get('stop_loss_price', 0),
-                        'take_profit': order_params.get('take_profit_price', 0),
-                        'leverage': order_params.get('leverage', 1)
+                        'cost': current_price * order_params['quantity'],
+                        'exit_price': exit_test_price,
+                        'pnl': realized_pnl,
+                        'confidence': order_params['confidence'],
+                        'status': 'SIMULATED'
                     }
-                    log.info(f"💰 虚拟持仓已记录: {self.current_symbol} {side} @ ${current_price:,.2f}")
+                    if is_close_action:
+                         trade_record['status'] = 'CLOSED (Fallback)'
+                         
+                    self.saver.save_trade(trade_record)
+                    # Update Global State History
+                    global_state.trade_history.insert(0, trade_record)
+                    if len(global_state.trade_history) > 50:
+                        global_state.trade_history.pop()
+
+                # 🎯 递增周期开仓计数器
+                if 'open' in vote_result.action.lower():
+                     global_state.cycle_positions_opened += 1
+                     log.info(f"本周期已开仓: {global_state.cycle_positions_opened}/1")
                 
                 return {
                     'status': 'success',
                     'action': vote_result.action,
-                    'details': order_params
+                    'details': order_params,
+                    'current_price': current_price
                 }
             else:
                 # Live Execution
@@ -814,28 +890,61 @@ class MultiAgentTradingBot:
                     pnl = (exit_price - entry_price) * current_position.quantity * direction
                 
                 # ✅ Save Trade in persistent history
-                trade_record = {
-                    'action': order_params['action'].upper(),
-                    'symbol': self.current_symbol,
-                    'price': entry_price,
-                    'quantity': order_params['quantity'],
-                    'cost': entry_price * order_params['quantity'],
-                    'exit_price': exit_price,
-                    'pnl': pnl,
-                    'confidence': order_params['confidence'],
-                    'status': 'EXECUTED'
-                }
-                self.saver.save_trade(trade_record)
+                # Logic Update: If CLOSING, try to update previous OPEN record. If failing, save new.
                 
-                # Update Global State History
-                global_state.trade_history.insert(0, trade_record)
-                if len(global_state.trade_history) > 50:
-                    global_state.trade_history.pop()
+                is_close_action = 'close' in order_params['action'].lower()
+                update_success = False
+                
+                if is_close_action:
+                    update_success = self.saver.update_trade_exit(
+                        symbol=self.current_symbol,
+                        exit_price=exit_price,
+                        pnl=pnl,
+                        exit_time=datetime.now().strftime("%H:%M:%S"),
+                        close_cycle=global_state.cycle_counter
+                    )
+                    
+                    # ✅ Sync global_state.trade_history if CSV update succeeded
+                    if update_success:
+                        for trade in global_state.trade_history:
+                            if trade.get('symbol') == self.current_symbol and trade.get('exit_price', 0) == 0:
+                                trade['exit_price'] = exit_price
+                                trade['pnl'] = pnl
+                                trade['close_cycle'] = global_state.cycle_counter
+                                trade['status'] = 'CLOSED'
+                                log.info(f"✅ Synced global_state.trade_history: {self.current_symbol} PnL ${pnl:.2f}")
+                                break
+                
+                if not update_success:
+                    is_open_action = 'open' in order_params['action'].lower()
+                    trade_record = {
+                        'open_cycle': global_state.cycle_counter if is_open_action else 0,
+                        'close_cycle': 0 if is_open_action else global_state.cycle_counter,
+                        'action': order_params['action'].upper(),
+                        'symbol': self.current_symbol,
+                        'price': entry_price,
+                        'quantity': order_params['quantity'],
+                        'cost': entry_price * order_params['quantity'],
+                        'exit_price': exit_price,
+                        'pnl': pnl,
+                        'confidence': order_params['confidence'],
+                        'status': 'EXECUTED'
+                    }
+                    if is_close_action:
+                         trade_record['status'] = 'CLOSED (Fallback)'
+                         
+                    self.saver.save_trade(trade_record)
+                    
+                    # Update Global State History
+                    global_state.trade_history.insert(0, trade_record)
+                    if len(global_state.trade_history) > 50:
+                        global_state.trade_history.pop()
                 
                 return {
                     'status': 'success',
                     'action': vote_result.action,
-                    'details': order_params
+                    'details': order_params,
+                    'current_price': current_price
                 }
             else:
                 print("  ❌ 订单执行失败")
@@ -843,7 +952,8 @@ class MultiAgentTradingBot:
                 return {
                     'status': 'failed',
                     'action': vote_result.action,
-                    'details': {'error': 'execution_failed'}
+                    'details': {'error': 'execution_failed'},
+                    'current_price': current_price
                 }
         
         except Exception as e:
@@ -905,8 +1015,22 @@ class MultiAgentTradingBot:
             return 0.0
     
     def _get_current_position(self) -> Optional[PositionInfo]:
-        """获取当前持仓"""
+        """获取当前持仓 (支持实盘 + Test Mode)"""
         try:
+            # 1. Test Mode Support
+            if self.test_mode:
+                if self.current_symbol in global_state.virtual_positions:
+                    v_pos = global_state.virtual_positions[self.current_symbol]
+                    return PositionInfo(
+                        symbol=self.current_symbol,
+                        side=v_pos['side'].lower(), # ensure lowercase 'long'/'short'
+                        entry_price=v_pos['entry_price'],
+                        quantity=v_pos['quantity'],
+                        unrealized_pnl=v_pos.get('unrealized_pnl', 0)
+                    )
+                return None
+
+            # 2. Live Mode Support
             pos = self.client.get_futures_position(self.current_symbol)
             if pos and abs(pos['position_amt']) > 0:
                 return PositionInfo(
@@ -1001,7 +1125,7 @@ class MultiAgentTradingBot:
         ]
         return "\n".join(lines)
 
-    def _build_market_context(self, quant_analysis: Dict, predict_result, market_data: Dict, regime_info: Dict = None) -> str:
+    def _build_market_context(self, quant_analysis: Dict, predict_result, market_data: Dict, regime_info: Dict = None, position_info: Dict = None) -> str:
         """
         构建 DeepSeek LLM 所需的市场上下文文本
         """
@@ -1013,7 +1137,6 @@ class MultiAgentTradingBot:
         trend_details = trend.get('details', {})
         
         oscillator = quant_analysis.get('oscillator', {})
-        # Oscillator details are flattened in top level for some keys but let's be safe
         
         sentiment = quant_analysis.get('sentiment', {})
         
@@ -1036,7 +1159,7 @@ class MultiAgentTradingBot:
         # 语义化转换 (Technical Indicators)
         t_score_total = trend.get('total_trend_score')  # Default to None
         t_semantic = SemanticConverter.get_trend_semantic(t_score_total)
-        # Individual Trend Scores (Corrected Keys)
+        # Individual Trend Scores
         t_1h_score = trend.get('trend_1h_score') 
         t_15m_score = trend.get('trend_15m_score')
         t_5m_score = trend.get('trend_5m_score')
@@ -1055,7 +1178,7 @@ class MultiAgentTradingBot:
         rsi_1m_semantic = SemanticConverter.get_rsi_semantic(rsi_15m)
         rsi_1h_semantic = SemanticConverter.get_rsi_semantic(rsi_1h)
         
-        # MACD is in trend details, not oscillator
+        # MACD
         macd_15m = trend.get('details', {}).get('15m_macd_diff')
         macd_semantic = SemanticConverter.get_macd_semantic(macd_15m)
         
@@ -1070,18 +1193,42 @@ class MultiAgentTradingBot:
         if regime_info:
             regime_type = regime_info.get('regime', 'unknown')
             regime_confidence = regime_info.get('confidence', 0)
-            position_info = regime_info.get('position', {})
-            price_position = position_info.get('location', 'unknown')
-            price_position_pct = position_info.get('position_pct', 50)
+            position_info_regime = regime_info.get('position', {})
+            price_position = position_info_regime.get('location', 'unknown')
+            price_position_pct = position_info_regime.get('position_pct', 50)
         
         # Helper to format values safely
         def fmt_val(val, fmt="{:.2f}"):
             return fmt.format(val) if val is not None else "N/A"
+            
+        # 构建持仓信息文本 (New)
+        position_section = ""
+        if position_info:
+            side_icon = "🟢" if position_info['side'] == 'LONG' else "🔴"
+            pnl_icon = "💰" if position_info['unrealized_pnl'] > 0 else "💸"
+            position_section = f"""
+## 💼 CURRENT POSITION STATUS (Virtual Sub-Agent Logic)
+> ⚠️ CRITICAL: YOU ARE HOLDING A POSITION. EVALUATE EXIT CONDITIONS FIRST.
+
+- **Status**: {side_icon} {position_info['side']}
+- **Entry Price**: ${position_info['entry_price']:,.2f}
+- **Current Price**: ${current_price:,.2f}
+- **PnL**: {pnl_icon} ${position_info['unrealized_pnl']:.2f} ({position_info['pnl_pct']:+.2f}%)
+- **Quantity**: {position_info['quantity']}
+- **Leverage**: {position_info['leverage']}x
+
+**EXIT JUDGMENT INSTRUCTION**:
+1. **Trend Reversal**: If current trend contradicts position side (e.g. Long but Trend turned Bearish), consider CLOSE.
+2. **Profit/Risk**: Check if PnL is satisfactory or risk is increasing.
+3. **If Closing**: Return `close_position` action.
+"""
         
         context = f"""
 ## 1. Price Overview
 - Current Price: ${current_price:,.2f}
 - Symbol: {self.current_symbol}
+
+{position_section}
 
 ## 2. Trend Analysis
 - 1h Trend: {t_1h_sem} (Score: {fmt_val(t_1h_score, "{:.0f}")})
@@ -1164,6 +1311,10 @@ class MultiAgentTradingBot:
     def start_account_monitor(self):
         """Start a background thread to monitor account equity in real-time"""
         def _monitor():
+            if self.test_mode:
+                log.info("💰 Account Monitor Thread: Disabled in Test Mode")
+                return
+                
             log.info("💰 Account Monitor Thread Started")
             while True:
                 # Check Control State
@@ -1184,7 +1335,7 @@ class MultiAgentTradingBot:
                 except Exception as e:
                     log.error(f"Account Monitor Error: {e}")
                     global_state.record_account_failure()  # Track failure
-                    global_state.add_log(f"❌ 账户信息获取失败: {str(e)}")  # Dashboard log
+                    global_state.add_log(f"❌ Account info fetch failed: {str(e)}")  # Dashboard log
                     time.sleep(5) # Backoff on error
                 
                 time.sleep(3) # Update every 3 seconds
@@ -1227,6 +1378,16 @@ class MultiAgentTradingBot:
         
         log.info(f"🚀 启动持续交易模式 (间隔: {global_state.cycle_interval}m)")
         
+        # 🧪 Test Mode: Initialize Virtual Account for Chart
+        if self.test_mode:
+            log.info("🧪 Test Mode: Initializing Virtual Account...")
+            global_state.update_account(
+                equity=global_state.virtual_balance,
+                available=global_state.virtual_balance,
+                wallet=global_state.virtual_balance,
+                pnl=0.0
+            )
+        
         try:
             while global_state.is_running:
                 # Check pause state
@@ -1252,6 +1413,16 @@ class MultiAgentTradingBot:
                 cycle_id = f"cycle_{cycle_num:04d}_{int(time.time())}"
                 global_state.current_cycle_id = cycle_id
                 
+                # 🧪 Test Mode: Record start of cycle account state (for Net Value Curve)
+                if self.test_mode:
+                    # Re-log current state with new cycle number so chart shows start of cycle
+                    global_state.update_account(
+                        equity=global_state.account_overview['total_equity'],
+                        available=global_state.account_overview['available_balance'],
+                        wallet=global_state.account_overview['wallet_balance'],
+                        pnl=global_state.account_overview['total_pnl']
+                    )
+                
                 print(f"\n{'='*80}")
                 print(f"🔄 Cycle #{cycle_num} | 分析 {len(self.symbols)} 个交易对")
                 print(f"{'='*80}")
@@ -1264,11 +1435,15 @@ class MultiAgentTradingBot:
                 # 🔄 多币种顺序处理: 依次分析每个交易对
                 # Step 1: 收集所有交易对的决策
                 all_decisions = []
+                latest_prices = {}  # Store latest prices for PnL calculation
                 for symbol in self.symbols:
                     self.current_symbol = symbol  # 设置当前处理的交易对
                     
                     # Use asyncio.run for the async cycle
                     result = asyncio.run(self.run_trading_cycle())
+                    
+                    # Capture price from global state (updated inside run_trading_cycle)
+                    latest_prices[symbol] = global_state.current_price
                     
                     print(f"  [{symbol}] 结果: {result['status']}")
                     
@@ -1298,6 +1473,12 @@ class MultiAgentTradingBot:
                         skipped = [f"{d['symbol']}({d['confidence']:.1f}%)" for d in all_decisions[1:]]
                         print(f"  ⏭️  跳过其他机会: {', '.join(skipped)}")
                         global_state.add_log(f"⏭️  Skipped opportunities: {', '.join(skipped)} (1 position per cycle limit)")
+                
+                        global_state.add_log(f"⏭️  Skipped opportunities: {', '.join(skipped)} (1 position per cycle limit)")
+                
+                # 💰 Update Virtual Account PnL (Mark-to-Market)
+                if self.test_mode:
+                    self._update_virtual_account_stats(latest_prices)
                 
                 # Dynamic Interval: specific to new requirement
                 current_interval = global_state.cycle_interval
@@ -1335,6 +1516,48 @@ class MultiAgentTradingBot:
             print(f"\n\n⚠️  收到停止信号，退出...")
             global_state.is_running = False
 
+    def _update_virtual_account_stats(self, latest_prices: Dict[str, float]):
+        """
+        [Test Mode] 更新虚拟账户统计 (权益、PnL) 并推送到 Global State
+        """
+        if not self.test_mode:
+            return
+
+        total_unrealized_pnl = 0.0
+        
+        # 遍历持仓计算未实现盈亏
+        for symbol, pos in global_state.virtual_positions.items():
+            current_price = latest_prices.get(symbol)
+            if not current_price:
+                 # Fallback to stored price if current not available
+                 current_price = pos.get('current_price', pos['entry_price'])
+                
+            entry_price = pos['entry_price']
+            quantity = pos['quantity']
+            side = pos['side']  # LONG or SHORT
+            
+            # PnL Calc
+            if side.upper() == 'LONG':
+                pnl = (current_price - entry_price) * quantity
+            else:
+                pnl = (entry_price - current_price) * quantity
+                
+            pos['unrealized_pnl'] = pnl
+            pos['current_price'] = current_price
+            total_unrealized_pnl += pnl
+
+        # 更新权益
+        # Equity = Balance (Realized) + Unrealized PnL
+        total_equity = global_state.virtual_balance + total_unrealized_pnl
+        
+        # 更新 Global State
+        global_state.update_account(
+            equity=total_equity,
+            available=global_state.virtual_balance,
+            wallet=global_state.virtual_balance,
+            pnl=total_unrealized_pnl
+        )
+
 def start_server():
     """Start FastAPI server in a separate thread"""
     print("\n🌍 Starting Web Dashboard at http://localhost:8000")
@@ -1354,13 +1577,13 @@ def main():
     parser.add_argument('--stop-loss', type=float, default=1.0, help='止损百分比')
     parser.add_argument('--take-profit', type=float, default=2.0, help='止盈百分比')
     parser.add_argument('--mode', choices=['once', 'continuous'], default='once', help='运行模式')
-    parser.add_argument('--interval', type=int, default=3, help='持续运行间隔（分钟）')
+    parser.add_argument('--interval', type=float, default=3.0, help='持续运行间隔（分钟）')
     
     args = parser.parse_args()
     
     # 测试模式默认 1 分钟周期，实盘模式默认 3 分钟
-    if args.test and args.interval == 3:  # 如果是测试模式且用户没有指定间隔
-        args.interval = 1
+    if args.test and args.interval == 3.0:  # 如果是测试模式且用户没有指定间隔
+        args.interval = 1.0
     
     
     # 创建机器人

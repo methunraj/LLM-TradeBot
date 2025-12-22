@@ -42,7 +42,8 @@ function initChart() {
                 },
                 y: {
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    ticks: { color: '#94a3b8' }
+                    ticks: { color: '#94a3b8' },
+                    beginAtZero: true
                 }
             },
             interaction: {
@@ -54,8 +55,10 @@ function initChart() {
     });
 }
 
+
 // 全局存储决策历史以便过滤
 let allDecisionHistory = [];
+let currentActivePositions = []; // To share with table renderer
 
 function updateDashboard() {
     fetch(API_URL)
@@ -68,18 +71,62 @@ function updateDashboard() {
             renderLogs(data.logs);
 
             // New Renderers
-            if (data.account) renderAccount(data.account);
-            if (data.account) {
-                // TODO: API should return positions array
-                // For now, create mock data if no positions available
-                const positions = data.positions || [];
-                updatePositionInfo(data.account, positions);
+            // Account & Positions Logic
+            let activeAccount = data.account;
+            let activePositions = data.positions || [];
+
+            if (data.system && data.system.is_test_mode && data.virtual_account) {
+                // Construct account object compatible with renderAccount
+                const va = data.virtual_account;
+                const unrealized = va.total_unrealized_pnl || 0;
+                activeAccount = {
+                    total_equity: va.current_balance + unrealized,
+                    wallet_balance: va.current_balance,
+                    total_pnl: unrealized
+                };
+
+                // Convert virtual positions dict to array for UI
+                if (va.positions) {
+                    activePositions = Object.entries(va.positions).map(([sym, details]) => ({
+                        symbol: sym,
+                        quantity: details.quantity,
+                        entry_price: details.entry_price,
+                        pnl: details.unrealized_pnl || 0,
+                        side: details.side,
+                        leverage: details.leverage || 1
+                    }));
+                }
             }
-            if (data.chart_data && data.chart_data.equity) renderChart(data.chart_data.equity);
+
+            if (activeAccount) {
+                renderAccount(activeAccount);
+                updatePositionInfo(activeAccount, activePositions);
+            }
+
+            // Determine Initial Amount for Chart Baseline
+            let initialAmount = null;
+            if (data.system && data.system.is_test_mode && data.virtual_account) {
+                initialAmount = data.virtual_account.initial_balance;
+            } else if (activeAccount) {
+                // For live, use wallet_balance (Realized Equity) roughly as baseline, 
+                // OR if we had a stored 'starting_balance' in backend.
+                // Ideally simply using the first point of the day would be better, 
+                // but here we use Wallet Balance as the "Center" anchor if no specific starting point.
+                // Actually, let's try to trust the first point of the chart if this is null?
+                // No, user specifically asked for "Initial Amount". In Test it's clear.
+                // In Live, it changes. Let's use Wallet Balance as the "0 PnL" line for current active positions?
+                // Yes, Wallet Balance = Equity - Unrealized PnL. So Equity fluctuates around Wallet Balance.
+                initialAmount = activeAccount.wallet_balance;
+            }
+
+            if (data.chart_data && data.chart_data.equity) {
+                renderChart(data.chart_data.equity, initialAmount);
+            }
 
             // Layout v2 Renderers with Filtering
             if (data.decision_history) {
                 allDecisionHistory = data.decision_history;
+                currentActivePositions = activePositions; // Update global
                 applyDecisionFilters(); // 应用当前过滤条件
             }
             if (data.trade_history) renderTradeHistory(data.trade_history);
@@ -112,7 +159,7 @@ function applyDecisionFilters() {
         });
     }
 
-    renderDecisionTable(filtered);
+    renderDecisionTable(filtered, currentActivePositions);
 }
 
 // 过滤器事件监听
@@ -124,11 +171,18 @@ function renderTradeHistory(trades) {
     if (!tbody) return;
 
     tbody.innerHTML = trades.map(t => {
-        const time = t.record_time || t.timestamp || 'N/A';
-        // Simplified time if needed: time.substring(5, 16) -> MM-DD HH:MM
+        const time = t.timestamp || t.record_time || 'N/A';
+        const openCycle = t.open_cycle !== undefined && t.open_cycle !== 0 ? `#${t.open_cycle}` : '-';
+        const closeCycle = t.close_cycle !== undefined && t.close_cycle !== 0 ? `#${t.close_cycle}` : '-';
 
         const symbol = t.symbol || 'BTC';
-        const action = t.action || 'Trade';
+        const action = (t.action || '').toUpperCase();
+
+        // Merge Side into Symbol
+        let sideBadge = '';
+        if (action.includes('LONG') || action.includes('BUY')) sideBadge = '<span class="value-tag bullish" style="font-size: 0.7em; padding: 2px 4px; margin-left: 4px;">LONG</span>';
+        else if (action.includes('SHORT') || action.includes('SELL')) sideBadge = '<span class="value-tag bearish" style="font-size: 0.7em; padding: 2px 4px; margin-left: 4px;">SHORT</span>';
+        else if (action.includes('CLOSE')) sideBadge = '<span class="value-tag neutral" style="font-size: 0.7em; padding: 2px 4px; margin-left: 4px;">CLOSE</span>';
 
         // Formatting numbers
         const fmtUsd = val => val ? '$' + Number(val).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '-';
@@ -139,33 +193,44 @@ function renderTradeHistory(trades) {
 
         // PnL with Color
         let pnlHtml = '-';
+        let pnlPctHtml = '-';
         if (t.pnl !== undefined && t.pnl !== 0 && t.pnl !== '0.0') {
             const val = Number(t.pnl);
             const cls = val > 0 ? 'pos' : (val < 0 ? 'neg' : 'neutral');
             const sign = val > 0 ? '+' : '';
             pnlHtml = `<span class="val ${cls}">${sign}${val.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>`;
-        }
 
-        // Action Color
-        let actCls = 'action-hold';
-        if (action.includes('LONG') || action.includes('BUY')) actCls = 'action-buy';
-        else if (action.includes('SHORT') || action.includes('SELL')) actCls = 'action-sell';
+            // Calculate PnL percentage based on cost
+            const costVal = Number(t.cost) || 0;
+            if (costVal > 0) {
+                const pctVal = (val / costVal) * 100;
+                const pctSign = pctVal > 0 ? '+' : '';
+                pnlPctHtml = `<span class="val ${cls}">${pctSign}${pctVal.toFixed(2)}%</span>`;
+            }
+        }
 
         return `
             <tr>
-                <td>${time}</td>
-                <td>${symbol}</td>
-                <td class="${actCls}">${action}</td>
+                <td style="font-size: 0.9em; color: #a0aec0;">${time}</td>
+                <td style="font-weight: bold; color: #74b9ff;">${openCycle}</td>
+                <td style="font-weight: bold; color: #fd79a8;">${closeCycle}</td>
+                <td>
+                    <span style="font-weight: 600;">${symbol}</span>
+                    ${sideBadge}
+                </td>
                 <td>${price}</td>
                 <td>${cost}</td>
                 <td>${exit}</td>
                 <td>${pnlHtml}</td>
+                <td>${pnlPctHtml}</td>
             </tr>
         `;
     }).join('');
 }
 
-function renderDecisionTable(history) {
+
+
+function renderDecisionTable(history, positions = []) {
     const tbody = document.querySelector('#decision-table tbody');
     if (!tbody) return;
 
@@ -178,6 +243,8 @@ function renderDecisionTable(history) {
         let actionClass = 'action-hold';
         if (action.includes('LONG') || action.includes('BUY')) actionClass = 'action-buy';
         else if (action.includes('SHORT') || action.includes('SELL')) actionClass = 'action-sell';
+
+
 
         // Helper to format score cell with Semantic Support
         const fmtScore = (key, label) => {
@@ -266,8 +333,8 @@ function renderDecisionTable(history) {
             if (d.guardian_passed) {
                 guardHtml = '<span class="badge pos" title="Passed">✅</span>';
             } else {
-                const reason = d.guardian_reason || 'Blocked';
-                guardHtml = `<span class="badge neg" title="${reason}">⛔</span>`;
+                const reason = (d.guardian_reason || 'Blocked').replace(/"/g, '&quot;');
+                guardHtml = `<span class="badge neg" title="${reason}" style="cursor: help;">⛔</span>`;
             }
         }
 
@@ -290,8 +357,10 @@ function renderDecisionTable(history) {
             else if (pos === 'lower') pos = 'LOWER';
             else pos = pos.toUpperCase().substring(0, 5);
 
-            regHtml = `<span class="badge neutral">${reg}</span>`;
-            posHtml = `<span class="badge neutral">${pos}</span>`;
+            let posPctVal = (d.position.position_pct !== undefined) ? parseFloat(d.position.position_pct).toFixed(1) : '?';
+
+            regHtml = `<span class="badge neutral" title="${d.regime.regime}">${reg}</span>`;
+            posHtml = `<span class="badge neutral" title="Exact: ${posPctVal}%">${pos}</span>`;
         }
 
         // Prophet P(Up) - PredictAgent probability
@@ -315,14 +384,15 @@ function renderDecisionTable(history) {
                 <td>${signal15m}</td>
                 <td>${signal5m}</td>
                 <td>${sentHtml}</td>
+                <td>${regHtml}</td>
+                <td>${posHtml}</td>
                 <td>${prophetHtml}</td>
                 <td>${riskHtml}</td>
                 <td>${guardHtml}</td>
-                <td>${posPctHtml}</td>
                 <td>${alignedHtml}</td>
-                <td>${regHtml}</td>
-                <td>${posHtml}</td>
             </tr>
+
+
         `;
     }).join('');
 }
@@ -351,15 +421,71 @@ function renderAccount(account) {
     }
 }
 
-function renderChart(history) {
+function renderChart(history, initialAmount = null) {
     if (!equityChart) return;
 
-    // Update data safely
-    const times = history.map(h => h.time);
-    const values = history.map(h => h.value);
+    // Filter for Cycle >= 1 (Skip setup phase Cycle 0)
+    // Also ensures we have valid data points
+    const validHistory = history.filter(h => h.cycle && h.cycle >= 1);
+
+    // If no valid history (e.g. still in cycle 0), maybe show empty or all?
+    // Let's fallback to history if validHistory is empty preventing blank chart
+    const dataToShow = validHistory.length > 0 ? validHistory : [];
+
+    const times = dataToShow.map(h => h.time);
+    const values = dataToShow.map(h => h.value);
+
+    // Determine Initial Amount (Baseline)
+    // If not provided, fallback to the first value in history, or 0
+    const baseline = initialAmount !== null ? initialAmount : (values.length > 0 ? values[0] : 0);
 
     equityChart.data.labels = times;
     equityChart.data.datasets[0].data = values;
+
+    // --- Add Dashed Line for Initial Amount ---
+    // We create a constant array of the same length as data
+    const baselineData = new Array(values.length).fill(baseline);
+
+    // Check if second dataset exists (index 1), if not create it
+    if (!equityChart.data.datasets[1]) {
+        equityChart.data.datasets.push({
+            label: 'Initial Capital',
+            data: baselineData,
+            borderColor: 'rgba(255, 255, 255, 0.3)', // Faint white
+            borderWidth: 1,
+            borderDash: [5, 5], // Dashed
+            pointRadius: 0,
+            fill: false,
+            tension: 0
+        });
+    } else {
+        equityChart.data.datasets[1].data = baselineData;
+    }
+    // ------------------------------------------
+
+    // --- Axis Centering Logic ---
+    if (values.length > 0) {
+        // Find min and max equity in the current view
+        const maxVal = Math.max(...values);
+        const minVal = Math.min(...values);
+
+        // Calculate the maximum deviation from the baseline
+        const deltaUp = Math.abs(maxVal - baseline);
+        const deltaDown = Math.abs(minVal - baseline);
+        const maxDelta = Math.max(deltaUp, deltaDown);
+
+        // Add some padding (e.g. 10%) so the curve doesn't touch the edges
+        // Ensure even if flat, we have a small range (e.g. 10 USDT or 1%)
+        const padding = maxDelta === 0 ? (baseline * 0.01) : (maxDelta * 0.2);
+
+        const yMax = baseline + maxDelta + padding;
+        const yMin = baseline - maxDelta - padding;
+
+        equityChart.options.scales.y.min = yMin;
+        equityChart.options.scales.y.max = yMax;
+    }
+    // ----------------------------
+
     equityChart.update('none'); // Update without full re-animation for smoothness
 }
 
@@ -379,13 +505,24 @@ function updatePositionInfo(account, positions = []) {
         if (positions && positions.length > 0) {
             detailsEl.innerHTML = positions.map(pos => {
                 const pnlClass = pos.pnl > 0 ? 'pos' : (pos.pnl < 0 ? 'neg' : 'neutral');
+
+                // Calculate ROE %
+                const leverage = pos.leverage || 1;
+                // Margin = (Entry * Qty) / Leveage
+                const margin = (pos.entry_price * pos.quantity) / leverage;
+                let pnlPct = 0;
+                if (margin > 0) pnlPct = (pos.pnl / margin) * 100;
+                const pctClass = pnlPct > 0 ? 'pos' : (pnlPct < 0 ? 'neg' : 'neutral');
+
+                const sideClass = (pos.side || 'LONG').toUpperCase() === 'LONG' ? 'pos' : 'neg';
+
                 return `
                     <div style="display: flex; align-items: center; gap: 8px; padding: 4px 10px; background: rgba(255,255,255,0.05); border-radius: 4px;">
-                        <span style="color: #e0e6ed; font-weight: 600;">${pos.symbol}</span>
-                        <span style="color: #a0aec0; font-size: 0.8em;">${pos.quantity}</span>
-                        <span class="val ${pnlClass}" style="font-size: 0.85em;">${fmt(pos.pnl)}</span>
+                        <span class="${sideClass}" style="font-weight: 600;">${pos.symbol}</span>
+                        <span class="val ${pnlClass}" style="font-size: 0.9em; font-weight: bold;">${fmt(pos.pnl)}</span>
+                        <span class="val ${pctClass}" style="font-size: 0.9em; font-weight: bold;">${pnlPct.toFixed(2)}%</span>
                     </div>
-        `;
+                `;
             }).join('');
         } else {
             detailsEl.innerHTML = '<span style="color: #718096; font-size: 0.8em;">No open positions</span>';
@@ -428,7 +565,7 @@ if (intervalSelector) {
         fetch('/api/control', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'set_interval', interval: parseInt(newInterval) })
+            body: JSON.stringify({ action: 'set_interval', interval: parseFloat(newInterval) })
         })
             .then(res => res.json())
             .then(data => {
@@ -582,8 +719,6 @@ function renderLogs(logs) {
     }).join('');
 
     // Auto-scroll to bottom: 
-    // - 如果用户没有主动向上滚动（距离底部100px以内），则自动滚动到底部
-    // - 首次加载时（scrollTop === 0）也自动滚动到底部
     if (isScrolledToBottom || previousScrollTop === 0) {
         container.scrollTop = container.scrollHeight;
     } else {
@@ -701,13 +836,12 @@ function setupEventListeners() {
     const btnStop = document.getElementById('btn-stop');
     if (btnStop) btnStop.addEventListener('click', () => setControl('stop'));
 
-    const btnRestart = document.getElementById('btn-restart');
-    if (btnRestart) btnRestart.addEventListener('click', () => setControl('restart'));
+
 
     const intervalSel = document.getElementById('interval-selector');
     if (intervalSel) {
         intervalSel.addEventListener('change', (e) => {
-            const val = parseInt(e.target.value);
+            const val = parseFloat(e.target.value);
             setControl('set_interval', { interval: val });
         });
     }

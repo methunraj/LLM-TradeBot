@@ -182,6 +182,15 @@ class RiskAuditAgent:
         
         # 1. 【一票否决】检查逆向开仓
         if current_position:
+            # 1.1 检查重复开仓 (Duplicate Open Block)
+            duplicated_check = self._check_duplicate_open(action, current_position)
+            if not duplicated_check['passed']:
+                return self._block_decision(
+                    'total_blocks',
+                    duplicated_check['reason']
+                )
+            
+            # 1.2 检查逆向开仓
             reverse_check = self._check_reverse_position(action, current_position)
             if not reverse_check['passed']:
                 return self._block_decision(
@@ -278,6 +287,27 @@ class RiskAuditAgent:
             corrections=corrections if corrections else None,
             warnings=warnings if warnings else None
         )
+    
+    
+    def _check_duplicate_open(
+        self,
+        action: str,
+        current_position: PositionInfo
+    ) -> Dict:
+        """
+        检查是否重复开仓 (Single Position Rule)
+        
+        规则: 同一个symbol如果已经持有仓位，禁止再次开仓 (long/short)。
+        只允许 close/add/reduce 相关操作 (目前仅支持单一仓位，所以add暂不支持或需特殊处理)
+        """
+        if action in ['long', 'open_long', 'short', 'open_short']:
+            # 只要是开仓动作，且当前有仓位 -> 拦截
+            return {
+                'passed': False,
+                'reason': f"【单一持仓限制】当前持有{current_position.side}仓位，禁止重复开{action}"
+            }
+        
+        return {'passed': True}
     
     def _check_reverse_position(
         self, 

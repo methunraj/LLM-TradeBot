@@ -42,8 +42,8 @@ class SharedState:
     })
     
     # Virtual Account (Test Mode)
-    virtual_initial_balance: float = 10000.0  # Starting balance for test mode
-    virtual_balance: float = 10000.0  # Current balance in test mode
+    virtual_initial_balance: float = 1000.0  # Starting balance for test mode
+    virtual_balance: float = 1000.0  # Current balance in test mode
     virtual_positions: Dict[str, Dict] = field(default_factory=dict)  # {symbol: {entry_price, quantity, side, ...}}
     
     # Account Failure Tracking
@@ -77,14 +77,18 @@ class SharedState:
         }
         # Add to history (Real-time PnL tracking)
         # We want to capture volatility, so we log more frequently.
-        timestamp = datetime.now().strftime("%H:%M:%S")
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         # Add point if history is empty or last point is older than 5 seconds to prevent flood
         # For simplicity, we just check if timestamp is different (1s resolution) but maybe throttle slightly if needed.
         # Let's just append. The frontend handles the curve.
         
         if not self.equity_history or self.equity_history[-1]['time'] != timestamp:
-            self.equity_history.append({'time': timestamp, 'value': equity})
+            self.equity_history.append({
+                'time': timestamp, 
+                'value': equity,
+                'cycle': self.cycle_counter
+            })
             
             # Keep last 200 points (e.g. ~10-20 mins of real-time data or 200 minutes of slow data)
             if len(self.equity_history) > 200:

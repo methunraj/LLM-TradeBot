@@ -62,8 +62,8 @@ Edit `config.yaml` to set parameters:
 
 #### 4. Start Web Dashboard (Recommended)
 
-![Dashboard Preview](./docs/dashboard_preview_new.png)
-![Live Log Output](./docs/screenshot-20251221-070754.png)
+![Dashboard Preview](./docs/dashboard_preview_1.png)
+![Live Log Output](./docs/dashboard_preview_2.png)
 Built-in modern real-time monitoring dashboard.
 
 ```bash
@@ -317,6 +317,14 @@ data/
 ---
 
 ## 🎉 Latest Updates
+
+**2025-12-23**:
+
+- ✅ **Trade History Enhanced**: Added Open/Close Cycle columns, PnL % with color indicators.
+- ✅ **Net Value Curve**: Dashed initial capital baseline with centered Y-axis logic.
+- ✅ **Decision Table Refactor**: Removed Active PnL column, added tooltip for Guardian block reasons.
+- ✅ **Strategy Improvements**: Added `add_position` action for "buy the dip", confidence calibration rules.
+- ✅ **Documentation**: Translated dashboard agent descriptions to English.
 
 **2025-12-21**:
 

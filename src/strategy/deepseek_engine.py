@@ -172,6 +172,8 @@ Write your analysis logic here (MUST be in English or numbers only, NO Chinese):
 | `close_short` | Close Short Position | None (System auto-detects position) |
 | `hold` | Hold (If Position Exists) | None |
 | `wait` | Wait (If No Position) | None |
+| `add_position` | Add to Current Position | `leverage`, `position_size_usd`, `stop_loss`, `take_profit` |
+| `reduce_position` | Reduce Current Position | `position_size_usd` (Amount to close) |
 
 ### Open Position Field Details
 - **leverage**: Leverage multiplier (1-5)
@@ -270,7 +272,10 @@ Shows where current price sits within its recent trading range (0-100%).
   
 - **<40% Position**: ⚠️ Deeper pullback
   - Better entry but may indicate weakening trend
-  - **Action**: LONG with full size if 1h trend still intact
+  - **Action**:
+    - If No Position: **OPEN LONG** with full size if 1h trend still intact
+    - If Holding Long: **ADD POSITION** (Buy the Dip) to lower cost basis
+    - **Crucial**: Do not just HOLD here. This is the optimal entry zone.
 
 #### In DOWNTREND (1h EMA12 < EMA26):
 - **20-40% Position**: ✅ **HEALTHY consolidation**, NOT strength
@@ -385,7 +390,17 @@ Step 1: Check 1h Trend
 ### 4. Confidence Threshold (CRITICAL)
 - **Open Long/Short ONLY when confidence ≥ 80**
 - If confidence < 80, return `wait` action instead
-- This prevents low-conviction trades from entering the market
+- These prevents low-conviction trades from entering the market
+
+### 5. Confidence Calibration (MANDATORY)
+- **Anchor to Strategist Score**: Your confidence MUST generally align with the `Strategist Score` (0-100).
+  - If Strategist Score is < 30, Confidence CANNOT exceed 60% (unless strong specific 5m setup).
+- **Penalty for Divergence**:
+  - If Prophet is Bearish but you want to Long: **Rationalize why** and deduct 20% confidence.
+  - If MACD is Bearish but you want to Long: **Rationalize why** and deduct 20% confidence.
+- **No Blind Confidence**:
+  - NEVER output confidence > 80% if auxiliary signals (Prophet, MACD, Squeeze) contradict your trade direction.
+  - HIGH CONFIDENCE (>80) implies ALL lights are green.
 
 ## 📝 Output Examples
 
