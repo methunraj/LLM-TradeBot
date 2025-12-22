@@ -205,20 +205,20 @@ class RiskManager:
         if market_snapshot and action in ['long', 'short', 'open_long', 'open_short']:
             # 从 market_snapshot 获取 1h 趋势信息
             stable_1h = market_snapshot.get('stable_1h')
-            if stable_1h is not None and not stable_1h.empty and len(stable_1h) > 26:
-                # 检查 EMA12 和 EMA26
-                if 'ema_12' in stable_1h.columns and 'ema_26' in stable_1h.columns:
-                    ema12 = stable_1h['ema_12'].iloc[-1]
-                    ema26 = stable_1h['ema_26'].iloc[-1]
+            if stable_1h is not None and not stable_1h.empty and len(stable_1h) > 13:
+                # Fast Trend: 使用 EMA5/EMA13 加快响应 (2025-12-23 update)
+                if 'ema_5' in stable_1h.columns and 'ema_13' in stable_1h.columns:
+                    ema5 = stable_1h['ema_5'].iloc[-1]
+                    ema13 = stable_1h['ema_13'].iloc[-1]
                     
                     # 判断 1h 趋势
-                    trend_1h = 'up' if ema12 > ema26 else 'down'
+                    trend_1h = 'up' if ema5 > ema13 else 'down'
                     
                     # 检查是否逆势
                     if trend_1h == 'down' and action in ['long', 'open_long']:
-                        return False, decision, f"风控拦截: 1h 下跌趋势中禁止做多 (EMA12:{ema12:.2f} < EMA26:{ema26:.2f})"
+                        return False, decision, f"风控拦截: 1h 下跌趋势中禁止做多 (EMA5:{ema5:.2f} < EMA13:{ema13:.2f})"
                     elif trend_1h == 'up' and action in ['short', 'open_short']:
-                        return False, decision, f"风控拦截: 1h 上涨趋势中禁止做空 (EMA12:{ema12:.2f} > EMA26:{ema26:.2f})"
+                        return False, decision, f"风控拦截: 1h 上涨趋势中禁止做空 (EMA5:{ema5:.2f} > EMA13:{ema13:.2f})"
 
         # 4. 位置检查 (位置感应过滤)
         if position:
@@ -232,11 +232,11 @@ class RiskManager:
                 stable_1h = market_snapshot.get('stable_1h')
                 
                 # 如果是 CHOPPY 且 1h 有明确趋势，则为趋势整理
-                if r_type == 'choppy' and stable_1h is not None and not stable_1h.empty and len(stable_1h) > 26:
-                    if 'ema_12' in stable_1h.columns and 'ema_26' in stable_1h.columns:
-                        ema12 = stable_1h['ema_12'].iloc[-1]
-                        ema26 = stable_1h['ema_26'].iloc[-1]
-                        ema_diff_pct = abs(ema12 - ema26) / ema26 * 100
+                if r_type == 'choppy' and stable_1h is not None and not stable_1h.empty and len(stable_1h) > 13:
+                    if 'ema_5' in stable_1h.columns and 'ema_13' in stable_1h.columns:
+                        ema5 = stable_1h['ema_5'].iloc[-1]
+                        ema13 = stable_1h['ema_13'].iloc[-1]
+                        ema_diff_pct = abs(ema5 - ema13) / ema13 * 100
                         
                         # 如果 EMA 差异 > 1%，认为趋势明确
                         if ema_diff_pct > 1.0:

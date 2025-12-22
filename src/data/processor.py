@@ -188,6 +188,10 @@ class MarketDataProcessor:
         # 移动平均线
         df['sma_20'] = SMAIndicator(close=df['close'], window=20).sma_indicator()
         df['sma_50'] = SMAIndicator(close=df['close'], window=50).sma_indicator()
+        # Fast EMAs for quick trend detection (used by risk manager)
+        df['ema_5'] = EMAIndicator(close=df['close'], window=5).ema_indicator()
+        df['ema_13'] = EMAIndicator(close=df['close'], window=13).ema_indicator()
+        # Standard EMAs for MACD and other indicators
         df['ema_12'] = EMAIndicator(close=df['close'], window=12).ema_indicator()
         df['ema_26'] = EMAIndicator(close=df['close'], window=26).ema_indicator()
         

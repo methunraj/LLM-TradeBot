@@ -325,6 +325,17 @@ body {
     color: var(--neon-red);
 }
 
+/* Global PnL color classes for tables */
+.val.pos {
+    color: var(--neon-green);
+    font-weight: 600;
+}
+
+.val.neg {
+    color: var(--neon-red);
+    font-weight: 600;
+}
+
 .chart-container-lg {
     flex: 1;
     position: relative;
@@ -669,7 +680,7 @@ tr:hover {
     align-items: stretch;
     gap: 0;
     padding: 0;
-    height: 450px;
+    height: 600px;
     /* Fixed height to ensure alignment */
 }
 
@@ -767,8 +778,8 @@ tr:hover {
     display: flex !important;
     flex-direction: row !important;
     align-items: stretch !important;
-    height: 1000px !important;
-    /* 增加高度 */
+    height: 800px !important;
+    /* Increased height for better visibility */
     overflow: hidden !important;
     box-sizing: border-box;
     padding: 0 !important;
@@ -776,11 +787,11 @@ tr:hover {
 
 .agent-docs-sidebar {
     flex: 0 0 320px !important;
-    height: 1000px !important;
-    /* 与父容器一致 */
-    max-height: 1000px !important;
+    height: 800px !important;
+    /* Match parent container */
+    max-height: 800px !important;
     overflow-y: auto;
-    /* 内容超出时显示滚动条 */
+    /* Scroll when content overflows */
     box-sizing: border-box;
     padding: 20px;
 }
@@ -806,11 +817,11 @@ tr:hover {
 
 #logs-container {
     flex: 1 !important;
-    height: 1000px !important;
-    /* 与左侧高度一致 */
-    max-height: 1000px !important;
+    height: 800px !important;
+    /* Match left sidebar height */
+    max-height: 800px !important;
     overflow-y: scroll !important;
-    /* 始终显示滚动条 */
+    /* Always show scrollbar */
     padding: 20px;
     box-sizing: border-box;
     background: transparent;
