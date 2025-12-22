@@ -789,8 +789,17 @@ class MultiAgentTradingBot:
                 # Only save NEW record if it's OPEN action OR if Update Failed (Fallback)
                 if not update_success:
                     is_open_action = 'open' in order_params['action'].lower()
+                    
+                    # For CLOSE actions, find the original open_cycle from trade_history
+                    original_open_cycle = 0
+                    if not is_open_action:
+                        for trade in global_state.trade_history:
+                            if trade.get('symbol') == self.current_symbol and trade.get('exit_price', 0) == 0:
+                                original_open_cycle = trade.get('open_cycle', 0)
+                                break
+                    
                     trade_record = {
-                        'open_cycle': global_state.cycle_counter if is_open_action else 0,
+                        'open_cycle': global_state.cycle_counter if is_open_action else original_open_cycle,
                         'close_cycle': 0 if is_open_action else global_state.cycle_counter,
                         'timestamp': datetime.now().strftime("%H:%M:%S"),
                         'action': order_params['action'].upper(),
@@ -917,8 +926,17 @@ class MultiAgentTradingBot:
                 
                 if not update_success:
                     is_open_action = 'open' in order_params['action'].lower()
+                    
+                    # For CLOSE actions, find the original open_cycle from trade_history
+                    original_open_cycle = 0
+                    if not is_open_action:
+                        for trade in global_state.trade_history:
+                            if trade.get('symbol') == self.current_symbol and trade.get('exit_price', 0) == 0:
+                                original_open_cycle = trade.get('open_cycle', 0)
+                                break
+                    
                     trade_record = {
-                        'open_cycle': global_state.cycle_counter if is_open_action else 0,
+                        'open_cycle': global_state.cycle_counter if is_open_action else original_open_cycle,
                         'close_cycle': 0 if is_open_action else global_state.cycle_counter,
                         'action': order_params['action'].upper(),
                         'symbol': self.current_symbol,

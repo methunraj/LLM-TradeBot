@@ -426,7 +426,7 @@ RR ratio: (88580-86000)/(86000-84710) = 2.0
   "position_size_usd": 200.0,
   "stop_loss": 84710.0,
   "take_profit": 88580.0,
-  "confidence": 75,
+  "confidence": 85,
   "reasoning": "Triple timeframe bullish with RSI pullback entry"
 }]
 ```
@@ -454,7 +454,7 @@ RR ratio: (3400-3200)/(3500-3400) = 2.0
   "position_size_usd": 150.0,
   "stop_loss": 3500.0,
   "take_profit": 3200.0,
-  "confidence": 70,
+  "confidence": 82,
   "reasoning": "Triple timeframe bearish with failed resistance break"
 }]
 ```
@@ -594,6 +594,14 @@ Please start your analysis and output the decision in JSON Array format `[{{...}
         if not (0 <= decision['confidence'] <= 100):
             log.error(f"confidence超出范围: {decision['confidence']}")
             return False
+        
+        # STRICT ENFORCEMENT: Open trades must have confidence >= 80
+        action = decision['action']
+        confidence = decision['confidence']
+        if action in ['open_long', 'open_short'] and confidence < 80:
+            log.warning(f"🚫 Confidence < 80 ({confidence}%) for {action}, converting to 'wait'")
+            decision['action'] = 'wait'
+            decision['reasoning'] = f"Low confidence ({confidence}% < 80%), wait for better setup"
         
         if not (1 <= decision['leverage'] <= config.risk.get('max_leverage', 5)):
             log.error(f"leverage超出范围: {decision['leverage']}")

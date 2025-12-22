@@ -172,8 +172,9 @@ function renderTradeHistory(trades) {
 
     tbody.innerHTML = trades.map(t => {
         const time = t.timestamp || t.record_time || 'N/A';
-        const openCycle = t.open_cycle !== undefined && t.open_cycle !== 0 ? `#${t.open_cycle}` : '-';
-        const closeCycle = t.close_cycle !== undefined && t.close_cycle !== 0 ? `#${t.close_cycle}` : '-';
+        // Show cycle number starting from 1, show '-' if 0 or undefined (means data missing)
+        const openCycle = t.open_cycle && t.open_cycle > 0 ? `#${t.open_cycle}` : '-';
+        const closeCycle = t.close_cycle && t.close_cycle > 0 ? `#${t.close_cycle}` : '-';
 
         const symbol = t.symbol || 'BTC';
         const action = (t.action || '').toUpperCase();
