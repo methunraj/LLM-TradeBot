@@ -183,7 +183,8 @@ class DataSaver:
         self,
         content: str,
         symbol: str,
-        snapshot_id: str
+        snapshot_id: str,
+        cycle_id: str = None
     ) -> Dict[str, str]:
         """保存LLM交互日志 (按币种分文件夹)
         
@@ -198,7 +199,11 @@ class DataSaver:
         os.makedirs(symbol_date_folder, exist_ok=True)
         
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f'llm_log_{timestamp}_{snapshot_id}.md'
+        # Include cycle_id in filename if provided
+        if cycle_id:
+            filename = f'llm_log_{timestamp}_cycle_{cycle_id}_snap_{snapshot_id}.md'
+        else:
+            filename = f'llm_log_{timestamp}_snap_{snapshot_id}.md'
         path = os.path.join(symbol_date_folder, filename)
         
         with open(path, 'w', encoding='utf-8') as f:

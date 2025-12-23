@@ -481,7 +481,8 @@ class MultiAgentTradingBot:
             self.saver.save_llm_log(
                 content=full_log_content,
                 symbol=self.current_symbol,
-                snapshot_id=snapshot_id
+                snapshot_id=snapshot_id,
+                cycle_id=cycle_id
             )
             
             # LOG: Bull/Bear Agents (show first for adversarial context)

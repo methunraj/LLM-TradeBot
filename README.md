@@ -23,6 +23,41 @@ Intelligent Multi-Agent Quantitative Trading Bot based on the **Adversarial Deci
 
 ---
 
+## 📚 What You Need to Know
+
+**For Complete Beginners**:
+
+- This is an **automated trading bot** that trades cryptocurrency futures on Binance
+- It uses AI (LLM) and machine learning to make trading decisions
+- **Test mode** lets you practice with virtual money before risking real funds
+- The bot runs 24/7 and makes decisions based on market analysis
+
+**Technical Level**: Intermediate Python knowledge recommended but not required for basic usage.
+
+---
+
+## ⚙️ Prerequisites
+
+Before you start, make sure you have:
+
+### Required
+
+- ✅ **Python 3.11+** installed ([Download here](https://www.python.org/downloads/))
+- ✅ **Git** installed ([Download here](https://git-scm.com/downloads))
+- ✅ **Binance Account** ([Sign up here](https://www.binance.com/))
+
+### For Test Mode (Beginners)
+
+- ✅ Nothing else needed! Test mode uses virtual balance
+
+### For Live Trading (Advanced)
+
+- ✅ **Binance Futures API Keys** with trading permissions
+- ✅ **USDT in Futures Wallet** (minimum $100 recommended)
+- ⚠️ **Risk Warning**: Only trade with money you can afford to lose
+
+---
+
 ## 🚀 Quick Start
 
 ### Startup Flow
@@ -105,6 +140,52 @@ After startup, visit: **<http://localhost:8000>**
   - **Bull/Bear**: Adversarial perspectives with stance (🔥Strong/↗Slight) and confidence
   - **Context**: Market Regime (📈UP/📉DN/〰️CHOP), Price Position (🔝HIGH/➖MID/🔻LOW)
   - **Guardian**: Risk level (✅SAFE/⚠️WARN/🚨DANGER), Audit result (✅PASS/⛔BLOCK), Multi-period alignment
+
+#### 📋 Recent Decisions Indicator Guide
+
+All indicators use semantic icons and two-line display format for quick visual scanning:
+
+**📊 System Columns**
+
+- **Time**: Decision timestamp
+- **Cycle**: Trading cycle number
+- **Symbol**: Trading pair (e.g., BTCUSDT)
+
+**⚖️ Critic (Decision Core)**
+
+- **Result**: Final action (LONG/SHORT/WAIT)
+- **Conf**: Decision confidence (0-100%)
+- **Reason**: Decision rationale (hover for full text)
+
+**👨‍🔬 Strategist (Quant Analysis)**
+
+- **1h/15m/5m**: Multi-timeframe signals
+  - Format: `T:UP` (Trend) / `O:DN` (Oscillator)
+  - Colors: Green (UP), Red (DN), Gray (NEU)
+- **Sent**: Sentiment score with icon (📈/📉/➖)
+
+**🔮 Prophet (ML Prediction)**
+
+- Format: `🔮↗` + `65%`
+- Direction: ↗UP (>55%), ➖NEU (45-55%), ↘DN (<45%)
+
+**🐂🐻 Bull/Bear (Adversarial Analysis)**
+
+- **Bull**: `↗Bull` / `🔥Bull` + confidence %
+- **Bear**: `↘Bear` / `🔥Bear` + confidence %
+- Stance: 🔥Strong, ↗Slight, ➖Neutral, ❓Unclear
+
+**🌍 Context (Market State)**
+
+- **Regime**: `📈UP` / `📉DN` / `〰️CHOP`
+- **Position**: `🔝HIGH` / `➖MID` / `🔻LOW` + percentage
+
+**🛡️ Guardian (Risk Control)**
+
+- **Risk**: `✅SAFE` / `⚠️WARN` / `🚨DANGER`
+- **Guard**: `✅PASS` / `⛔BLOCK` (with reason on hover)
+- **Aligned**: ✅ Multi-period aligned / ➖ Not aligned
+
 - **📜 Trade History**: Complete record of all trades with Open/Close cycles and PnL statistics
 - **📡 Live Log Output**: Real-time scrolling logs with highlighted Agent tags (Oracle, Strategist, Critic, Guardian), 500-line history buffer
 
@@ -410,6 +491,58 @@ data/
 - ✅ **Documentation Optimization**: Updated README to highlight adversarial architecture.
 - ✅ **Project Renamed**: Officially renamed to `LLM-TradeBot`.
 - ✅ **Full-Link Auditing**: Implemented complete intermediate state archiving.
+
+---
+
+## ❓ Frequently Asked Questions (FAQ)
+
+### For Beginners
+
+**Q: Is this safe to use? Will I lose money?**
+A: Test mode is 100% safe - it uses virtual money. For live trading, only use funds you can afford to lose. Cryptocurrency trading is risky.
+
+**Q: Do I need to know Python to use this?**
+A: No! Just follow the Quick Start guide. You only need Python installed, not programming knowledge.
+
+**Q: How much money do I need to start?**
+A: Test mode is free. For live trading, minimum $100 USDT recommended, but start small while learning.
+
+**Q: Will the bot trade 24/7?**
+A: Yes, once started in continuous mode, it runs non-stop analyzing markets and making decisions.
+
+**Q: How do I know if it's working?**
+A: Open `http://localhost:8000` in your browser to see the real-time dashboard with live logs and charts.
+
+### Technical Questions
+
+**Q: Which exchanges are supported?**
+A: Currently only Binance Futures. Spot trading and other exchanges are not supported.
+
+**Q: Can I customize the trading strategy?**
+A: Yes! Edit `config.yaml` for basic parameters. Advanced users can modify agent logic in `src/` directory.
+
+**Q: What's the difference between Test and Live mode?**
+A: Test mode simulates trading with $1000 virtual balance. Live mode executes real trades on Binance.
+
+**Q: How do I stop the bot?**
+A: Press `Ctrl+C` in the terminal, or run `pkill -f "python main.py"`
+
+**Q: Why is the dashboard not loading?**
+A: Make sure the bot is running and visit `http://localhost:8000`. Check firewall settings if issues persist.
+
+### Troubleshooting
+
+**Q: "ModuleNotFoundError" when starting**
+A: Run `pip install -r requirements.txt` to install all dependencies.
+
+**Q: "API Key invalid" error**
+A: Check your `.env` file has correct Binance API keys. For test mode, API keys are optional.
+
+**Q: Bot keeps saying "WAIT" and not trading**
+A: This is normal! The bot is conservative and only trades when conditions are favorable. Check the dashboard logs for reasoning.
+
+**Q: How do I update to the latest version?**
+A: Run `git pull origin main` then restart the bot.
 
 ---
 
