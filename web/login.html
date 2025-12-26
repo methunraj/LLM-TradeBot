@@ -213,9 +213,25 @@
         // Check Deployment Mode
         async function checkMode() {
             try {
+                // Method 1: Check URL hostname (Railway domains contain 'railway.app')
+                const isRailwayByUrl = window.location.hostname.includes('railway.app');
+
+                // Method 2: Check backend API
                 const res = await fetch('/api/info');
                 const data = await res.json();
-                if (data.deployment_mode === 'railway') {
+                const isRailwayByApi = data.deployment_mode === 'railway';
+
+                // Use either method (URL is more reliable for Railway)
+                const isRailway = isRailwayByUrl || isRailwayByApi;
+
+                console.log('🌍 Deployment Detection:', {
+                    hostname: window.location.hostname,
+                    isRailwayByUrl,
+                    isRailwayByApi,
+                    finalMode: isRailway ? 'railway' : 'local'
+                });
+
+                if (isRailway) {
                     hintEl.style.display = 'block';
                     // Railway: Default autofill 'guest' (User Role)
                     input.value = 'guest';
