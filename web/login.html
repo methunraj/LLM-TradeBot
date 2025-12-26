@@ -180,8 +180,15 @@
         <form id="login-form">
             <div class="form-group">
                 <label for="password">Password</label>
-                <input type="password" id="password" placeholder="Enter access code..." value="admin" required
-                    autofocus>
+                <input type="password" id="password" placeholder="Enter access code..." autofocus>
+
+                <!-- Login Hint (Railway Only) -->
+                <div id="login-hint"
+                    style="display: none; margin-top: 10px; font-size: 13px; color: rgba(255,255,255,0.5); line-height: 1.5; text-align: left;">
+                    <strong style="color:rgba(255,255,255,0.8)">Login Modes:</strong><br>
+                    • <strong>Admin:</strong> Enter password for full control.<br>
+                    • <strong>User:</strong> Leave empty for read-only access.
+                </div>
             </div>
             <button type="submit" id="btn-submit" class="btn-login">Unlock Dashboard</button>
         </form>
@@ -198,6 +205,21 @@
         const input = document.getElementById('password');
         const btn = document.getElementById('btn-submit');
         const errorEl = document.getElementById('error-msg');
+        const hintEl = document.getElementById('login-hint');
+
+        // Check Deployment Mode
+        async function checkMode() {
+            try {
+                const res = await fetch('/api/info');
+                const data = await res.json();
+                if (data.deployment_mode === 'railway') {
+                    hintEl.style.display = 'block';
+                }
+            } catch (e) {
+                console.error('Failed to check mode:', e);
+            }
+        }
+        checkMode();
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();

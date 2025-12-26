@@ -69,6 +69,14 @@ def clean_nans(obj):
         return [clean_nans(i) for i in obj]
     return obj
 
+# Public endpoint for system info (no auth required)
+@app.get("/api/info")
+async def get_system_info():
+    return {
+        "deployment_mode": DEPLOYMENT_MODE,
+        "requires_auth": True
+    }
+
 # Authentication Endpoints
 @app.post("/api/login")
 async def login(response: Response, data: LoginRequest):
