@@ -91,7 +91,7 @@ class DataSaver:
         klines: List[Dict],
         symbol: str,
         timeframe: str,
-        save_formats: List[str] = ['json', 'csv', 'parquet'],
+        save_formats: List[str] = ['json', 'csv'],
         cycle_id: str = None
     ) -> Dict[str, str]:
         """保存原始K线数据 (原 save_step1_klines)"""
@@ -136,13 +136,8 @@ class DataSaver:
             saved_files['csv'] = path
             
             
-        if 'parquet' in save_formats:
-            try:
-                path = os.path.join(date_folder, f'{filename_base}.parquet')
-                df.to_parquet(path, index=False)
-                saved_files['parquet'] = path
-            except Exception as e:
-                log.warning(f"Failed to save parquet for market_data (using json/csv instead): {e}")
+            
+        # Parquet usage removed by user request
 
         log.debug(f"保存市场数据: {symbol} {timeframe}")
         return saved_files
@@ -160,21 +155,18 @@ class DataSaver:
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         
         if cycle_id:
-            filename = f'indicators_{symbol}_{timeframe}_{timestamp}_cycle_{cycle_id}_snap_{snapshot_id}.parquet'
+            filename = f'indicators_{symbol}_{timeframe}_{timestamp}_cycle_{cycle_id}_snap_{snapshot_id}.csv'
         else:
-            filename = f'indicators_{symbol}_{timeframe}_{timestamp}_{snapshot_id}.parquet'
+            filename = f'indicators_{symbol}_{timeframe}_{timestamp}_{snapshot_id}.csv'
         path = os.path.join(date_folder, filename)
         
         try:
-            df.to_parquet(path)
+            df.to_csv(path, index=False)
             log.debug(f"保存技术指标: {path}")
-            return {'parquet': path}
+            return {'csv': path}
         except Exception as e:
-            log.warning(f"Failed to save parquet for indicators: {e}")
-            # Fallback to CSV
-            csv_path = path.replace('.parquet', '.csv')
-            df.to_csv(csv_path)
-            return {'csv': csv_path}
+            log.error(f"Failed to save indicators: {e}")
+            return {}
 
     def save_features(
         self,
@@ -190,21 +182,18 @@ class DataSaver:
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         
         if cycle_id:
-            filename = f'features_{symbol}_{timeframe}_{timestamp}_cycle_{cycle_id}_snap_{snapshot_id}_{version}.parquet'
+            filename = f'features_{symbol}_{timeframe}_{timestamp}_cycle_{cycle_id}_snap_{snapshot_id}_{version}.csv'
         else:
-            filename = f'features_{symbol}_{timeframe}_{timestamp}_{snapshot_id}_{version}.parquet'
+            filename = f'features_{symbol}_{timeframe}_{timestamp}_{snapshot_id}_{version}.csv'
         path = os.path.join(date_folder, filename)
         
         try:
-            features.to_parquet(path)
+            features.to_csv(path, index=False)
             log.debug(f"保存特征数据: {path}")
-            return {'parquet': path}
+            return {'csv': path}
         except Exception as e:
-            log.warning(f"Failed to save parquet for features: {e}")
-            # Fallback to CSV
-            csv_path = path.replace('.parquet', '.csv')
-            features.to_csv(csv_path)
-            return {'csv': csv_path}
+            log.error(f"Failed to save features: {e}")
+            return {}
 
     def save_context(
         self,
