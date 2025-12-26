@@ -22,17 +22,20 @@ class TradingLogger:
             # 针对 Railway/Postgres 的 URL 修正 (SQLAlchemy 需要 postgresql:// 开头)
             if self.db_url.startswith("postgres://"):
                 self.db_url = self.db_url.replace("postgres://", "postgresql://", 1)
-            log.info(f"使用 PostgreSQL 数据库: {self.db_url.split('@')[1] if '@' in self.db_url else 'Railway'}")
+            db_host = self.db_url.split('@')[1].split('/')[0] if '@' in self.db_url else 'Railway'
+            log.info(f"使用 PostgreSQL 数据库: {db_host}")
+            db_type = "PostgreSQL"
         else:
             # 本地开发使用 SQLite
             db_path = Path(db_path)
             db_path.parent.mkdir(parents=True, exist_ok=True)
             self.db_url = f"sqlite:///{db_path}"
             log.info(f"使用 SQLite 数据库: {db_path}")
+            db_type = "SQLite"
         
         self.engine = create_engine(self.db_url)
         self._init_database()
-        log.info("交易日志系统初始化完成")
+        log.info(f"交易日志系统初始化完成，使用数据库: {db_type}")
     
     def _init_database(self):
         """初始化数据库"""
