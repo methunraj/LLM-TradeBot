@@ -5,7 +5,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - LLM-TradeBot</title>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;600&display=swap"
+        rel="stylesheet">
     <style>
         :root {
             --bg-color: #0f1115;
@@ -21,8 +23,8 @@
             padding: 0;
             font-family: 'Inter', sans-serif;
             background-color: var(--bg-color);
-            background-image: 
-                radial-gradient(circle at 15% 50%, rgba(0, 255, 157, 0.08), transparent 25%), 
+            background-image:
+                radial-gradient(circle at 15% 50%, rgba(0, 255, 157, 0.08), transparent 25%),
                 radial-gradient(circle at 85% 30%, rgba(66, 153, 225, 0.08), transparent 25%);
             color: var(--text-main);
             height: 100vh;
@@ -46,8 +48,15 @@
         }
 
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .logo {
@@ -58,8 +67,15 @@
         }
 
         @keyframes float {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-10px); }
+
+            0%,
+            100% {
+                transform: translateY(0);
+            }
+
+            50% {
+                transform: translateY(-10px);
+            }
         }
 
         h1 {
@@ -146,13 +162,12 @@
             opacity: 0;
             transition: opacity 0.3s;
         }
-        
+
         .footer {
             margin-top: 30px;
             font-size: 12px;
             color: #4a5568;
         }
-
     </style>
 </head>
 
@@ -165,13 +180,14 @@
         <form id="login-form">
             <div class="form-group">
                 <label for="password">Password</label>
-                <input type="password" id="password" placeholder="Enter access code..." required autofocus>
+                <input type="password" id="password" placeholder="Enter access code..." value="EthanAlgoX" required
+                    autofocus>
             </div>
             <button type="submit" id="btn-submit" class="btn-login">Unlock Dashboard</button>
         </form>
 
         <div id="error-msg" class="error-msg">Invalid password</div>
-        
+
         <div class="footer">
             &copy; 2025 LLM-TradeBot System
         </div>
@@ -186,7 +202,7 @@
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             const password = input.value;
-            
+
             if (!password) return;
 
             // UI Loading State
@@ -218,14 +234,14 @@
                 // Error State
                 errorEl.textContent = err.message || 'Invalid password';
                 errorEl.style.opacity = '1';
-                
+
                 // Shake animation
                 const container = document.querySelector('.login-container');
                 container.style.transform = 'translateX(5px)';
                 setTimeout(() => container.style.transform = 'translateX(-5px)', 50);
                 setTimeout(() => container.style.transform = 'translateX(5px)', 100);
                 setTimeout(() => container.style.transform = 'translateX(0)', 150);
-                
+
                 // Reset
                 btn.disabled = false;
                 btn.textContent = 'Unlock Dashboard';
