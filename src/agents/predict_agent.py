@@ -5,7 +5,7 @@
 职责:
 1. 接收结构化特征数据
 2. 输出未来价格上涨概率 (0.0 - 1.0)
-3. 支持规则评分和 ML 模型两种模式
+3. 支持Rule-based scoring和 ML 模型两种Mode
 4. 提供因子分解说明预测原因
 
 Author: AI Trader Team
@@ -67,7 +67,7 @@ class PredictAgent:
     
     核心功能:
     - 接收结构化特征数据 (来自 TechnicalFeatureEngineer)
-    - 使用加权规则评分计算上涨/下跌概率
+    - 使用加权Rule-based scoring计算上涨/下跌概率
     - 预留 ML 模型接口供未来扩展
     """
     
@@ -124,8 +124,8 @@ class PredictAgent:
         # 尝试加载 ML 模型
         self._try_load_ml_model()
         
-        mode_str = "ML 模型" if self.ml_model is not None else "规则评分"
-        log.info(f"🔮 预测预言家 (The Prophet) 初始化完成 | 预测周期: {horizon} | 币种: {symbol} | 模式: {mode_str}")
+        mode_str = "ML 模型" if self.ml_model is not None else "Rule-based scoring"
+        log.info(f"🔮 The Prophet initialized | Horizon: {horizon} | Symbol: {symbol} | Mode: {mode_str}")
     
     def _try_load_ml_model(self):
         """尝试加载 ML 模型"""
@@ -137,9 +137,9 @@ class PredictAgent:
                     self.ml_model = ProphetMLModel(self.model_path)
                     log.info(f"✅ ML 模型已加载: {self.model_path}")
                 else:
-                    log.warning("LightGBM 未安装，使用规则评分模式")
+                    log.warning("LightGBM 未安装，使用Rule-based scoringMode")
             except Exception as e:
-                log.warning(f"ML 模型加载失败: {e}，使用规则评分模式")
+                log.warning(f"ML 模型加载失败: {e}，使用Rule-based scoringMode")
     
     async def predict(self, features: Dict[str, float]) -> PredictResult:
         """
@@ -154,7 +154,7 @@ class PredictAgent:
         # 预处理特征
         clean_features = self._preprocess_features(features)
         
-        # 选择预测模式
+        # 选择预测Mode
         if self.ml_model is not None:
             result = await self._predict_with_ml(clean_features)
         else:
@@ -208,7 +208,7 @@ class PredictAgent:
     
     async def _predict_with_rules(self, features: Dict[str, float]) -> PredictResult:
         """
-        使用规则评分系统预测
+        使用Rule-based scoring系统预测
         
         评分逻辑：
         - 基础概率: 0.5 (中性)
@@ -378,7 +378,7 @@ class PredictAgent:
                 model_type='ml_lightgbm'
             )
         except Exception as e:
-            log.warning(f"ML 预测失败: {e}，回退到规则评分")
+            log.warning(f"ML 预测失败: {e}，falling back toRule-based scoring")
             return await self._predict_with_rules(features)
     
     def load_ml_model(self, model_path: str):

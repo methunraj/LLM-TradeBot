@@ -154,6 +154,19 @@ class ReflectionAgent:
                 
                 log.info(f"🧠 Reflection #{self.reflection_count} generated successfully")
                 log.info(f"   Summary: {result.summary[:100]}...")
+                
+                # 🆕 保存反思日志
+                try:
+                    from src.server.state import global_state
+                    if hasattr(global_state, 'saver'):
+                        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                        global_state.saver.save_reflection(
+                            reflection=json.dumps(result.raw_response, ensure_ascii=False, indent=2) if result.raw_response else result.summary,
+                            trades_analyzed=len(trades),
+                            timestamp=timestamp
+                        )
+                except Exception as e:
+                    log.warning(f"Failed to save reflection log: {e}")
             
             return result
             

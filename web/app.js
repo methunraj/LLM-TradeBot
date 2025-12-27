@@ -38,7 +38,20 @@ function initChart() {
             scales: {
                 x: {
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    ticks: { color: '#94a3b8' }
+                    ticks: {
+                        color: '#94a3b8',
+                        maxTicksLimit: 8,           // Show max 8 labels
+                        autoSkip: true,              // Auto skip crowded labels
+                        maxRotation: 45,             // Rotate labels for long text
+                        callback: function (value, index, ticks) {
+                            // Only show time part (HH:MM) for cleaner display
+                            const label = this.getLabelForValue(value);
+                            if (label && label.includes(' ')) {
+                                return label.split(' ')[1] || label;  // Return time part
+                            }
+                            return label;
+                        }
+                    }
                 },
                 y: {
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
@@ -850,12 +863,64 @@ function renderDecision(decision) {
 function renderLogs(logs) {
     const container = document.getElementById('logs-container');
     if (!container) return;
+    // 🆕 Check verbose mode toggle
+    const verboseCheckbox = document.getElementById('verbose-logs');
+    const isVerboseMode = verboseCheckbox ? verboseCheckbox.checked : false;
+
+    // 🆕 Filter logs based on mode
+    let filteredLogs = logs;
+    if (!isVerboseMode) {
+        // Summary mode: Show only agent outputs + ERROR/WARNING
+        filteredLogs = logs.filter(logLine => {
+            const cleanLine = logLine.replace(/\x1b\[[0-9;]*m/g, '');
+
+            // Always keep ERROR and WARNING logs
+            if (cleanLine.includes('ERROR') || cleanLine.includes('WARNING') || cleanLine.includes('⚠️') || cleanLine.includes('❌')) {
+                return true;
+            }
+
+            // Exclude verbose INFO logs (data fetching, initialization, etc.)
+            const excludePatterns = [
+                'Data fetched:',
+                'Starting Web Dashboard',
+                'System ready',
+                '启动持续',
+                '💰 Account Monitor',
+                'WebSocket',
+                'REST API',
+                'LightGBM',
+                '初始数据加载',
+                'Test Mode: Initializing'
+            ];
+
+            if (excludePatterns.some(pattern => cleanLine.includes(pattern))) {
+                return false;
+            }
+
+            // Keep important agent summaries and decision outputs
+            const keepPatterns = [
+                // Agent outputs
+                'The Oracle', 'The Strategist', 'The Critic', 'The Guardian', 'The Executor', 'The Prophet',
+                // Decision keywords
+                'Cycle #', 'Vote:', 'Result:', 'Command:', 'Best opportunity',
+                // Execution results
+                '🚀', '💰 [TEST]', 'Opened', 'Closed',
+                // Status indicators
+                '✅', '🚀', '💰', '📈', '📉', '🐂', '🐻',
+                '✅ 通过', '❌ BLOCKED', '🎯',
+                // Step markers
+                '[Step'
+            ];
+
+            return keepPatterns.some(pattern => cleanLine.includes(pattern));
+        });
+    }
 
     // Smart Scroll: Check if user is near bottom before update
     const isScrolledToBottom = container.scrollHeight - container.clientHeight <= container.scrollTop + 100;
     const previousScrollTop = container.scrollTop;
 
-    container.innerHTML = logs.map(logLine => {
+    container.innerHTML = filteredLogs.map(logLine => {
         // Strip ANSI colors
         let cleanLine = logLine.replace(/\x1b\[[0-9;]*m/g, '');
 
@@ -1763,3 +1828,42 @@ document.addEventListener('DOMContentLoaded', () => {
         refreshBtn.addEventListener('click', loadAccounts);
     }
 });
+
+function renderTradeHistory(history) {
+    const tbody = document.querySelector('#trade-table tbody');
+    if (!tbody) return;
+
+    tbody.innerHTML = history.slice().reverse().map(t => {
+        const fmt = num => `$${(num || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+        // PnL Class
+        const pnl = t.pnl || t.realized_pnl || 0;
+        let pnlClass = 'neutral';
+        if (pnl > 0) pnlClass = 'pos';
+        else if (pnl < 0) pnlClass = 'neg';
+
+        // PnL Percent
+        const pnlPct = t.roi ? (t.roi * 100).toFixed(2) + '%' : '0.00%';
+
+        // Position Value
+        const posValue = t.quantity ? (t.entry_price * t.quantity) : (t.position_value || 0);
+
+        // Status Badge
+        const status = t.status ? `<span class="badge ${t.status === 'open' ? 'badge-processing' : 'badge-completed'}">${t.status.toUpperCase()}</span>` : '';
+        const side = t.side ? `<span class="${t.side.toUpperCase() === 'LONG' ? 'pos' : 'neg'}" style="font-weight:bold">${t.side.toUpperCase()}</span>` : '';
+
+        return `
+            <tr>
+                <td style="font-size: 0.9em; color: #a0aec0;">${t.time || t.timestamp || '-'}</td>
+                <td>${t.cycle || t.open_cycle || '-'}</td>
+                <td style="font-weight:600;">${t.symbol} ${side}</td>
+                <td>${fmt(t.entry_price)}</td>
+                <td>${fmt(posValue)}</td>
+                <td>${t.exit_price > 0 ? fmt(t.exit_price) : '-'}</td>
+                <td class="${pnlClass}">${pnl !== 0 ? fmt(pnl) : '-'}</td>
+                <td class="${pnlClass}">${pnl !== 0 ? pnlPct : '-'}</td>
+                <td>${status}</td>
+            </tr>
+        `;
+    }).join('');
+}

@@ -75,7 +75,7 @@ class RiskAuditAgent:
             max_leverage: 最大杠杆倍数
             max_position_pct: 最大单仓位占总资金比例
             max_total_risk_pct: 最大总风险敞口占总资金比例
-            min_stop_loss_pct: 最小止损距离（防止秒爆）
+            min_stop_loss_pct: 最小止损距离（防止s爆）
             max_stop_loss_pct: 最大止损距离（防止过度亏损）
         """
         self.max_leverage = max_leverage
@@ -96,7 +96,7 @@ class RiskAuditAgent:
             'insufficient_margin_blocks': 0,
             'over_leverage_blocks': 0,
         }
-        log.info("👮 风控守护者 (The Guardian) 初始化完成")
+        log.info("👮 The Guardian initialized")
     
     async def audit_decision(
         self,

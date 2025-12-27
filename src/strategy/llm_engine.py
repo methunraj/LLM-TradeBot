@@ -101,9 +101,22 @@ class StrategyEngine:
                 return self._get_fallback_decision(market_context_data)
         
         # 🐂🐻 Get adversarial perspectives first
-        log.info("🐂🐻 Gathering Bull/Bear perspectives...")
+        log.info("🐂🐻 Analyzing Bull/Bear perspectives")
         bull_perspective = self.get_bull_perspective(market_context_text)
         bear_perspective = self.get_bear_perspective(market_context_text)
+        
+        # 🆕 保存Bull/Bear日志
+        try:
+            from src.server.state import global_state
+            if hasattr(global_state, 'saver') and hasattr(global_state, 'current_cycle_id'):
+                global_state.saver.save_bull_bear_perspectives(
+                    bull=bull_perspective,
+                    bear=bear_perspective,
+                    symbol=market_context_data['symbol'],
+                    cycle_id=global_state.current_cycle_id
+                )
+        except Exception as e:
+            log.warning(f"Failed to save bull/bear perspectives log: {e}")
         
         system_prompt = self._build_system_prompt()
         user_prompt = self._build_user_prompt(market_context_text, bull_perspective, bear_perspective, reflection)
@@ -189,10 +202,10 @@ class StrategyEngine:
 
         bull_prompt = """You are a BULLISH market analyst. Your job is to find reasons WHY the market could go UP.
 
-Analyze the provided market data and identify:
-1. Bullish technical signals (support levels, RSI oversold, MACD crossovers)
-2. Positive trend indicators
-3. Entry opportunities for LONG positions
+Analyze the provided 'Four-Layer Strategy Analysis' and identify:
+1. Bullish Trend & Fuel signals (Layer 1)
+2. Bullish AI Resonance (Layer 2)
+3. Bullish Setup patterns (Layer 3/4)
 
 Output your analysis in this EXACT JSON format:
 ```json
@@ -247,10 +260,10 @@ Focus ONLY on bullish factors. Ignore bearish signals."""
 
         bear_prompt = """You are a BEARISH market analyst. Your job is to find reasons WHY the market could go DOWN.
 
-Analyze the provided market data and identify:
-1. Bearish technical signals (resistance levels, RSI overbought, bearish divergence)
-2. Negative trend indicators
-3. Entry opportunities for SHORT positions or exit warnings for LONG
+Analyze the provided 'Four-Layer Strategy Analysis' and identify:
+1. Bearish Trend & Fuel signals (Layer 1)
+2. Bearish AI Resonance (Layer 2)
+3. Bearish Setup patterns (Layer 3/4)
 
 Output your analysis in this EXACT JSON format:
 ```json
@@ -296,7 +309,7 @@ Focus ONLY on bearish factors. Ignore bullish signals."""
         import os
         
         # Check for custom prompt
-        # Assuming src/strategy/deepseek_engine.py, so config is ../../config/custom_prompt.md
+        # Assuming src/strategy/llm_engine.py, so config is ../../config/custom_prompt.md
         base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         custom_prompt_path = os.path.join(base_dir, 'config', 'custom_prompt.md')
         
@@ -319,9 +332,9 @@ Focus ONLY on bearish factors. Ignore bullish signals."""
             return "Error: Default prompt missing"
     
     def _build_user_prompt(self, market_context: str, bull_perspective: Dict = None, bear_perspective: Dict = None, reflection: str = None) -> str:
-        """Build User Prompt (English Version) with Bull/Bear perspectives and optional reflection"""
+        """Build User Prompt - DATA ONLY (No instructions, all rules are in system prompt)"""
         
-        # Build adversarial analysis section
+        # Build adversarial analysis section (data only)
         adversarial_section = ""
         if bull_perspective or bear_perspective:
             bull_reasons = bull_perspective.get('bullish_reasons', 'N/A') if bull_perspective else 'N/A'
@@ -332,109 +345,34 @@ Focus ONLY on bearish factors. Ignore bullish signals."""
             bear_stance = bear_perspective.get('stance', 'UNKNOWN') if bear_perspective else 'UNKNOWN'
             
             adversarial_section = f"""
-
-## 🐂🐻 Adversarial Analysis (Consider BOTH perspectives)
+---
+## 🐂🐻 Adversarial Analysis
 
 ### 🐂 Bull Agent [{bull_stance}] (Confidence: {bull_conf}%)
 {bull_reasons}
 
 ### 🐻 Bear Agent [{bear_stance}] (Confidence: {bear_conf}%)
 {bear_reasons}
-
-> **IMPORTANT**: Weigh both perspectives. If one side has significantly higher confidence (>20% difference), lean towards that direction. If similar, prefer `wait`.
-
----
 """
         
-        # Build reflection section (from ReflectionAgent)
+        # Build reflection section (data only)
         reflection_section = ""
         if reflection:
             reflection_section = f"""
-## 🧠 Trading Reflection (Lessons from Last 10 Trades)
+---
+## 🧠 Trading Reflection (Last 10 Trades)
 
 {reflection}
-
-> **Apply these insights**: Consider the patterns and recommendations when making your decision.
-
----
 """
         
-        return f"""# 📊 Real-Time Market Data (Technical Analysis Completed)
-
-The system has prepared the following complete market status for **5m/15m/1h** timeframes:
+        # DATA-ONLY user prompt
+        return f"""# 📊 MARKET DATA INPUT
 
 {market_context}
 {adversarial_section}{reflection_section}
 ---
 
-## 🎯 Your Task
-
-Please follow this flow for analysis and decision-making:
-
-### 1️⃣ Multi-Timeframe Trend Judgment (Mandatory)
-- Analyze **1h** main trend direction (SMA/MACD)
-- Check **15m** for confluence with 1h
-- Observe **5m** for short-term momentum
-
-### 2️⃣ Key Indicator Confirmation (Mandatory)
-- Is RSI in reasonable range (30-70)?
-- Is MACD histogram expanding (momentum up) or contracting?
-- Does Volume support the trend?
-- Is ATR showing abnormal volatility?
-
-### 3️⃣ Risk Assessment (Mandatory)
-- Are there extreme indicators (RSI>80 or <20)?
-- Are timeframes contradicting?
-- Is liquidity (Volume) sufficient?
-
-### 4️⃣ Entry Timing (If Opening)
-- Where is price relative to Support/Resistance?
-- Is there a clear entry signal (Breakout/Pullback/Cross)?
-- Is Risk-Reward Ratio ≥ 2?
-
-### 5️⃣ Stop Loss / Take Profit (If Opening)
-- Calculate logical SL distance using ATR
-- **Verify SL Direction**:
-  - Long: stop_loss < entry_price
-  - Short: stop_loss > entry_price
-- TP must be at least 2x risk
-
----
-
-## ⚡ Output Format Requirements (Mandatory)
-
-1. **Use <reasoning> and <decision> XML tags**
-2. **JSON must be wrapped in ```json code block**
-3. **JSON must be an array format `[{{...}}]`**, starting with `[{{`
-4. **reasoning field is required**: One sentence summary in English (under 50 words)
-5. **Prohibited**: Range symbols `~`, thousand separators `,`, Chinese comments
-
----
-
-## 🚨 Format Example
-
-<reasoning>
-1h: [trend analysis]
-15m: [confluence check]
-5m: [entry timing]
-Risk: [assessment]
-</reasoning>
-
-<decision>
-```json
-[
-  {{
-    "symbol": "BTCUSDT",
-    "action": "wait",
-    "confidence": 45,
-    "reasoning": "Weak signals, await clearer entry"
-  }}
-]
-```
-</decision>
-
-
-Please start your analysis and output the decision in JSON Array format `[{{...}}]`.
+Analyze the above data following the strategy rules in system prompt. Output your decision.
 """
     
     def _get_fallback_decision(self, context: Dict) -> Dict:

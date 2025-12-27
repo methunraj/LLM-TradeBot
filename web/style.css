@@ -706,6 +706,20 @@ th {
     font-size: 0.7rem;
     padding: 8px 6px;
     border-bottom: 2px solid var(--panel-border-hover);
+    top: 0;
+    z-index: 20;
+    /* Ensure group header is on top */
+    height: 34px;
+    /* Fixed height for sticky calc */
+}
+
+/* Second Header Row (Column Names) */
+.decision-table-card thead tr:nth-child(2) th {
+    top: 34px;
+    /* Offset by group header height */
+    z-index: 15;
+    background: var(--bg-tertiary);
+    /* Ensure opacity */
 }
 
 .group-system {
@@ -713,7 +727,7 @@ th {
     color: var(--accent-blue);
 }
 
-.group-critic {
+.group-decision {
     background: rgba(251, 191, 36, 0.1);
     color: var(--accent-gold);
 }
@@ -721,6 +735,11 @@ th {
 .group-strategist {
     background: rgba(0, 214, 143, 0.1);
     color: var(--accent-green);
+}
+
+.group-context {
+    background: rgba(0, 153, 255, 0.08);
+    color: var(--text-secondary);
 }
 
 .group-prophet {

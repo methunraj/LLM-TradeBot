@@ -27,64 +27,79 @@ class CustomJSONEncoder(json.JSONEncoder):
 
 
 class DataSaver:
-    """数据保存工具类 - 按业务领域和日期自动组织文件
+    """数据保存工具类 - 按Agent和业务领域自动组织文件
     
-    目录结构 (Adversarial Intelligence Framework - AIF):
+    新目录结构 (Multi-Agent Framework):
     data/
-      the_oracle/        (数据先知 - DataSync)
-      the_strategist/    (量化策略师 - QuantAnalyst)
-      the_critic/        (对抗评论员 - DecisionCore)
-      the_guardian/      (风控守护者 - RiskAudit)
-      the_executor/      (执行指挥官 - ExecutionEngine)
+      agents/              (所有LLM Agent的日志)
+        trend_agent/
+        setup_agent/
+        trigger_agent/
+        bull_bear/
+        strategy_engine/
+        reflection/
+      market_data/         (原始市场数据)
+      analytics/           (量化分析)
+      execution/           (交易执行)
+      risk/                (风控审计)
     """
     
     def __init__(self, base_dir: str = 'data'):
         self.base_dir = base_dir
         
-        # 定义业务目录映射 (Unified AIF Hierarchy)
+        # 定义业务目录映射 (Agent-Based Structure)
         self.dirs = {
-            # 1. 采样层 - 数据先知 (The Oracle)
-            'market_data': os.path.join(base_dir, 'the_oracle', 'market_data'),
+            # Agent层 - 所有LLM Agent日志
+            'trend_agent': os.path.join(base_dir, 'agents', 'trend_agent'),
+            'setup_agent': os.path.join(base_dir, 'agents', 'setup_agent'),
+            'trigger_agent': os.path.join(base_dir, 'agents', 'trigger_agent'),
+            'bull_bear': os.path.join(base_dir, 'agents', 'bull_bear'),
+            'strategy_engine': os.path.join(base_dir, 'agents', 'strategy_engine'),
+            'reflection': os.path.join(base_dir, 'agents', 'reflection'),
             
-            # 2. 假设层 - 量化策略师 (The Strategist)
-            'indicators': os.path.join(base_dir, 'the_strategist', 'indicators'),
-            'features': os.path.join(base_dir, 'the_strategist', 'features'),
-            'analytics': os.path.join(base_dir, 'the_strategist', 'analytics'),
+            # 数据层
+            'market_data': os.path.join(base_dir, 'market_data'),
             
-            # 2b. 预测层 - 预测预言家 (The Prophet)
-            'predictions': os.path.join(base_dir, 'the_prophet', 'predictions'),
+            # 分析层
+            'indicators': os.path.join(base_dir, 'analytics', 'indicators'),
+            'predictions': os.path.join(base_dir, 'analytics', 'predictions'),
+            'regime': os.path.join(base_dir, 'analytics', 'regime'),
+            'analytics': os.path.join(base_dir, 'analytics'),
             
-            # 3. 对抗层 - 对抗评论员 (The Critic)
-            'llm_logs': os.path.join(base_dir, 'the_critic', 'llm_logs'),
-            'decisions': os.path.join(base_dir, 'the_critic', 'decisions'),
+            # 执行层
+            'orders': os.path.join(base_dir, 'execution', 'orders'),
+            'trades': os.path.join(base_dir, 'execution', 'trades'),
             
-            # 4. 审计层 - 风控守护者 (The Guardian)
-            'risk_audits': os.path.join(base_dir, 'the_guardian', 'audits'),
+            # 风控层
+            'risk_audits': os.path.join(base_dir, 'risk', 'audits'),
             
-            # 5. 执行层 - 执行指挥官 (The Executor)
-            'orders': os.path.join(base_dir, 'the_executor', 'orders'),
-            'trades': os.path.join(base_dir, 'the_executor', 'trades'),
-            'backtest': os.path.join(base_dir, 'the_executor', 'backtests')
+            # 兼容旧路径 (向后兼容)
+            'llm_logs': os.path.join(base_dir, 'agents', 'strategy_engine'),  # 兼容旧代码
+            'decisions': os.path.join(base_dir, 'agents', 'strategy_engine'),
         }
         
-        # 兼容旧路径映射 (Alias for legacy methods)
+        # 兼容旧路径映射
         self.dirs['agent_context'] = self.dirs['analytics']
         self.dirs['executions'] = self.dirs['orders']
+        self.dirs['features'] = self.dirs['analytics']  # features合并到analytics
             
-    def _get_date_folder(self, category: str, date: Optional[str] = None) -> str:
-        """获取或创建指定类别的日期文件夹"""
+    def _get_date_folder(self, category: str, symbol: Optional[str] = None, date: Optional[str] = None) -> str:
+        """获取或创建指定类别的日期文件夹 (支持按币种嵌套)"""
         if date is None:
             date = datetime.now().strftime('%Y%m%d')
         
         category_dir = self.dirs.get(category)
         if not category_dir:
-            # Fallback for unknown categories
             category_dir = os.path.join(self.base_dir, category)
             os.makedirs(category_dir, exist_ok=True)
             
-        date_folder = os.path.join(category_dir, date)
-        os.makedirs(date_folder, exist_ok=True)
-        return date_folder
+        if symbol:
+            target_folder = os.path.join(category_dir, symbol, date)
+        else:
+            target_folder = os.path.join(category_dir, date)
+            
+        os.makedirs(target_folder, exist_ok=True)
+        return target_folder
     
     def save_market_data(
         self,
@@ -99,7 +114,7 @@ class DataSaver:
             log.warning("K线数据为空，跳过保存")
             return {}
         
-        date_folder = self._get_date_folder('market_data')
+        date_folder = self._get_date_folder('market_data', symbol=symbol)
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         
         # 元数据
@@ -151,7 +166,7 @@ class DataSaver:
         cycle_id: str = None
     ) -> Dict[str, str]:
         """保存技术指标数据 (原 save_step2_indicators)"""
-        date_folder = self._get_date_folder('indicators')
+        date_folder = self._get_date_folder('indicators', symbol=symbol)
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         
         if cycle_id:
@@ -178,7 +193,7 @@ class DataSaver:
         cycle_id: str = None
     ) -> Dict[str, str]:
         """保存特征数据 (原 save_step3_features)"""
-        date_folder = self._get_date_folder('features')
+        date_folder = self._get_date_folder('features', symbol=symbol)
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         
         if cycle_id:
@@ -204,7 +219,7 @@ class DataSaver:
         cycle_id: str = None
     ) -> Dict[str, str]:
         """保存Agent上下文/分析结果 (原 save_step4_context)"""
-        date_folder = self._get_date_folder('agent_context')
+        date_folder = self._get_date_folder('agent_context', symbol=symbol)
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         
         if cycle_id:
@@ -228,22 +243,17 @@ class DataSaver:
     ) -> Dict[str, str]:
         """保存LLM交互日志 (按币种分文件夹)
         
-        路径结构: data/the_critic/llm_logs/{SYMBOL}/{YYYYMMDD}/llm_log_{timestamp}_{snapshot_id}.md
+        路径结构: data/agents/strategy_engine/{SYMBOL}/{YYYYMMDD}/llm_log_{timestamp}.md
         """
-        # Get base llm_logs directory
-        base_llm_dir = self.dirs.get('llm_logs')
-        
-        # Create symbol-specific subfolder
-        date_str = datetime.now().strftime('%Y%m%d')
-        symbol_date_folder = os.path.join(base_llm_dir, symbol, date_str)
-        os.makedirs(symbol_date_folder, exist_ok=True)
+        # Get symbol-specific subfolder using central helper
+        symbol_date_folder = self._get_date_folder('llm_logs', symbol=symbol)
         
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         # Include cycle_id in filename if provided
         if cycle_id:
-            filename = f'llm_log_{timestamp}_cycle_{cycle_id}_snap_{snapshot_id}.md'
+            filename = f'llm_log_{timestamp}_{cycle_id}_{snapshot_id}.md'
         else:
-            filename = f'llm_log_{timestamp}_snap_{snapshot_id}.md'
+            filename = f'llm_log_{timestamp}_{snapshot_id}.md'
         path = os.path.join(symbol_date_folder, filename)
         
         with open(path, 'w', encoding='utf-8') as f:
@@ -251,6 +261,151 @@ class DataSaver:
             
         log.debug(f"保存LLM日志: {path}")
         return {'md': path}
+    
+    def save_trend_analysis(
+        self,
+        analysis: str,
+        input_data: Dict,
+        symbol: str,
+        cycle_id: str,
+        model: str = 'deepseek-chat'
+    ) -> Dict[str, str]:
+        """保存TrendAgent分析日志"""
+        symbol_date_folder = self._get_date_folder('trend_agent', symbol=symbol)
+        
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f'trend_{timestamp}_{cycle_id}.json'
+        path = os.path.join(symbol_date_folder, filename)
+        
+        data = {
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'cycle_id': cycle_id,
+            'symbol': symbol,
+            'input_data': input_data,
+            'analysis': analysis,
+            'model': model,
+            'temperature': 0.3
+        }
+        
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False, cls=CustomJSONEncoder)
+        
+        log.debug(f"保存Trend分析: {path}")
+        return {'json': path}
+    
+    def save_setup_analysis(
+        self,
+        analysis: str,
+        input_data: Dict,
+        symbol: str,
+        cycle_id: str,
+        model: str = 'deepseek-chat'
+    ) -> Dict[str, str]:
+        """保存SetupAgent分析日志"""
+        symbol_date_folder = self._get_date_folder('setup_agent', symbol=symbol)
+        
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f'setup_{timestamp}_{cycle_id}.json'
+        path = os.path.join(symbol_date_folder, filename)
+        
+        data = {
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'cycle_id': cycle_id,
+            'symbol': symbol,
+            'input_data': input_data,
+            'analysis': analysis,
+            'model': model,
+            'temperature': 0.3
+        }
+        
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False, cls=CustomJSONEncoder)
+        
+        log.debug(f"保存Setup分析: {path}")
+        return {'json': path}
+    
+    def save_trigger_analysis(
+        self,
+        analysis: str,
+        input_data: Dict,
+        symbol: str,
+        cycle_id: str,
+        model: str = 'deepseek-chat'
+    ) -> Dict[str, str]:
+        """保存TriggerAgent分析日志"""
+        symbol_date_folder = self._get_date_folder('trigger_agent', symbol=symbol)
+        
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f'trigger_{timestamp}_{cycle_id}.json'
+        path = os.path.join(symbol_date_folder, filename)
+        
+        data = {
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'cycle_id': cycle_id,
+            'symbol': symbol,
+            'input_data': input_data,
+            'analysis': analysis,
+            'model': model,
+            'temperature': 0.3
+        }
+        
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False, cls=CustomJSONEncoder)
+        
+        log.debug(f"保存Trigger分析: {path}")
+        return {'json': path}
+    
+    def save_bull_bear_perspectives(
+        self,
+        bull: Dict,
+        bear: Dict,
+        symbol: str,
+        cycle_id: str
+    ) -> Dict[str, str]:
+        """保存Bull/Bear对抗分析日志"""
+        symbol_date_folder = self._get_date_folder('bull_bear', symbol=symbol)
+        
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f'perspectives_{timestamp}_{cycle_id}.json'
+        path = os.path.join(symbol_date_folder, filename)
+        
+        data = {
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'cycle_id': cycle_id,
+            'symbol': symbol,
+            'bull_perspective': bull,
+            'bear_perspective': bear
+        }
+        
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False, cls=CustomJSONEncoder)
+        
+        log.debug(f"保存Bull/Bear分析: {path}")
+        return {'json': path}
+    
+    def save_reflection(
+        self,
+        reflection: str,
+        trades_analyzed: int,
+        timestamp: str
+    ) -> Dict[str, str]:
+        """保存ReflectionAgent反思日志"""
+        date_folder = self._get_date_folder('reflection')
+        
+        filename = f'reflection_{timestamp}.json'
+        path = os.path.join(date_folder, filename)
+        
+        data = {
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'trades_analyzed': trades_analyzed,
+            'reflection': reflection
+        }
+        
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False, cls=CustomJSONEncoder)
+        
+        log.debug(f"保存Reflection: {path}")
+        return {'json': path}
 
     def save_decision(
         self,
@@ -260,12 +415,12 @@ class DataSaver:
         cycle_id: str = None
     ) -> Dict[str, str]:
         """保存决策结果 (原 save_step6_decision)"""
-        date_folder = self._get_date_folder('decisions')
+        date_folder = self._get_date_folder('decisions', symbol=symbol)
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         
         # Use cycle_id if provided, otherwise fall back to snapshot_id
         if cycle_id:
-            filename = f'decision_{symbol}_{cycle_id}_{timestamp}.json'
+            filename = f'decision_{symbol}_{timestamp}_{cycle_id}.json'
             decision['cycle_id'] = cycle_id  # Ensure it's in the content too
         else:
             filename = f'decision_{symbol}_{timestamp}_{snapshot_id}.json'
@@ -284,11 +439,11 @@ class DataSaver:
         cycle_id: str = None
     ) -> Dict[str, str]:
         """保存执行记录"""
-        date_folder = self._get_date_folder('orders')
+        date_folder = self._get_date_folder('orders', symbol=symbol)
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         
         if cycle_id:
-            filename = f'order_{symbol}_{timestamp}_cycle_{cycle_id}.json'
+            filename = f'execution_{symbol}_{timestamp}_{cycle_id}.json'
             record['cycle_id'] = cycle_id
         else:
             filename = f'order_{symbol}_{timestamp}.json'
@@ -316,14 +471,14 @@ class DataSaver:
         cycle_id: str = None
     ) -> Dict[str, str]:
         """保存风控审计结果"""
-        date_folder = self._get_date_folder('risk_audits')
+        date_folder = self._get_date_folder('risk_audits', symbol=symbol)
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         
         if cycle_id:
-            filename = f'audit_{symbol}_{timestamp}_cycle_{cycle_id}_snap_{snapshot_id}.json'
+            filename = f'audit_{symbol}_{timestamp}_{cycle_id}_{snapshot_id}.json'
             audit_result['cycle_id'] = cycle_id
         else:
-            filename = f'audit_{symbol}_{timestamp}_{snapshot_id}.json'
+            filename = f'risk_audit_{symbol}_{timestamp}_{snapshot_id}.json'
         path = os.path.join(date_folder, filename)
         
         with open(path, 'w', encoding='utf-8') as f:
@@ -340,14 +495,14 @@ class DataSaver:
         cycle_id: str = None
     ) -> Dict[str, str]:
         """保存预测预言家(The Prophet)的预测结果"""
-        date_folder = self._get_date_folder('predictions')
+        date_folder = self._get_date_folder('predictions', symbol=symbol)
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         
         if cycle_id:
-            filename = f'prediction_{symbol}_{timestamp}_cycle_{cycle_id}_snap_{snapshot_id}.json'
+            filename = f'prediction_{symbol}_{timestamp}_{cycle_id}_{snapshot_id}.json'
             prediction['cycle_id'] = cycle_id
         else:
-            filename = f'prediction_{symbol}_{timestamp}_snap_{snapshot_id}.json'
+            filename = f'prediction_{symbol}_{timestamp}_{snapshot_id}.json'
         path = os.path.join(date_folder, filename)
         
         with open(path, 'w', encoding='utf-8') as f:
@@ -356,9 +511,9 @@ class DataSaver:
         log.debug(f"保存预测结果: {path}")
         return {'json': path}
 
-    def list_files(self, category: str, date: str = None) -> List[str]:
+    def list_files(self, category: str, symbol: Optional[str] = None, date: Optional[str] = None) -> List[str]:
         """列出文件"""
-        folder = self._get_date_folder(category, date)
+        folder = self._get_date_folder(category, symbol=symbol, date=date)
         if not os.path.exists(folder):
             return []
         return [os.path.join(folder, f) for f in os.listdir(folder)]

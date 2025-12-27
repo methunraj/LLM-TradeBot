@@ -6,7 +6,7 @@ import numpy as np
 import uuid
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
-from ta.trend import SMAIndicator, EMAIndicator, MACD
+from ta.trend import SMAIndicator, EMAIndicator, MACD, ADXIndicator
 from ta.momentum import RSIIndicator, StochasticOscillator
 from ta.volatility import BollingerBands, AverageTrueRange
 from ta.volume import VolumeWeightedAveragePrice
@@ -198,6 +198,10 @@ class MarketDataProcessor:
         df['ema_12'] = EMAIndicator(close=df['close'], window=12).ema_indicator()
         df['ema_26'] = EMAIndicator(close=df['close'], window=26).ema_indicator()
         
+        # 🆕 Trend EMAs for 1h dual EMA system (Specification requirement)
+        df['ema_20'] = EMAIndicator(close=df['close'], window=20).ema_indicator()
+        df['ema_60'] = EMAIndicator(close=df['close'], window=60).ema_indicator()
+        
         # MACD - 经典价差定义（恢复标准，2025-12-18修复）
         # 保存原始MACD价差（单位: USDT），符合经典技术分析定义
         # MACD = EMA12 - EMA26（价格差），非百分比
@@ -213,6 +217,10 @@ class MarketDataProcessor:
         
         # RSI
         df['rsi'] = RSIIndicator(close=df['close'], window=14).rsi()
+        # 🆕 ADX Indicator (Added 2025-12-27)
+        # ADX = Average Directional Index (Trend Strength)
+        adx_indicator = ADXIndicator(high=df['high'], low=df['low'], close=df['close'], window=14)
+        df['adx'] = adx_indicator.adx()
         
         # 布林带
         bb = BollingerBands(close=df['close'], window=20, window_dev=2)
@@ -225,6 +233,21 @@ class MarketDataProcessor:
             (df['bb_upper'] - df['bb_lower']) / df['bb_middle'],
             np.nan
         )
+        
+        # 🆕 KDJ Indicator (Specification requirement for 15m setup)
+        # Parameters: N=9, M1=3, M2=3
+        from ta.momentum import StochasticOscillator
+        stoch = StochasticOscillator(
+            high=df['high'],
+            low=df['low'],
+            close=df['close'],
+            window=9,
+            smooth_window=3
+        )
+        df['kdj_k'] = stoch.stoch()
+        df['kdj_d'] = stoch.stoch_signal()
+        df['kdj_j'] = 3 * df['kdj_k'] - 2 * df['kdj_d']
+        
         
         # ATR (波动率) - 修复前期 0 值问题
         # 先计算 True Range
