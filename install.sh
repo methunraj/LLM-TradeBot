@@ -84,11 +84,42 @@ source "$VENV_DIR/bin/activate"
 print_info "Upgrading pip..."
 pip install --upgrade pip -q
 
+# Check network connectivity
+print_info "Checking network connectivity..."
+if command -v curl &> /dev/null; then
+    if curl -s --max-time 3 pypi.org > /dev/null 2>&1; then
+        print_success "Network connection OK"
+    else
+        print_warning "Network connection slow, installation may take longer"
+    fi
+fi
+
+# Detect region and select mirror
+PIP_INDEX=""
+if command -v curl &> /dev/null; then
+    COUNTRY=$(curl -s --max-time 2 ipinfo.io/country 2>/dev/null || echo "")
+    if [[ "$COUNTRY" == "CN" ]]; then
+        print_info "Detected China region, using Tsinghua mirror for faster installation..."
+        PIP_INDEX="-i https://pypi.tuna.tsinghua.edu.cn/simple"
+    fi
+fi
+
 # Install dependencies
-print_info "Installing dependencies..."
+print_info "Installing dependencies (estimated 2-3 minutes)..."
+print_info "Progress will be shown below..."
+echo ""
+
 if [ -f "requirements.txt" ]; then
-    pip install -r requirements.txt -q
-    print_success "Dependencies installed"
+    # Install with progress bar, timeout, and retries
+    if pip install -r requirements.txt $PIP_INDEX --timeout 60 --retries 3 2>&1 | grep -E "Collecting|Installing|Successfully"; then
+        echo ""
+        print_success "Dependencies installed successfully"
+    else
+        echo ""
+        print_error "Dependency installation failed"
+        print_info "You can try manually: pip install -r requirements.txt"
+        exit 1
+    fi
 else
     print_error "requirements.txt not found"
     exit 1
