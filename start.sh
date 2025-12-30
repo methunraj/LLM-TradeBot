@@ -68,17 +68,19 @@ TEST_MODE=""
 RUN_MODE=""
 EXTRA_ARGS=""
 
-for arg in "$@"; do
-    case $arg in
+while [[ $# -gt 0 ]]; do
+    case $1 in
         --test)
             TEST_MODE="--test"
+            shift
             ;;
         --mode)
-            shift
-            RUN_MODE="--mode $1"
+            RUN_MODE="--mode $2"
+            shift 2
             ;;
         *)
-            EXTRA_ARGS="$EXTRA_ARGS $arg"
+            EXTRA_ARGS="$EXTRA_ARGS $1"
+            shift
             ;;
     esac
 done

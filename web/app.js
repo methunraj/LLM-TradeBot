@@ -793,9 +793,18 @@ function renderLogs(logs) {
             // Strip ANSI colors for filtering
             const cleanLine = logLine.replace(/\x1b\[[0-9;]*m/g, '');
 
-            // Show if contains agent tags (new format) or important keywords
-            return (
-                // New multi-agent format tags
+            // 🎯 Simplified Mode: Show only Agent Summaries + Warnings/Errors
+
+            // 1. Always show WARNING and ERROR
+            if (cleanLine.includes('WARNING') ||
+                cleanLine.includes('ERROR') ||
+                cleanLine.includes('⚠️') ||
+                cleanLine.includes('❌')) {
+                return true;
+            }
+
+            // 2. Show Agent Summary Lines (with result indicators)
+            const hasAgentTag = (
                 cleanLine.includes('[📊 SYSTEM]') ||
                 cleanLine.includes('[🕵️ ORACLE]') ||
                 cleanLine.includes('[👨‍🔬 STRATEGIST]') ||
@@ -805,34 +814,42 @@ function renderLogs(logs) {
                 cleanLine.includes('[⚖️ CRITIC]') ||
                 cleanLine.includes('[🛡️ GUARDIAN]') ||
                 cleanLine.includes('[🚀 EXECUTOR]') ||
-                cleanLine.includes('[🎯 SYSTEM]') ||
-                // Cycle separators
-                cleanLine.includes('━━━') ||
-                // System status messages
+                cleanLine.includes('[🧠 REFLECTION]')
+            );
+
+            const hasResultIndicator = (
+                cleanLine.includes('✅') ||
+                cleanLine.includes('❌') ||
+                cleanLine.includes('⚠️') ||
+                cleanLine.includes('PASS') ||
+                cleanLine.includes('FAIL') ||
+                cleanLine.includes('BLOCK') ||
+                cleanLine.includes('VETO')
+            );
+
+            // Show if it's an agent line with a result
+            if (hasAgentTag && hasResultIndicator) {
+                return true;
+            }
+
+            // 3. Show System Status Changes
+            if (cleanLine.includes('⏹️') ||  // Stopped
+                cleanLine.includes('⏸️') ||  // Paused
+                cleanLine.includes('▶️') ||  // Started
                 cleanLine.includes('STOPPED') ||
                 cleanLine.includes('PAUSED') ||
                 cleanLine.includes('RESUMED') ||
-                cleanLine.includes('START') ||
-                cleanLine.includes('Cycle #') ||
-                cleanLine.includes('⏹️') ||
-                cleanLine.includes('⏸️') ||
-                cleanLine.includes('▶️') ||
-                cleanLine.includes('🚀') ||
-                // Error/Warning keywords
-                cleanLine.includes('ERROR') ||
-                cleanLine.includes('WARNING') ||
-                cleanLine.includes('❌') ||
-                cleanLine.includes('✅') ||
-                // Legacy agent names (fallback)
-                cleanLine.includes('ORACLE') ||
-                cleanLine.includes('STRATEGIST') ||
-                cleanLine.includes('PROPHET') ||
-                cleanLine.includes('GUARDIAN') ||
-                cleanLine.includes('EXECUTOR') ||
-                cleanLine.includes('CRITIC') ||
-                cleanLine.includes('BULL') ||
-                cleanLine.includes('BEAR')
-            );
+                cleanLine.includes('START')) {
+                return true;
+            }
+
+            // 4. Show Cycle Separators
+            if (cleanLine.includes('━━━') ||
+                cleanLine.includes('Cycle #')) {
+                return true;
+            }
+
+            return false;
         })
         : logs; // Show all logs in detailed mode
 
@@ -1371,6 +1388,37 @@ function setupEventListeners() {
             const val = parseFloat(e.target.value);
             setControl('set_interval', { interval: val });
         });
+    }
+
+    // 🆕 Log Mode Toggle
+    const logModeToggle = document.getElementById('log-mode-toggle');
+    if (logModeToggle) {
+        // Initialize log mode from localStorage or default to 'simplified'
+        window.logMode = localStorage.getItem('logMode') || 'simplified';
+        updateLogModeUI();
+
+        logModeToggle.addEventListener('click', () => {
+            // Toggle between simplified and detailed
+            window.logMode = window.logMode === 'simplified' ? 'detailed' : 'simplified';
+            localStorage.setItem('logMode', window.logMode);
+            updateLogModeUI();
+            // Force refresh logs
+            updateDashboard();
+        });
+    }
+}
+
+// Update log mode UI elements
+function updateLogModeUI() {
+    const iconEl = document.getElementById('log-mode-icon');
+    const textEl = document.getElementById('log-mode-text');
+
+    if (window.logMode === 'simplified') {
+        if (iconEl) iconEl.textContent = '📋';
+        if (textEl) textEl.textContent = 'Simplified';
+    } else {
+        if (iconEl) iconEl.textContent = '📜';
+        if (textEl) textEl.textContent = 'Detailed';
     }
 }
 

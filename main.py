@@ -160,7 +160,15 @@ class MultiAgentTradingBot:
             # Sort to keep stable order
             self.symbols.sort()
                 
-        self.primary_symbol = self.config.get('trading.primary_symbol', self.symbols[0])
+        # 🔧 Primary symbol must be in the symbols list
+        configured_primary = self.config.get('trading.primary_symbol', 'BTCUSDT')
+        if configured_primary in self.symbols:
+            self.primary_symbol = configured_primary
+        else:
+            # Use first symbol if configured primary not in list
+            self.primary_symbol = self.symbols[0]
+            log.info(f"Primary symbol {configured_primary} not in symbols list, using {self.primary_symbol}")
+        
         self.current_symbol = self.primary_symbol  # 当前处理的交易对
         self.test_mode = test_mode
         global_state.is_test_mode = test_mode  # Set test mode in global state
