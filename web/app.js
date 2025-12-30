@@ -1,5 +1,47 @@
 const API_URL = '/api/status';
 
+// 🌐 Language Management (exposed to window for global access)
+window.currentLang = localStorage.getItem('language') || 'en';
+
+// 🎯 Demo Mode Tracking (moved to top to avoid TDZ error)
+let demoExpiredShown = false;
+
+// Apply translations to elements with data-i18n attribute
+function applyTranslations(lang) {
+    if (!window.i18n || !window.i18n[lang]) {
+        console.warn('i18n not loaded or language not found:', lang);
+        return;
+    }
+
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (window.i18n[lang][key]) {
+            // Preserve icons if they exist (with Unicode flag to handle multibyte emojis)
+            const icon = el.textContent.match(/^[🌐⚙️🚪📉📈📋📜📡⏹️⏸️▶️🧪💰📊]/u);
+            const translation = window.i18n[lang][key];
+            el.textContent = icon ? icon[0] + ' ' + translation.replace(/^[🌐⚙️🚪📉📈📋📜📡⏹️⏸️▶️🧪💰📊]\s*/u, '') : translation;
+        }
+    });
+}
+
+// Toggle language between EN and ZH
+function toggleLanguage() {
+    console.log('🌐 Language toggle triggered');
+    window.currentLang = window.currentLang === 'en' ? 'zh' : 'en';
+    localStorage.setItem('language', window.currentLang);
+    applyTranslations(window.currentLang);
+    updateLanguageButton();
+}
+
+
+// Update language button text
+function updateLanguageButton() {
+    const langText = document.getElementById('lang-text');
+    if (langText) {
+        langText.textContent = window.currentLang === 'en' ? '中文' : 'EN';
+    }
+}
+
 // Chart Instance
 let equityChart = null;
 
@@ -517,12 +559,13 @@ function renderAccount(account) {
     const walletBalance = account.wallet_balance || 0;
     const totalPnl = account.total_pnl || 0;
 
-    setTxt('account-total-equity', fmt(totalEquity));
+    setTxt('acc-equity', fmt(totalEquity));
+    setTxt('header-equity', fmt(totalEquity));
     setTxt('account-wallet-balance', fmt(walletBalance));
-    setTxt('account-initial-balance', fmt(initialBalance));
+    setTxt('acc-initial', fmt(initialBalance));
 
     // PnL calculation and styling
-    const pnlElement = document.getElementById('account-total-pnl');
+    const pnlElement = document.getElementById('acc-pnl');
     if (pnlElement) {
         pnlElement.textContent = fmt(totalPnl);
         pnlElement.classList.remove('pos', 'neg', 'neutral');
@@ -734,6 +777,10 @@ function renderSystemStatus(system) {
     // Sync Interval Selector with backend value (default to 3 min)
     const intervalSel = document.getElementById('interval-selector');
     if (intervalSel) {
+        // The instruction provided a syntactically incorrect line.
+        // Assuming the intent was to keep the original logic for setting the interval value,
+        // and that the `<script>` tag was a misplaced artifact or a misunderstanding of JS syntax.
+        // To maintain syntactic correctness as per instructions, the original line is kept.
         const interval = system.cycle_interval !== undefined ? system.cycle_interval : 3;
         intervalSel.value = interval.toString();
     }
@@ -1036,12 +1083,40 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 });
 
-// Init
-initChart();
-setupEventListeners();
-applyRoleRestrictions(); // Apply role-based UI restrictions
-setInterval(updateDashboard, 2000); // Poll every 2s
-updateDashboard();
+// 🚀 MAIN INITIALIZATION
+document.addEventListener('DOMContentLoaded', function () {
+    console.log('🚀 App Initializing...');
+
+    // 1. Language Init (Priority)
+    try {
+        console.log('🌐 Init Language:', window.currentLang);
+        if (typeof applyTranslations === 'function') {
+            applyTranslations(window.currentLang);
+            updateLanguageButton();
+        }
+    } catch (e) { console.error('Language Init Error:', e); }
+
+    // 2. Chart Init
+    try {
+        initChart();
+    } catch (e) { console.error('Chart Init Error:', e); }
+
+    // 3. Event Listeners
+    try {
+        setupEventListeners();
+    } catch (e) { console.error('EventListeners Init Error:', e); }
+
+    // 4. Role Restrictions (if defined)
+    try {
+        if (typeof applyRoleRestrictions === 'function') applyRoleRestrictions();
+    } catch (e) { console.error('Role Restrictions Error:', e); }
+
+    // 5. Start Polling
+    setInterval(updateDashboard, 2000);
+    updateDashboard();
+
+    console.log('✅ App Initialization Complete');
+});
 
 function setControl(action, payload = {}) {
     if (!verifyRole()) return;
@@ -1234,7 +1309,7 @@ function showAccountAlert(failureCount) {
 }
 
 // Demo Mode Handling (20-minute limit for default API)
-let demoExpiredShown = false;
+// Note: demoExpiredShown is now declared at the top of the file to avoid TDZ error
 
 function handleDemoMode(demo) {
     const btnStart = document.getElementById('btn-start');
@@ -1473,6 +1548,15 @@ function setupEventListeners() {
             // Force refresh logs
             updateDashboard();
         });
+    }
+
+    // 🌐 Language Toggle
+    const langToggle = document.getElementById('btn-language');
+    if (langToggle) {
+        console.log('✅ Language toggle button found, attaching listener');
+        langToggle.addEventListener('click', toggleLanguage);
+    } else {
+        console.error('❌ Language toggle button NOT found');
     }
 }
 
@@ -1776,8 +1860,13 @@ async function savePrompt() {
 }
 
 // FALLBACK DEBUG & HANDLER
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('🔧 App.js loaded (Fallback)');
+document.addEventListener('DOMContentLoaded', function () {
+    console.log('🎯 Fallback Handler Loaded');
+
+    // Initialize TradingView chart (fallback)
+    if (!window.chartInitialized) {
+        loadTradingViewChart();
+    }
     const btn = document.getElementById('btn-settings');
     const modal = document.getElementById('settings-modal');
     console.log('Btn:', btn, 'Modal:', modal);
@@ -1914,6 +2003,19 @@ document.addEventListener('DOMContentLoaded', () => {
 // Trade History Rendering (Backend Data)
 // ============================================================================
 
+// Helper to format cycle ID (cycle_0013_...) -> #13
+function formatCycle(cycleId) {
+    if (!cycleId || cycleId === '-') return '-';
+    // If it's a full cycle ID string "cycle_0013_123456"
+    if (typeof cycleId === 'string' && cycleId.startsWith('cycle_')) {
+        const parts = cycleId.split('_');
+        if (parts.length >= 2) {
+            return '#' + parseInt(parts[1], 10);
+        }
+    }
+    return '#' + cycleId;
+}
+
 function renderTradeHistory(trades) {
     const tbody = document.querySelector('#trade-table tbody');
     if (!tbody) return;
@@ -1925,8 +2027,8 @@ function renderTradeHistory(trades) {
 
     tbody.innerHTML = trades.map(trade => {
         const time = trade.recorded_at || trade.timestamp || '-';
-        const openCycle = trade.cycle || '-';
-        const closeCycle = trade.close_cycle || '-';
+        const openCycle = formatCycle(trade.cycle);
+        const closeCycle = formatCycle(trade.close_cycle);
         const symbol = trade.symbol || '-';
         const entryPrice = trade.entry_price ? `$${Number(trade.entry_price).toLocaleString()}` : '-';
         const posValue = trade.quantity && trade.entry_price ? `$${(trade.quantity * trade.entry_price).toFixed(2)}` : '-';

@@ -590,14 +590,17 @@ data/
 
 ## 🎉 Latest Updates
 
+**2025-12-31**:
+
+- ✅ **Full Chinese Internationalization (i18n)**: Complete bilingual support with language toggle button.
+  - Dashboard UI elements (headers, tables, buttons) fully translated
+  - Agent documentation sidebar with Chinese descriptions
+  - Seamless language switching without page reload
+
 **2025-12-28**:
 
-- ✅ **Log Standardization**: All system logs converted to English with unified `[ICON TAG]` format for better readability.
 - ✅ **Dashboard Log Mode Toggle**: Switch between Simplified (agent summaries) and Detailed (full debug) log views.
-- ✅ **Live Log Sync Fix**: Log output now starts from Cycle 1, matching Recent Decisions table.
-- ✅ **Net Value Curve**: Smart x-axis labels that adapt to data volume while preserving first cycle timestamp.
-- ✅ **Real-time Trade History**: Backend tracking of balance history and trade records with PnL calculation.
-- ✅ **LLM Prompt Optimization**: Removed redundant Market Regime & Price Position section (now handled by TREND/SETUP agents).
+- ✅ **Net Value Curve Enhancement**: Smart x-axis labels that adapt to data volume while preserving first cycle timestamp.
 
 **2025-12-25**:
 
@@ -611,29 +614,17 @@ data/
 - ✅ **Dashboard LLM Settings**: Switch LLM provider and API keys directly from Dashboard Settings.
 - ✅ **Multi-Account Architecture**: New `src/exchanges/` module with `BaseTrader` abstraction for multi-exchange support.
 - ✅ **Account Manager**: Manage multiple trading accounts via Dashboard or `config/accounts.json`.
-- ✅ **API Endpoints**: Added `/api/accounts` and `/api/exchanges` for account management.
-
-**2025-12-23**:
-
-- ✅ **Trade History Enhanced**: Added Open/Close Cycle columns, PnL % with color indicators.
-- ✅ **Net Value Curve**: Dashed initial capital baseline with centered Y-axis logic.
-- ✅ **Decision Table Refactor**: Removed Active PnL column, added tooltip for Guardian block reasons.
-- ✅ **Strategy Improvements**: Added `add_position` action for "buy the dip", confidence calibration rules.
-- ✅ **Documentation**: Translated dashboard agent descriptions to English.
 
 **2025-12-21**:
 
 - ✅ **ML Model Upgrade**: Upgraded `PredictAgent` to use **LightGBM** machine learning model.
 - ✅ **Auto-Training**: Implemented automatic model retraining every 2 hours to adapt to market drifts.
 - ✅ **Dashboard Refinement**: Enhanced dashboard with auto-scrolling logs, robust scrollbars, and ML probability display.
-- ✅ **Cycle Optimization**: Optimized decision cycle to 3 minutes for faster response.
 
 **2025-12-20**:
 
 - ✅ **Adversarial Decision Framework**: Introduced `PositionAnalyzer` and `RegimeDetector`.
 - ✅ **Confidence Score Refactor**: Implemented dynamic confidence penalties.
-- ✅ **Documentation Optimization**: Updated README to highlight adversarial architecture.
-- ✅ **Project Renamed**: Officially renamed to `LLM-TradeBot`.
 - ✅ **Full-Link Auditing**: Implemented complete intermediate state archiving.
 
 ---

@@ -10,6 +10,7 @@
         href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;600&display=swap"
         rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/static/i18n.js"></script>
 </head>
 
 <body>
@@ -43,14 +44,21 @@
                     <!-- Settings Button - Elegant Text Style -->
                     <button id="btn-settings" class="btn-settings-elegant" title="Settings">
                         <span class="settings-icon">⚙️</span>
-                        <span class="settings-text">Settings</span>
+                        <span class="settings-text" data-i18n="btn.settings">Settings</span>
                     </button>
 
                     <!-- Logout Button -->
                     <button id="btn-logout" class="btn-settings-elegant" title="Logout" style="margin-left: 10px;"
                         onclick="window.logout()">
                         <span class="settings-icon">🚪</span>
-                        <span class="settings-text">Exit</span>
+                        <span class="settings-text" data-i18n="btn.logout">Exit</span>
+                    </button>
+
+                    <!-- Language Toggle Button -->
+                    <button id="btn-language" class="btn-settings-elegant" title="切换语言 / Switch Language"
+                        style="margin-left: 10px;">
+                        <span class="settings-icon">🌐</span>
+                        <span id="lang-text" class="settings-text">中文</span>
                     </button>
 
                     <button id="btn-start" class="btn-control start" title="Start Trading"
@@ -68,19 +76,19 @@
                     </select>
                 </div>
                 <div class="status-item">
-                    <span class="label">MODE</span>
+                    <span class="label" data-i18n="header.mode">MODE</span>
                     <span id="sys-mode" class="value badge">LOADING</span>
                 </div>
                 <div class="status-item">
-                    <span class="label">ENVIRONMENT</span>
+                    <span class="label" data-i18n="header.environment">ENVIRONMENT</span>
                     <span id="sys-env" class="value badge">LOADING</span>
                 </div>
                 <div class="status-item">
-                    <span class="label">CYCLE</span>
+                    <span class="label" data-i18n="header.cycle">CYCLE</span>
                     <span id="cycle-counter" class="value">#0</span>
                 </div>
                 <div class="status-item">
-                    <span class="label">EQUITY</span>
+                    <span class="label" data-i18n="header.equity">EQUITY</span>
                     <span id="header-equity" class="value">$0.00</span>
                 </div>
             </div>
@@ -96,7 +104,7 @@
                     <div class="chart-header">
                         <div
                             style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                            <h2 style="margin: 0;">📉 Real-time K-Line</h2>
+                            <h2 style="margin: 0;" data-i18n="section.kline">📉 Real-time K-Line</h2>
                             <select id="symbol-selector"
                                 style="padding: 5px 10px; margin-left: 20px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: #fff; font-size: 0.9rem; cursor: pointer;">
                                 <option value="BTCUSDT" selected>BTC/USDT</option>
@@ -148,18 +156,18 @@
                 <!-- Net Value -->
                 <div class="glass-panel card chart-composite-card">
                     <div class="chart-header">
-                        <h2>📈 Net Value Curve</h2>
+                        <h2 data-i18n="section.netvalue">📈 Net Value Curve</h2>
                         <div class="header-metrics">
                             <div class="h-metric">
-                                <span class="label">Initial Balance</span>
+                                <span class="label" data-i18n="chart.initial">Initial Balance</span>
                                 <span id="acc-initial" class="val">$0.00</span>
                             </div>
                             <div class="h-metric">
-                                <span class="label">Current Funds</span>
+                                <span class="label" data-i18n="chart.current">Current Funds</span>
                                 <span id="acc-equity" class="val">$0.00</span>
                             </div>
                             <div class="h-metric">
-                                <span class="label">Total Profit</span>
+                                <span class="label" data-i18n="chart.profit">Total Profit</span>
                                 <span id="acc-pnl" class="val neutral">$0.00</span>
                             </div>
                         </div>
@@ -176,7 +184,7 @@
                 <!-- Decisions -->
                 <div class="glass-panel card decision-table-card">
                     <div style="display: flex; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 20px;">
-                        <h2 style="margin: 0;">📋 Recent Decisions</h2>
+                        <h2 style="margin: 0;" data-i18n="section.decisions">📋 Recent Decisions</h2>
 
                         <!-- 🔍 Filter Controls (Fixed next to Title) -->
                         <div id="decision-filters" style="display: flex; gap: 10px; align-items: center;">
@@ -213,35 +221,38 @@
                             <thead>
                                 <!-- Agent Group Header Row -->
                                 <tr class="agent-group-row">
-                                    <th colspan="3" class="group-system">📊 System</th>
-                                    <th colspan="3" class="group-strategist">📈 Strategy</th>
-                                    <th class="group-trend">🔮 TREND</th>
-                                    <th colspan="2" class="group-setup">📊 SETUP</th>
-                                    <th class="group-trigger">⚡ TRIGGER</th>
-                                    <th class="group-prophet">🔮 Prophet</th>
-                                    <th colspan="2" class="group-bullbear">🐂🐻 Bull/Bear</th>
-                                    <th colspan="3" class="group-critic">⚖️ Critic</th>
-                                    <th class="group-guardian">🛡️ Guard</th>
+                                    <th colspan="3" class="group-system" data-i18n="group.system">📊 System</th>
+                                    <th colspan="3" class="group-strategist" data-i18n="group.strategist">📈 Strategy
+                                    </th>
+                                    <th class="group-trend" data-i18n="group.trend">🔮 TREND</th>
+                                    <th colspan="2" class="group-setup" data-i18n="group.setup">📊 SETUP</th>
+                                    <th class="group-trigger" data-i18n="group.trigger">⚡ TRIGGER</th>
+                                    <th class="group-prophet" data-i18n="group.prophet">🔮 Prophet</th>
+                                    <th colspan="2" class="group-bullbear" data-i18n="group.bullbear">🐂🐻 Bull/Bear
+                                    </th>
+                                    <th colspan="3" class="group-critic" data-i18n="group.critic">⚖️ Critic</th>
+                                    <th class="group-guardian" data-i18n="group.guardian">🛡️ Guard</th>
                                 </tr>
                                 <!-- Column Header Row -->
                                 <tr>
-                                    <th title="决策生成时间">Time</th>
-                                    <th title="循环次数">Cycle</th>
-                                    <th title="交易对">Symbol</th>
-                                    <th title="四层策略状态 (Layer 1-4)">Layers</th>
-                                    <th title="ADX趋势强度 (>25=趋势, <20=震荡)">ADX</th>
-                                    <th title="OI持仓量变化% + 燃料强度">OI</th>
-                                    <th title="市场状态 (TREND_UP/TREND_DOWN/CHOPPY/VOLATILE)">Regime</th>
-                                    <th title="价格位置 (HIGH/MIDDLE/LOW)">Position</th>
-                                    <th title="KDJ区域 (超买/超卖/中性)">Zone</th>
-                                    <th title="Trigger触发状态 (Volume/Pattern)">Signal</th>
-                                    <th title="PredictAgent 上涨概率 (0-100%)">P(Up)</th>
-                                    <th title="🐂 Bull Agent 多头信心度 (0-100%)">🐂Bull</th>
-                                    <th title="🐻 Bear Agent 空头信心度 (0-100%)">🐻Bear</th>
-                                    <th title="最终决策动作 (LONG/SHORT/HOLD/WAIT)">Result</th>
-                                    <th title="信心度 (0-100%)">Conf</th>
-                                    <th title="决策原因详细说明 (悬停查看完整)">Reason</th>
-                                    <th title="Guardian 审核结果 + 风险等级">Guard</th>
+                                    <th title="决策生成时间" data-i18n="table.time">Time</th>
+                                    <th title="循环次数" data-i18n="table.cycle">Cycle</th>
+                                    <th title="交易对" data-i18n="table.symbol">Symbol</th>
+                                    <th title="四层策略状态 (Layer 1-4)" data-i18n="table.layers">Layers</th>
+                                    <th title="ADX趋势强度 (>25=趋势, <20=震荡)" data-i18n="table.adx">ADX</th>
+                                    <th title="OI持仓量变化% + 燃料强度" data-i18n="table.oi">OI</th>
+                                    <th title="市场状态 (TREND_UP/TREND_DOWN/CHOPPY/VOLATILE)" data-i18n="table.regime">
+                                        Regime</th>
+                                    <th title="价格位置 (HIGH/MIDDLE/LOW)" data-i18n="table.position">Position</th>
+                                    <th title="KDJ区域 (超买/超卖/中性)" data-i18n="table.zone">Zone</th>
+                                    <th title="Trigger触发状态 (Volume/Pattern)" data-i18n="table.signal">Signal</th>
+                                    <th title="PredictAgent 上涨概率 (0-100%)" data-i18n="table.pup">P(Up)</th>
+                                    <th title="🐂 Bull Agent 多头信心度 (0-100%)" data-i18n="table.bull">🐂Bull</th>
+                                    <th title="🐻 Bear Agent 空头信心度 (0-100%)" data-i18n="table.bear">🐻Bear</th>
+                                    <th title="最终决策动作 (LONG/SHORT/HOLD/WAIT)" data-i18n="table.result">Result</th>
+                                    <th title="信心度 (0-100%)" data-i18n="table.conf">Conf</th>
+                                    <th title="决策原因详细说明 (悬停查看完整)" data-i18n="table.reason">Reason</th>
+                                    <th title="Guardian 审核结果 + 风险等级" data-i18n="table.guard">Guard</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -255,20 +266,20 @@
             <!-- Row 2.5: Trade History (Full Width) -->
             <section class="row-trades">
                 <div class="glass-panel card trade-table-card">
-                    <h2>📜 Trade History</h2>
+                    <h2 data-i18n="section.trades">📜 Trade History</h2>
                     <div class="table-container">
                         <table id="trade-table">
                             <thead>
                                 <tr>
-                                    <th title="交易记录时间">Time</th>
-                                    <th title="开仓周期">Open</th>
-                                    <th title="平仓周期">Close</th>
-                                    <th title="交易对">Symbol</th>
-                                    <th title="开仓价格">Entry Price</th>
-                                    <th title="持仓金额 (含杠杆)">Pos Value</th>
-                                    <th title="平仓价格">Exit Price</th>
-                                    <th title="盈亏金额">PnL</th>
-                                    <th title="盈亏比例">PnL %</th>
+                                    <th title="交易记录时间" data-i18n="trade.time">Time</th>
+                                    <th title="开仓周期" data-i18n="trade.open">Open</th>
+                                    <th title="平仓周期" data-i18n="trade.close">Close</th>
+                                    <th title="交易对" data-i18n="trade.symbol">Symbol</th>
+                                    <th title="开仓价格" data-i18n="trade.entry">Entry Price</th>
+                                    <th title="持仓金额 (含杠杆)" data-i18n="trade.posvalue">Pos Value</th>
+                                    <th title="平仓价格" data-i18n="trade.exit">Exit Price</th>
+                                    <th title="盈亏金额" data-i18n="trade.pnl">PnL</th>
+                                    <th title="盈亏比例" data-i18n="trade.pnlpct">PnL %</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -284,7 +295,7 @@
                 <div class="glass-panel card compound-card">
                     <div class="compound-header"
                         style="display: flex; justify-content: space-between; align-items: center;">
-                        <h2>📡 Live Log Output</h2>
+                        <h2 data-i18n="section.logs">📡 Live Log Output</h2>
                         <button id="log-mode-toggle" class="btn-log-mode" title="Toggle log detail level">
                             <span id="log-mode-icon">📋</span>
                             <span id="log-mode-text">Simplified</span>
@@ -294,57 +305,76 @@
                         <!-- Documentation Sidebar -->
                         <div class="agent-docs-sidebar custom-scroll">
                             <div class="agent-doc-item">
-                                <h4 class="agent-title oracle">🕵️ Oracle (DataSync)</h4>
-                                <p class="role">Unified Data Provider. Multi-dimensional market snapshot.</p>
+                                <h4 class="agent-title oracle" data-i18n="agent.oracle.title">🕵️ Oracle (DataSync)</h4>
+                                <p class="role" data-i18n="agent.oracle.role">Unified Data Provider. Multi-dimensional
+                                    market snapshot.</p>
                                 <ul>
-                                    <li>Multi-timeframe data (5m/15m/1h) + Funding Rates</li>
-                                    <li>Time-slice alignment to prevent data drift</li>
-                                    <li>Dual View: Stable (Closed) + Real-time (Ticking)</li>
+                                    <li data-i18n="agent.oracle.feat1">Multi-timeframe data (5m/15m/1h) + Funding Rates
+                                    </li>
+                                    <li data-i18n="agent.oracle.feat2">Time-slice alignment to prevent data drift</li>
+                                    <li data-i18n="agent.oracle.feat3">Dual View: Stable (Closed) + Real-time (Ticking)
+                                    </li>
                                 </ul>
                             </div>
                             <div class="agent-doc-item">
-                                <h4 class="agent-title strategist">👨‍🔬 Strategist (QuantAnalyst)</h4>
-                                <p class="role">Multi-dimensional Signal Generator. Core of Quant Analysis.</p>
+                                <h4 class="agent-title strategist" data-i18n="agent.strategist.title">👨‍🔬 Strategist
+                                    (QuantAnalyst)</h4>
+                                <p class="role" data-i18n="agent.strategist.role">Multi-dimensional Signal Generator.
+                                    Core of Quant Analysis.</p>
                                 <ul>
-                                    <li>Trend Agent: EMA/MACD Direction Judgment</li>
-                                    <li>Oscillator Agent: RSI/BB Overbought/Oversold</li>
-                                    <li>Sentiment Agent: Funding Rate/Flow Anomalies</li>
+                                    <li data-i18n="agent.strategist.feat1">Trend Agent: EMA/MACD Direction Judgment</li>
+                                    <li data-i18n="agent.strategist.feat2">Oscillator Agent: RSI/BB Overbought/Oversold
+                                    </li>
+                                    <li data-i18n="agent.strategist.feat3">Sentiment Agent: Funding Rate/Flow Anomalies
+                                    </li>
                                 </ul>
                             </div>
                             <div class="agent-doc-item">
-                                <h4 class="agent-title prophet">🔮 Prophet (Predict)</h4>
-                                <p class="role">ML Prediction Engine. Probabilistic Decision Support.</p>
+                                <h4 class="agent-title prophet" data-i18n="agent.prophet.title">🔮 Prophet (Predict)
+                                </h4>
+                                <p class="role" data-i18n="agent.prophet.role">ML Prediction Engine. Probabilistic
+                                    Decision Support.</p>
                                 <ul>
-                                    <li>LightGBM 50+ Features. Auto-retrain every 2h</li>
-                                    <li>30-min Price Direction Probability (0-100%)</li>
-                                    <li>SHAP Feature Importance Analysis</li>
+                                    <li data-i18n="agent.prophet.feat1">LightGBM 50+ Features. Auto-retrain every 2h
+                                    </li>
+                                    <li data-i18n="agent.prophet.feat2">30-min Price Direction Probability (0-100%)</li>
+                                    <li data-i18n="agent.prophet.feat3">SHAP Feature Importance Analysis</li>
                                 </ul>
                             </div>
                             <div class="agent-doc-item">
-                                <h4 class="agent-title critic">⚖️ Critic (DecisionCore)</h4>
-                                <p class="role">LLM Adversarial Judge. Final Decision Hub.</p>
+                                <h4 class="agent-title critic" data-i18n="agent.critic.title">⚖️ Critic (DecisionCore)
+                                </h4>
+                                <p class="role" data-i18n="agent.critic.role">LLM Adversarial Judge. Final Decision Hub.
+                                </p>
                                 <ul>
-                                    <li>Market Regime: Trend / Chop / Chaos</li>
-                                    <li>Price Position: High / Mid / Low</li>
-                                    <li>🐂🐻 Bull/Bear Debate → Weighted Voting</li>
+                                    <li data-i18n="agent.critic.feat1">Market Regime: Trend / Chop / Chaos</li>
+                                    <li data-i18n="agent.critic.feat2">Price Position: High / Mid / Low</li>
+                                    <li data-i18n="agent.critic.feat3">🐂🐻 Bull/Bear Debate → Weighted Voting</li>
                                 </ul>
                             </div>
                             <div class="agent-doc-item">
-                                <h4 class="agent-title guardian">🛡️ Guardian (RiskAudit)</h4>
-                                <p class="role">Independent Risk Audit. Has Veto Power.</p>
+                                <h4 class="agent-title guardian" data-i18n="agent.guardian.title">🛡️ Guardian
+                                    (RiskAudit)</h4>
+                                <p class="role" data-i18n="agent.guardian.role">Independent Risk Audit. Has Veto Power.
+                                </p>
                                 <ul>
-                                    <li>R/R Check: Min 2:1 Risk-Reward</li>
-                                    <li>Drawdown Protection: Auto-pause on threshold</li>
-                                    <li>Twisted Protection: Block counter-trend trades</li>
+                                    <li data-i18n="agent.guardian.feat1">R/R Check: Min 2:1 Risk-Reward</li>
+                                    <li data-i18n="agent.guardian.feat2">Drawdown Protection: Auto-pause on threshold
+                                    </li>
+                                    <li data-i18n="agent.guardian.feat3">Twisted Protection: Block counter-trend trades
+                                    </li>
                                 </ul>
                             </div>
                             <div class="agent-doc-item">
-                                <h4 class="agent-title reflection">🪞 Mentor (Reflection)</h4>
-                                <p class="role">Trade Review Analysis. Continuous Evolution.</p>
+                                <h4 class="agent-title reflection" data-i18n="agent.mentor.title">🪞 Mentor (Reflection)
+                                </h4>
+                                <p class="role" data-i18n="agent.mentor.role">Trade Review Analysis. Continuous
+                                    Evolution.</p>
                                 <ul>
-                                    <li>Triggers LLM Deep Review every 10 trades</li>
-                                    <li>Pattern Recognition: Success/Failure summary</li>
-                                    <li>Insight Injection: Feedback to Critic for optimization</li>
+                                    <li data-i18n="agent.mentor.feat1">Triggers LLM Deep Review every 10 trades</li>
+                                    <li data-i18n="agent.mentor.feat2">Pattern Recognition: Success/Failure summary</li>
+                                    <li data-i18n="agent.mentor.feat3">Insight Injection: Feedback to Critic for
+                                        optimization</li>
                                 </ul>
                             </div>
                         </div>
@@ -796,7 +826,8 @@
             background: rgba(0, 0, 0, 0.2);
         }
     </style>
-    <script src="/static/app.js?v=ai500_decision_filter"></script>
+    </style>
+    <script src="/static/app.js?v=agent_docs_i18n"></script>
     <script>
         // EMERGENCY FIX & LOGIC V3
         (function () {

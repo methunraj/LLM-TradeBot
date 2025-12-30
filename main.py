@@ -1441,16 +1441,8 @@ class MultiAgentTradingBot:
                             
                             log.info(f"💰 [TEST] Closed {side} {self.current_symbol}: PnL=${realized_pnl:.2f}, Bal=${global_state.virtual_balance:.2f}")
                             
-                            # Record trade to history
-                            global_state.record_trade({
-                                'symbol': self.current_symbol,
-                                'action': f'CLOSE_{side}',
-                                'entry_price': entry_price,
-                                'exit_price': current_price,
-                                'quantity': qty,
-                                'pnl': realized_pnl,
-                                'cycle': global_state.cycle_counter
-                            })
+                            # Record trade to history -> MOVED TO UNIFIED BLOCK BELOW
+                            # global_state.record_trade({ ... })
                         else:
                             log.warning(f"⚠️ [TEST] Close ignored - No position for {self.current_symbol}")
                     
@@ -1468,15 +1460,8 @@ class MultiAgentTradingBot:
                         }
                         log.info(f"💰 [TEST] Opened {side} {self.current_symbol} @ ${current_price:,.2f}")
                         
-                        # Record trade to history
-                        global_state.record_trade({
-                            'symbol': self.current_symbol,
-                            'action': f'OPEN_{side}',
-                            'entry_price': current_price,
-                            'quantity': order_params['quantity'],
-                            'pnl': 0.0,
-                            'cycle': global_state.cycle_counter
-                        })
+                        # Record trade to history -> MOVED TO UNIFIED BLOCK BELOW
+                        # global_state.record_trade({ ... })
 
                 # ✅ Save Trade in persistent history
                 # Logic Update: If CLOSING, try to update previous OPEN record. If failing, save new.
@@ -1519,10 +1504,10 @@ class MultiAgentTradingBot:
                     trade_record = {
                         'open_cycle': global_state.cycle_counter if is_open_action else original_open_cycle,
                         'close_cycle': 0 if is_open_action else global_state.cycle_counter,
-                        'timestamp': datetime.now().strftime("%H:%M:%S"),
+                        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         'action': order_params['action'].upper(),
                         'symbol': self.current_symbol,
-                        'price': current_price,
+                        'entry_price': current_price, # ✅ Fixed field name (was price)
                         'quantity': order_params['quantity'],
                         'cost': current_price * order_params['quantity'],
                         'exit_price': exit_test_price,
