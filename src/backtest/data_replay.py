@@ -394,15 +394,24 @@ class DataReplayAgent:
             yield self.timestamps[i]
     
     def get_current_price(self) -> float:
-        """获取当前价格（最新收盘价）"""
+        """
+        获取当前价格
+        
+        CRITICAL FIX (Cycle 2):
+        防止 Look-ahead Bias：
+        返回当前 K 线的 Open 价格，而不是 Close 价格。
+        在回测时刻 T，我们只能看到 T 时刻的开盘价，看不到 T+5m 的收盘价。
+        """
         if self.latest_snapshot is None:
             return 0.0
         
         live = self.latest_snapshot.live_5m
         if isinstance(live, dict):
-            return float(live.get('close', 0.0))
+            # 使用 OPEN 价格
+            return float(live.get('open', 0.0))
         elif hasattr(live, 'empty') and not live.empty:
-            return float(live['close'].iloc[-1])
+            # 使用 OPEN 价格
+            return float(live['open'].iloc[-1])
         return 0.0
     
     def get_open_price(self) -> float:

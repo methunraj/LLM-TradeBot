@@ -38,6 +38,8 @@ class BacktestSignalCalculator:
         gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
         
+        # 防止除零错误：将零值替换为极小值
+        loss = loss.replace(0, 1e-10)
         rs = gain / loss
         return 100 - (100 / (1 + rs))
     

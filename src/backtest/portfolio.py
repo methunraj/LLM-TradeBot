@@ -537,10 +537,13 @@ class BacktestPortfolio:
         notional = quantity * exec_price
         commission = notional * self.commission
         
-        # 检查资金是否足够
-        total_cost = notional + commission
+        # 计算初始保证金
+        initial_margin = notional / self.margin_config.leverage
+        
+        # 检查资金是否足够（需要支付保证金 + 手续费）
+        total_cost = initial_margin + commission
         if total_cost > self.cash:
-            log.warning(f"Insufficient cash: ${self.cash:.2f} < ${total_cost:.2f}")
+            log.warning(f"Insufficient cash: ${self.cash:.2f} < ${total_cost:.2f} (Margin: ${initial_margin:.2f}, Fee: ${commission:.2f})")
             return None
         
         # 计算止损止盈价格
@@ -569,7 +572,7 @@ class BacktestPortfolio:
         )
         self.positions[symbol] = position
         
-        # 扣除资金
+        # 扣除资金（保证金 + 手续费）
         self.cash -= total_cost
         
         # 记录交易
@@ -638,8 +641,11 @@ class BacktestPortfolio:
         # 计算持仓时间
         holding_time = (timestamp - position.entry_time).total_seconds() / 3600
         
-        # 更新资金: 返还本金 + 盈亏 - 手续费
-        self.cash += notional + pnl - commission
+        # 计算初始保证金
+        initial_margin = position.quantity * position.entry_price / self.margin_config.leverage
+        
+        # 更新资金: 返还保证金 + 盈亏 - 手续费
+        self.cash += initial_margin + pnl - commission
         
         # 记录交易
         self.trade_counter += 1

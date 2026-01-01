@@ -35,8 +35,6 @@ class BacktestConfig:
     slippage: float = 0.001
     commission: float = 0.0004
     step: int = 1  # 1=每5分钟, 3=每15分钟, 12=每小时
-    use_llm: bool = False  # 是否使用 LLM（费用高）
-    llm_cache: bool = True  # 缓存 LLM 响应
     margin_mode: str = "cross"  # "cross" 或 "isolated"
     contract_type: str = "linear"  # "linear" 或 "inverse"
     contract_size: float = 100.0  # 币本位合约面值 (BTC=100 USD)
@@ -44,6 +42,63 @@ class BacktestConfig:
     use_llm: bool = False  # 是否在回测中调用 LLM（费用高、速度慢）
     llm_cache: bool = True  # 缓存 LLM 响应
     llm_throttle_ms: int = 100  # LLM 调用间隔（毫秒），避免速率限制
+    
+    def __post_init__(self):
+        """验证配置参数"""
+        from datetime import datetime
+        
+        # 验证日期格式
+        try:
+            start = datetime.strptime(self.start_date, '%Y-%m-%d')
+            end = datetime.strptime(self.end_date, '%Y-%m-%d')
+            if start >= end:
+                raise ValueError(f"start_date ({self.start_date}) must be before end_date ({self.end_date})")
+        except ValueError as e:
+            if "does not match format" in str(e):
+                raise ValueError(f"Invalid date format. Expected YYYY-MM-DD, got start_date={self.start_date}, end_date={self.end_date}")
+            raise
+        
+        # 验证数值范围
+        if self.initial_capital <= 0:
+            raise ValueError(f"initial_capital must be positive, got {self.initial_capital}")
+        
+        if self.max_position_size <= 0:
+            raise ValueError(f"max_position_size must be positive, got {self.max_position_size}")
+        
+        if self.leverage < 1 or self.leverage > 125:
+            raise ValueError(f"leverage must be between 1 and 125, got {self.leverage}")
+        
+        if self.stop_loss_pct < 0 or self.stop_loss_pct > 100:
+            raise ValueError(f"stop_loss_pct must be between 0 and 100, got {self.stop_loss_pct}")
+        
+        if self.take_profit_pct < 0:
+            raise ValueError(f"take_profit_pct must be non-negative, got {self.take_profit_pct}")
+        
+        if self.slippage < 0 or self.slippage > 1:
+            raise ValueError(f"slippage must be between 0 and 1, got {self.slippage}")
+        
+        if self.commission < 0 or self.commission > 1:
+            raise ValueError(f"commission must be between 0 and 1, got {self.commission}")
+        
+        if self.step < 1:
+            raise ValueError(f"step must be at least 1, got {self.step}")
+        
+        # 验证symbol格式
+        if not self.symbol or not isinstance(self.symbol, str):
+            raise ValueError("symbol must be a non-empty string")
+        
+        # 验证策略模式
+        if self.strategy_mode not in ['technical', 'agent']:
+            raise ValueError(f"strategy_mode must be 'technical' or 'agent', got {self.strategy_mode}")
+        
+        # 验证保证金模式
+        if self.margin_mode not in ['cross', 'isolated']:
+            raise ValueError(f"margin_mode must be 'cross' or 'isolated', got {self.margin_mode}")
+        
+        # 验证合约类型
+        if self.contract_type not in ['linear', 'inverse']:
+            raise ValueError(f"contract_type must be 'linear' or 'inverse', got {self.contract_type}")
+
 
 
 @dataclass
@@ -57,6 +112,27 @@ class BacktestResult:
     duration_seconds: float = 0.0
     
     def to_dict(self) -> Dict:
+        # 获取决策数据并去重
+        def _get_filtered_decisions():
+            """获取过滤和去重后的决策列表"""
+            # 获取最后50个决策
+            recent = self.decisions[-50:] if len(self.decisions) > 50 else self.decisions
+            # 获取所有非hold决策
+            non_hold = [d for d in self.decisions if d.get('action') != 'hold']
+            
+            # 合并并去重（基于timestamp）
+            seen = set()
+            result = []
+            for d in recent + non_hold:
+                # 使用timestamp作为唯一键
+                key = d.get('timestamp')
+                if key and key not in seen:
+                    seen.add(key)
+                    # 只保留需要的字段
+                    filtered = {k: v for k, v in d.items() if k in ['timestamp', 'action', 'confidence', 'reason', 'price', 'vote_details']}
+                    result.append(filtered)
+            return result
+        
         return {
             'config': {
                 'symbol': self.config.symbol,
@@ -67,13 +143,7 @@ class BacktestResult:
             'metrics': self.metrics.to_dict(),
             'total_trades': len(self.trades),
             'duration_seconds': self.duration_seconds,
-            'decisions': [
-                {k: v for k, v in d.items() if k in ['timestamp', 'action', 'confidence', 'reason', 'price', 'vote_details']} 
-                for d in self.decisions[-50:]  # Last 50 decisions
-            ] + [
-                {k: v for k, v in d.items() if k in ['timestamp', 'action', 'confidence', 'reason', 'price', 'vote_details']}
-                for d in self.decisions if d.get('action') != 'hold'
-            ], # + All non-hold decisions (deduplication needed on frontend or here if strictly necessary, but concatenation is safer for now)
+            'decisions': _get_filtered_decisions(),
         }
 
 
@@ -272,9 +342,15 @@ class BacktestEngine:
                             }
                         )
                     
-            except Exception as e:
-                log.warning(f"Error at {timestamp}: {e}")
+            except (KeyError, ValueError, IndexError) as e:
+                # 可恢复的数据错误：记录警告并跳过此时间点
+                log.warning(f"Data error at {timestamp}: {type(e).__name__}: {e}, skipping this timestamp")
                 continue
+            except Exception as e:
+                # 致命错误：记录错误并终止回测
+                log.error(f"Fatal error at {timestamp}: {type(e).__name__}: {e}")
+                log.error(f"Backtest terminated due to fatal error")
+                raise RuntimeError(f"Backtest failed at {timestamp}: {e}") from e
         
         # 4. 强制平仓所有持仓
         await self._close_all_positions()
