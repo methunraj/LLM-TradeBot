@@ -355,20 +355,24 @@ class DecisionCoreAgent:
             (action, confidence)
         """
         # 动态阈值：根据市场状态调整
-        base_threshold = 30
+        # CRITICAL FIX: 阈值需要匹配实际加权得分范围
+        # 权重总和约 0.80，理论最大分 = 100 * 0.80 = 80
+        # 实际情况：单一方向信号（如 trend_15m=60）贡献 60 * 0.10 = 6
+        # 合理阈值范围：8-15（而不是 20-30）
+        base_threshold = 15
         if regime:
             regime_type = regime.get('regime', '')
             if regime_type in ['VOLATILE_DIRECTIONLESS', 'choppy']:
-                # 波动无方向市场：降低阈值增加交易机会
-                base_threshold = 20
+                # 波动无方向市场：大幅降低阈值捕捉信号
+                base_threshold = 8
             elif regime_type in ['TRENDING', 'TRENDING_UP', 'TRENDING_DOWN']:
                 # 趋势市场：标准阈值
-                base_threshold = 30
+                base_threshold = 15
             elif regime_type in ['VOLATILE_TRENDING']:
                 # 波动趋势：略微降低
-                base_threshold = 25
+                base_threshold = 10
         
-        high_threshold = base_threshold + 20  # 强信号阈值
+        high_threshold = base_threshold + 10  # 强信号阈值
         
         # 强信号阈值（需要多周期对齐）
         if weighted_score > high_threshold and aligned:

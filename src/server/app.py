@@ -640,7 +640,30 @@ async def run_backtest(config: BacktestRequest, authenticated: bool = Depends(ve
                                 'decisions': decisions
                             }, f, indent=2, ensure_ascii=False)
                         
-                        # 6. Save LLM logs (if any)
+                        # 6. Save K-line data (input data for analysis)
+                        kline_dir = os.path.join(backtest_dir, 'kline_data')
+                        os.makedirs(kline_dir, exist_ok=True)
+                        
+                        # Get K-line data from engine's data replay
+                        if hasattr(engine, 'data_replay') and engine.data_replay:
+                            data_cache = engine.data_replay.data_cache
+                            
+                            # Save 5m K-line data
+                            if hasattr(data_cache, 'df_5m') and data_cache.df_5m is not None:
+                                df_5m_path = os.path.join(kline_dir, 'kline_5m.csv')
+                                data_cache.df_5m.to_csv(df_5m_path)
+                            
+                            # Save 15m K-line data
+                            if hasattr(data_cache, 'df_15m') and data_cache.df_15m is not None:
+                                df_15m_path = os.path.join(kline_dir, 'kline_15m.csv')
+                                data_cache.df_15m.to_csv(df_15m_path)
+                            
+                            # Save 1h K-line data
+                            if hasattr(data_cache, 'df_1h') and data_cache.df_1h is not None:
+                                df_1h_path = os.path.join(kline_dir, 'kline_1h.csv')
+                                data_cache.df_1h.to_csv(df_1h_path)
+                        
+                        # 7. Save LLM logs (if any)
                         llm_log_count = 0
                         if hasattr(engine, 'agent_runner') and engine.agent_runner and hasattr(engine.agent_runner, 'llm_logs'):
                             llm_logs = engine.agent_runner.llm_logs
@@ -685,6 +708,7 @@ async def run_backtest(config: BacktestRequest, authenticated: bool = Depends(ve
                         print(f"   ├── trades.json ({len(trades)} trades)")
                         print(f"   ├── equity_curve.json ({len(equity_curve)} points)")
                         print(f"   ├── decisions.json ({len(decisions)} agent decisions)")
+                        print(f"   ├── kline_data/ (5m, 15m, 1h K-line CSV files)")
                         if llm_log_count > 0:
                             print(f"   └── llm_logs/ ({llm_log_count} LLM interactions)")
                     except Exception as log_err:

@@ -889,8 +889,14 @@
                 <div class="result-header"
                     style="margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;">
                     <h2 style="margin:0;">Backtest Result</h2>
-                    <span id="resultIdDisplay"
-                        style="background:var(--accent-dim); color:var(--accent); padding:4px 8px; border-radius:4px; font-weight:600; display:none;"></span>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <span id="resultDurationDisplay"
+                            style="background:var(--bg-secondary); color:var(--text-secondary); padding:4px 8px; border-radius:4px; font-size:0.9em; display:none;">
+                            ⏱️ <span id="durationText"></span>
+                        </span>
+                        <span id="resultIdDisplay"
+                            style="background:var(--accent-dim); color:var(--accent); padding:4px 8px; border-radius:4px; font-weight:600; display:none;"></span>
+                    </div>
                 </div>
                 <div class="metrics-grid">
                     <div class="metric-card">
@@ -1662,8 +1668,11 @@
                 updateMetric('shortTrades', `${m.short_trades} (${m.short_win_rate})`);
                 updateMetric('avgHoldTime', m.avg_holding_time);
 
-                // Update ID display
+                // Update ID and Duration display
                 const idEl = document.getElementById('resultIdDisplay');
+                const durationEl = document.getElementById('resultDurationDisplay');
+                const durationTextEl = document.getElementById('durationText');
+
                 if (result.id) {
                     idEl.textContent = 'Run id' + result.id;
                     idEl.title = `DB ID: ${result.id}\nUUID: ${result.run_id || 'N/A'}`;
@@ -1674,6 +1683,31 @@
                     idEl.style.display = 'block';
                 } else {
                     idEl.style.display = 'none';
+                }
+
+                // Format and display duration
+                if (result.duration_seconds !== undefined) {
+                    const duration = result.duration_seconds;
+                    let durationStr = '';
+
+                    if (duration < 60) {
+                        durationStr = `${duration.toFixed(1)}s`;
+                    } else if (duration < 3600) {
+                        const mins = Math.floor(duration / 60);
+                        const secs = Math.floor(duration % 60);
+                        durationStr = `${mins}m ${secs}s`;
+                    } else {
+                        const hours = Math.floor(duration / 3600);
+                        const mins = Math.floor((duration % 3600) / 60);
+                        const secs = Math.floor(duration % 60);
+                        durationStr = `${hours}h ${mins}m ${secs}s`;
+                    }
+
+                    durationTextEl.textContent = durationStr;
+                    durationEl.title = `Runtime: ${duration.toFixed(2)} seconds`;
+                    durationEl.style.display = 'inline-block';
+                } else {
+                    durationEl.style.display = 'none';
                 }
 
                 // Render charts

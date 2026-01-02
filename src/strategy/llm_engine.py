@@ -140,7 +140,7 @@ class StrategyEngine:
                 log.warning("🚫 LLM Strategy Engine not ready (No API Key). Returning fallback.")
                 return self._get_fallback_decision(market_context_data)
         
-        # 🐂🐻 Get adversarial perspectives first
+        # 🐂🐻 Get adversarial perspectives (ALWAYS - critical for strategy validation)
         log.info("🐂🐻 Gathering Bull/Bear perspectives...")
         bull_perspective = self.get_bull_perspective(market_context_text)
         bear_perspective = self.get_bear_perspective(market_context_text)
