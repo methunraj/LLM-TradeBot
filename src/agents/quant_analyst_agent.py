@@ -56,7 +56,16 @@ class QuantAnalystAgent:
         k = rsv.ewm(alpha=1/m1, adjust=False).mean()
         d = k.ewm(alpha=1/m2, adjust=False).mean()
         j = 3 * k - 2 * d
+        j = 3 * k - 2 * d
         return k, d, j
+
+    @staticmethod
+    def calculate_atr(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> pd.Series:
+        tr1 = high - low
+        tr2 = (high - close.shift()).abs()
+        tr3 = (low - close.shift()).abs()
+        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+        return tr.ewm(alpha=1/period, adjust=False).mean()
         
     def analyze_trend(self, df: pd.DataFrame) -> Dict:
         """Calculate trend score (-100 to +100)"""
@@ -147,12 +156,21 @@ class QuantAnalystAgent:
         o_15m = self.analyze_oscillator(snapshot.stable_15m)
         o_1h = self.analyze_oscillator(snapshot.stable_1h)
         
+        # 3.5 Volatility Analysis (ATR)
+        volatility = {'atr_1h': 0.0, 'atr_15m': 0.0, 'atr_5m': 0.0}
+        
+        for p, df in [('1h', snapshot.stable_1h), ('15m', snapshot.stable_15m), ('5m', snapshot.stable_5m)]:
+             if df is not None and len(df) > 20:
+                 atr = self.calculate_atr(df['high'], df['low'], df['close']).iloc[-1]
+                 volatility[f'atr_{p}'] = round(atr, 4)
+        
         # 4. 计算综合得分 (简单平均)
         total_trend_score = (t_5m['score'] + t_15m['score'] + t_1h['score']) / 3
         total_osc_score = (o_5m['score'] + o_15m['score'] + o_1h['score']) / 3
         
         result = {
             'sentiment': sentiment,
+            'volatility': volatility,
             # 保留空的占位符以兼容
             'timeframe_6h': {}, 
             'timeframe_2h': {},

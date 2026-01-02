@@ -482,8 +482,10 @@ Analyze the above data following the strategy rules in system prompt. Output you
         reasoning_lower = decision.get('reasoning', '').lower()
         if 'strong trend' in reasoning_lower or 'strong_trend' in reasoning_lower:
             regime_threshold = 60
-        elif 'choppy' in reasoning_lower or 'volatile' in reasoning_lower:
-            regime_threshold = 80
+        elif 'choppy' in reasoning_lower:
+            regime_threshold = 75
+        elif 'volatile' in reasoning_lower:
+             regime_threshold = 70
             
         if action in ['open_long', 'open_short'] and confidence < regime_threshold:
             log.warning(f"🚫 Confidence {confidence}% < Threshold {regime_threshold}% for {action}, converting to 'wait'")

@@ -28,7 +28,7 @@ class BacktestConfig:
     start_date: str
     end_date: str
     initial_capital: float = 10000.0
-    max_position_size: float = 100.0
+    max_position_size: float = 1000000.0
     leverage: int = 1
     stop_loss_pct: float = 1.0
     take_profit_pct: float = 2.0
@@ -516,6 +516,7 @@ class BacktestEngine:
             leverage = params.get('leverage') or self.config.leverage
             sl_pct = params.get('stop_loss_pct') or self.config.stop_loss_pct
             tp_pct = params.get('take_profit_pct') or self.config.take_profit_pct
+            trailing_pct = params.get('trailing_stop_pct')
             
             available_cash = self.portfolio.cash
             
@@ -548,7 +549,8 @@ class BacktestEngine:
                     price=current_price,
                     timestamp=timestamp,
                     stop_loss_pct=sl_pct,
-                    take_profit_pct=tp_pct
+                    take_profit_pct=tp_pct,
+                    trailing_stop_pct=trailing_pct
                 )
     
     async def _close_all_positions(self):

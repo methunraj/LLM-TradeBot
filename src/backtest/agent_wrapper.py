@@ -319,6 +319,7 @@ class BacktestAgentRunner:
                 trade_params={
                     'stop_loss_pct': llm_result_dict.get('stop_loss_pct'),
                     'take_profit_pct': llm_result_dict.get('take_profit_pct'),
+                    'trailing_stop_pct': llm_result_dict.get('trailing_stop_pct'), # Added
                     'leverage': llm_result_dict.get('leverage'),
                     'position_size_pct': llm_result_dict.get('position_size_pct')
                 }
@@ -383,7 +384,8 @@ Please provide your trading decision based on this analysis."""
         from dataclasses import replace
         
         # Strategy: LLM can override if high confidence, otherwise enhance reasoning
-        if llm_decision.confidence > 70:
+        # Strategy: LLM can override if confidence > 50 (Was 70), allowing Agent to lead
+        if llm_decision.confidence > 50:
             # LLM override with high confidence
             log.info(f"🎯 LLM override: {llm_decision.action} (confidence: {llm_decision.confidence}%)")
             return llm_decision

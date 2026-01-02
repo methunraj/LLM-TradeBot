@@ -119,7 +119,11 @@ class Position:
     stop_loss: Optional[float] = None
     take_profit: Optional[float] = None
     contract_type: str = "linear"  # "linear" 或 "inverse"
+    contract_type: str = "linear"  # "linear" 或 "inverse"
     contract_size: float = 1.0     # 币本位合约面值
+    trailing_stop_pct: Optional[float] = None
+    highest_price: float = 0.0      # For Long Trailing
+    lowest_price: float = float('inf') # For Short Trailing
     
     @property
     def notional_value(self) -> float:
@@ -175,7 +179,30 @@ class Position:
             return current_price >= self.take_profit
         else:
             return current_price <= self.take_profit
+            return current_price <= self.take_profit
 
+    def update_price(self, current_price: float):
+        """Update high/low watermark for trailing stop"""
+        if self.side == Side.LONG:
+            if current_price > self.highest_price:
+                self.highest_price = current_price
+        else:
+            if current_price < self.lowest_price:
+                self.lowest_price = current_price
+
+    def should_trailing_stop(self, current_price: float) -> bool:
+        """Check if trailing stop is triggered"""
+        if self.trailing_stop_pct is None:
+            return False
+            
+        if self.side == Side.LONG:
+            # If price drops X% from high
+            stop_price = self.highest_price * (1 - self.trailing_stop_pct / 100)
+            return current_price <= stop_price
+        else:
+            # If price rises X% from low
+            stop_price = self.lowest_price * (1 + self.trailing_stop_pct / 100)
+            return current_price >= stop_price
 
 @dataclass
 class Trade:
@@ -504,7 +531,9 @@ class BacktestPortfolio:
         price: float,
         timestamp: datetime,
         stop_loss_pct: float = None,
-        take_profit_pct: float = None
+        stop_loss_pct: float = None,
+        take_profit_pct: float = None,
+        trailing_stop_pct: float = None
     ) -> Optional[Trade]:
         """
         开仓
@@ -568,7 +597,10 @@ class BacktestPortfolio:
             entry_price=exec_price,
             entry_time=timestamp,
             stop_loss=stop_loss,
-            take_profit=take_profit
+            take_profit=take_profit,
+            trailing_stop_pct=trailing_stop_pct,
+            highest_price=exec_price,
+            lowest_price=exec_price
         )
         self.positions[symbol] = position
         
@@ -697,10 +729,15 @@ class BacktestPortfolio:
             
             price = current_prices[symbol]
             
+            # Update high/low watermark
+            position.update_price(price)
+            
             if position.should_stop_loss(price):
                 symbols_to_close.append((symbol, price, "stop_loss"))
             elif position.should_take_profit(price):
                 symbols_to_close.append((symbol, price, "take_profit"))
+            elif position.should_trailing_stop(price):
+                symbols_to_close.append((symbol, price, "trailing_stop"))
         
         for symbol, price, reason in symbols_to_close:
             trade = self.close_position(symbol, price, timestamp, reason)
