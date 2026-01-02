@@ -12,37 +12,102 @@
             justify-content: center;
             align-items: center;
             min-height: 100vh;
-            background: var(--bg-primary);
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
             margin: 0;
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Animated background */
+        body::before {
+            content: '';
+            position: absolute;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(99, 102, 241, 0.1) 1px, transparent 1px);
+            background-size: 50px 50px;
+            animation: backgroundMove 20s linear infinite;
+            opacity: 0.3;
+        }
+
+        @keyframes backgroundMove {
+            0% {
+                transform: translate(0, 0);
+            }
+
+            100% {
+                transform: translate(50px, 50px);
+            }
+        }
+
+        .login-container {
+            position: relative;
+            z-index: 1;
         }
 
         .login-card {
-            background: var(--bg-secondary);
-            padding: 2.5rem;
-            border-radius: 16px;
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(20px);
+            padding: 3rem;
+            border-radius: 24px;
             width: 100%;
-            max-width: 400px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-            border: 1px solid var(--border-color);
+            max-width: 420px;
+            box-shadow:
+                0 20px 60px rgba(0, 0, 0, 0.5),
+                0 0 0 1px rgba(99, 102, 241, 0.2);
+            border: 1px solid rgba(99, 102, 241, 0.1);
             text-align: center;
+            animation: fadeIn 0.6s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .logo {
-            font-size: 3rem;
+            font-size: 4rem;
             margin-bottom: 1rem;
+            animation: float 3s ease-in-out infinite;
+            filter: drop-shadow(0 0 20px rgba(99, 102, 241, 0.5));
+        }
+
+        @keyframes float {
+
+            0%,
+            100% {
+                transform: translateY(0px);
+            }
+
+            50% {
+                transform: translateY(-10px);
+            }
         }
 
         h1 {
-            color: var(--text-primary);
+            color: #f1f5f9;
             margin-bottom: 0.5rem;
-            font-size: 1.5rem;
+            font-size: 1.8rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
 
-        p {
-            color: var(--text-secondary);
-            margin-bottom: 2rem;
-            font-size: 0.9rem;
+        .subtitle {
+            color: #94a3b8;
+            margin-bottom: 2.5rem;
+            font-size: 0.95rem;
+            font-weight: 400;
         }
 
         .form-group {
@@ -52,48 +117,91 @@
 
         label {
             display: block;
-            color: var(--text-secondary);
-            margin-bottom: 0.5rem;
+            color: #cbd5e1;
+            margin-bottom: 0.75rem;
             font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .input-wrapper {
+            position: relative;
+        }
+
+        .input-icon {
+            position: absolute;
+            left: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 1.2rem;
+            opacity: 0.5;
         }
 
         input {
             width: 100%;
-            padding: 12px;
-            border-radius: 8px;
-            background: var(--bg-primary);
-            border: 1px solid var(--border-color);
-            color: var(--text-primary);
+            padding: 14px 14px 14px 48px;
+            border-radius: 12px;
+            background: rgba(15, 23, 42, 0.6);
+            border: 2px solid rgba(99, 102, 241, 0.2);
+            color: #f1f5f9;
             font-size: 1rem;
             box-sizing: border-box;
-            transition: border-color 0.2s;
+            transition: all 0.3s ease;
         }
 
         input:focus {
             outline: none;
-            border-color: var(--accent);
+            border-color: #6366f1;
+            background: rgba(15, 23, 42, 0.8);
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+        }
+
+        input::placeholder {
+            color: #64748b;
         }
 
         button {
             width: 100%;
-            padding: 12px;
-            border-radius: 8px;
-            background: var(--accent);
+            padding: 14px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
             color: white;
             border: none;
             font-size: 1rem;
             font-weight: 600;
             cursor: pointer;
-            transition: opacity 0.2s;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s;
+        }
+
+        button:hover::before {
+            left: 100%;
         }
 
         button:hover {
-            opacity: 0.9;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(99, 102, 241, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
         }
 
         button:disabled {
             opacity: 0.7;
             cursor: not-allowed;
+            transform: none;
         }
 
         .error-msg {
@@ -101,24 +209,83 @@
             font-size: 0.9rem;
             margin-top: 1rem;
             min-height: 1.2em;
+            padding: 0.5rem;
+            border-radius: 8px;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            display: none;
+        }
+
+        .error-msg.show {
+            display: block;
+            animation: shake 0.5s;
+        }
+
+        @keyframes shake {
+
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+
+            25% {
+                transform: translateX(-10px);
+            }
+
+            75% {
+                transform: translateX(10px);
+            }
+        }
+
+        .local-mode-badge {
+            display: inline-block;
+            background: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-top: 1.5rem;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .footer-text {
+            margin-top: 2rem;
+            color: #64748b;
+            font-size: 0.8rem;
         }
     </style>
 </head>
 
 <body>
-    <div class="login-card">
-        <div class="logo">🤖</div>
-        <h1>LLM-TradeBot</h1>
-        <p>Please log in to access the dashboard</p>
+    <div class="login-container">
+        <div class="login-card">
+            <div class="logo">🤖</div>
+            <h1>LLM-TradeBot</h1>
+            <p class="subtitle">Multi-Agent Crypto Trading System</p>
 
-        <form id="loginForm" onsubmit="handleLogin(event)">
-            <div class="form-group">
-                <label for="password">Password</label>
-                <input type="password" id="password" required autofocus placeholder="Enter access password">
+            <form id="loginForm" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label for="password">🔐 Access Password</label>
+                    <div class="input-wrapper">
+                        <span class="input-icon">🔑</span>
+                        <input type="password" id="password" required autofocus placeholder="Enter your password">
+                    </div>
+                </div>
+                <button type="submit" id="submitBtn">
+                    <span id="btnText">Login to Dashboard</span>
+                </button>
+                <div class="error-msg" id="errorMsg"></div>
+            </form>
+
+            <div id="localModeBadge" style="display: none;">
+                <div class="local-mode-badge">🏠 Local Mode</div>
             </div>
-            <button type="submit" id="submitBtn">Login</button>
-            <div class="error-msg" id="errorMsg"></div>
-        </form>
+
+            <div class="footer-text">
+                Powered by DeepSeek LLM & Multi-Agent Framework
+            </div>
+        </div>
     </div>
 
     <script>
@@ -127,10 +294,12 @@
 
             const password = document.getElementById('password').value;
             const btn = document.getElementById('submitBtn');
+            const btnText = document.getElementById('btnText');
             const errorMsg = document.getElementById('errorMsg');
 
             btn.disabled = true;
-            btn.textContent = 'Verifying...';
+            btnText.textContent = 'Verifying...';
+            errorMsg.classList.remove('show');
             errorMsg.textContent = '';
 
             try {
@@ -141,17 +310,24 @@
                 });
 
                 if (response.ok) {
-                    window.location.href = '/';
+                    btnText.textContent = '✓ Success! Redirecting...';
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 500);
                 } else {
                     const data = await response.json();
-                    errorMsg.textContent = data.detail || 'Login failed';
+                    errorMsg.textContent = '❌ ' + (data.detail || 'Invalid password');
+                    errorMsg.classList.add('show');
                 }
             } catch (error) {
                 console.error('Login error:', error);
-                errorMsg.textContent = 'Connection error. Please try again.';
+                errorMsg.textContent = '⚠️ Connection error. Please try again.';
+                errorMsg.classList.add('show');
             } finally {
-                btn.disabled = false;
-                btn.textContent = 'Login';
+                if (!errorMsg.classList.contains('show')) {
+                    btn.disabled = false;
+                    btnText.textContent = 'Login to Dashboard';
+                }
             }
         }
 
@@ -162,9 +338,11 @@
                 const data = await res.json();
                 if (data.deployment_mode === 'local') {
                     const pwdInput = document.getElementById('password');
+                    const badge = document.getElementById('localModeBadge');
+
                     if (pwdInput) {
                         pwdInput.value = 'admin'; // Default local password
-                        // Optional: Auto-focus or highlight
+                        badge.style.display = 'block';
                         console.log('🏠 Local mode detected: Password auto-filled');
                     }
                 }

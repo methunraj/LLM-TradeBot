@@ -829,6 +829,11 @@
                     <div class="progress-bar" id="progressBar"></div>
                 </div>
                 <div class="progress-text" id="progressText">Initializing...</div>
+                <div class="progress-details" id="progressDetails"
+                    style="text-align: center; color: #888; font-size: 0.9em; margin-top: 5px;">
+                    <span id="timepointProgress"></span>
+                    <span id="estimatedTime" style="margin-left: 15px;"></span>
+                </div>
                 <!-- Real-time Metrics -->
                 <div class="realtime-metrics" id="realtimeMetrics">
                     <div class="metric-row">
@@ -1155,8 +1160,8 @@
 
             // Add change listener to all checkboxes
             document.addEventListener('DOMContentLoaded', () => {
-                // Set default dates to 3 days
-                setDateRange(3);
+                // Set default dates to 1 day
+                setDateRange(1);
 
                 // Add change listeners to checkboxes
                 document.querySelectorAll('#symbolGrid input[type="checkbox"]').forEach(cb => {
@@ -1509,7 +1514,7 @@
                 // Update UI
                 btn.disabled = true;
                 btn.innerHTML = '<span class="spinner"></span> Running...';
-                stopBtn.style.display = 'inline-block';  // Show stop button
+                stopBtn.style.display = 'flex';  // Show stop button (matches CSS .stop-btn display: flex)
                 stopBtn.disabled = false;
                 progressSection.classList.add('active');
                 resultsSection.classList.remove('active');
@@ -1551,7 +1556,24 @@
                                 const msg = JSON.parse(line);
 
                                 if (msg.type === 'progress') {
-                                    updateProgress(msg.percent, `Running... ${msg.percent}%`);
+                                    // Update progress bar
+                                    const percent = msg.progress || msg.percent || 0;
+                                    const current = msg.current_timepoint || 0;
+                                    const total = msg.total_timepoints || 0;
+
+                                    updateProgress(percent, `Running... ${percent.toFixed(1)}%`);
+
+                                    // Update timepoint progress
+                                    if (current && total) {
+                                        document.getElementById('timepointProgress').textContent =
+                                            `📊 ${current}/${total} timepoints`;
+
+                                        // Calculate estimated remaining time
+                                        const remaining = total - current;
+                                        const estimatedMinutes = Math.ceil(remaining * 72 / 60); // 72 seconds per timepoint
+                                        document.getElementById('estimatedTime').textContent =
+                                            `⏱️ Est. ${estimatedMinutes}min remaining`;
+                                    }
 
                                     // Update basic profit display
                                     if (msg.current_equity !== undefined && msg.current_equity !== null) {
