@@ -428,6 +428,100 @@ async def list_exchanges(authenticated: bool = Depends(verify_auth)):
 # Backtest API Endpoints
 # ============================================================================
 
+# Global tracking for active backtest sessions
+import asyncio
+from collections import defaultdict
+from typing import List
+import uuid as uuid_lib
+from datetime import datetime
+
+class BacktestSession:
+    """Track a running backtest session"""
+    def __init__(self, session_id: str, config: dict):
+        self.session_id = session_id
+        self.config = config
+        self.status = 'running'  # running, completed, error
+        self.progress = 0
+        self.current_timepoint = 0
+        self.total_timepoints = 0
+        self.start_time = datetime.now()
+        self.result = None
+        self.error = None
+        self.subscribers: List[asyncio.Queue] = []  # Multiple clients can subscribe
+        self.latest_data = {}  # Store latest progress data for new subscribers
+
+ACTIVE_BACKTESTS: Dict[str, BacktestSession] = {}  # session_id -> BacktestSession
+
+@app.get("/api/backtest/active")
+async def get_active_backtests(authenticated: bool = Depends(verify_auth)):
+    """Get list of currently running backtests"""
+    result = []
+    for session_id, session in ACTIVE_BACKTESTS.items():
+        result.append({
+            'session_id': session_id,
+            'symbol': session.config.get('symbol'),
+            'status': session.status,
+            'progress': session.progress,
+            'current_timepoint': session.current_timepoint,
+            'total_timepoints': session.total_timepoints,
+            'start_time': session.start_time.isoformat(),
+            'latest_data': session.latest_data
+        })
+    return {'active_backtests': result}
+
+@app.get("/api/backtest/subscribe/{session_id}")
+async def subscribe_to_backtest(session_id: str, authenticated: bool = Depends(verify_auth)):
+    """Subscribe to a running backtest's progress stream"""
+    from fastapi.responses import StreamingResponse
+    
+    if session_id not in ACTIVE_BACKTESTS:
+        raise HTTPException(status_code=404, detail="Backtest session not found")
+    
+    session = ACTIVE_BACKTESTS[session_id]
+    
+    async def event_generator():
+        queue = asyncio.Queue()
+        session.subscribers.append(queue)
+        
+        # First, send the latest state to catch up
+        if session.latest_data:
+            yield json.dumps({
+                'type': 'progress',
+                'session_id': session_id,
+                **session.latest_data
+            }) + '\n'
+        
+        try:
+            while session.status == 'running':
+                try:
+                    data = await asyncio.wait_for(queue.get(), timeout=30)
+                    yield json.dumps(data) + '\n'
+                except asyncio.TimeoutError:
+                    # Send keepalive
+                    yield json.dumps({'type': 'keepalive'}) + '\n'
+            
+            # Session completed, send final result if available
+            if session.result:
+                yield json.dumps({
+                    'type': 'result',
+                    'data': session.result,
+                    'session_id': session_id
+                }) + '\n'
+            elif session.error:
+                yield json.dumps({
+                    'type': 'error',
+                    'message': session.error,
+                    'session_id': session_id
+                }) + '\n'
+        finally:
+            if queue in session.subscribers:
+                session.subscribers.remove(queue)
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="application/x-ndjson"
+    )
+
 class BacktestRequest(BaseModel):
     symbol: str = "BTCUSDT"
     start_date: str
@@ -475,6 +569,16 @@ async def run_backtest(config: BacktestRequest, authenticated: bool = Depends(ve
         
         engine = BacktestEngine(bt_config)
         
+        # Create session for tracking
+        session_id = str(uuid.uuid4())[:8]
+        session = BacktestSession(session_id, {
+            'symbol': config.symbol,
+            'start_date': config.start_date,
+            'end_date': config.end_date,
+            'step': config.step
+        })
+        ACTIVE_BACKTESTS[session_id] = session
+        
         # Generator for Streaming Response
         async def event_generator():
             queue = asyncio.Queue()
@@ -486,9 +590,14 @@ async def run_backtest(config: BacktestRequest, authenticated: bool = Depends(ve
                 current = data.get('current_timepoint', 0)
                 total = data.get('total_timepoints', 0)
                 
-                # Send progress update on EVERY timepoint for real-time progress bar
-                await queue.put({
+                # Update session state
+                session.progress = progress
+                session.current_timepoint = current
+                session.total_timepoints = total
+                
+                progress_msg = {
                     "type": "progress",
+                    "session_id": session_id,
                     "current": current,
                     "total": total,
                     "percent": round(progress, 1),
@@ -500,7 +609,20 @@ async def run_backtest(config: BacktestRequest, authenticated: bool = Depends(ve
                     "equity_point": data.get('latest_equity_point'),
                     "recent_trades": data.get('latest_trade'),
                     "metrics": data.get('metrics')
-                })
+                }
+                
+                # Store latest data for reconnecting subscribers
+                session.latest_data = progress_msg
+                
+                # Send to main queue
+                await queue.put(progress_msg)
+                
+                # Notify all subscribers
+                for subscriber_queue in session.subscribers:
+                    try:
+                        subscriber_queue.put_nowait(progress_msg)
+                    except asyncio.QueueFull:
+                        pass  # Skip if queue is full
             
             # Run engine in background task
             async def run_engine():
@@ -726,17 +848,50 @@ async def run_backtest(config: BacktestRequest, authenticated: bool = Depends(ve
                         print(f"⚠️ Folder logging failed: {log_err}")
 
                     # --- 3. Send Final Result ---
-                    await queue.put({
+                    result_msg = {
                         "type": "result",
+                        "session_id": session_id,
                         "data": response_data
-                    })
+                    }
+                    
+                    # Update session status
+                    session.status = 'completed'
+                    session.result = response_data
+                    
+                    # Notify all subscribers
+                    for subscriber_queue in session.subscribers:
+                        try:
+                            subscriber_queue.put_nowait(result_msg)
+                        except asyncio.QueueFull:
+                            pass
+                    
+                    await queue.put(result_msg)
                     
                 except Exception as e:
                     import traceback
                     traceback.print_exc()
-                    await queue.put({"type": "error", "message": str(e)})
+                    error_msg = {"type": "error", "session_id": session_id, "message": str(e)}
+                    
+                    # Update session status
+                    session.status = 'error'
+                    session.error = str(e)
+                    
+                    # Notify subscribers
+                    for subscriber_queue in session.subscribers:
+                        try:
+                            subscriber_queue.put_nowait(error_msg)
+                        except asyncio.QueueFull:
+                            pass
+                    
+                    await queue.put(error_msg)
                 finally:
                     await queue.put(None) # End of stream
+                    # Clean up session after 5 minutes
+                    async def cleanup_session():
+                        await asyncio.sleep(300)  # 5 minutes
+                        if session_id in ACTIVE_BACKTESTS:
+                            del ACTIVE_BACKTESTS[session_id]
+                    asyncio.create_task(cleanup_session())
 
             # Start the engine task
             asyncio.create_task(run_engine())

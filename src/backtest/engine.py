@@ -465,16 +465,8 @@ class BacktestEngine:
             log.warning(f"🚫 Confidence {confidence}% < 50% for {action}. Forcing WAIT.")
             return {'action': 'wait', 'reason': 'low_confidence_filtering'}
         
-        # 1. Volatile Regime Entry Guard
-        # Block new entries in VOLATILE_DIRECTIONLESS unless extreme oscillator reading
-        reason = decision.get('reason', '')
-        if action in ['long', 'short'] and 'VOLATILE_DIRECTIONLESS' in reason:
-            vote_details = decision.get('vote_details', {})
-            oscillator_1h = abs(vote_details.get('oscillator_1h', 0))
-            # Only allow entry if oscillator shows extreme (> 5 = RSI < 25 or > 75)
-            if oscillator_1h < 5:
-                log.warning(f"🚫 Volatile Regime Guard: {action} blocked in VOLATILE_DIRECTIONLESS (oscillator_1h={oscillator_1h:.1f} < 5)")
-                return {'action': 'wait', 'reason': 'volatile_regime_guard'}
+        # NOTE: Volatile Regime Guard REMOVED - was too strict, blocking all trades
+        # The LLM already provides this context in the reason field
         
         # Normalize actions
         if action == 'open_long': action = 'long'
