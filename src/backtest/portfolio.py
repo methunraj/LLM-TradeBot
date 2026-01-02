@@ -119,7 +119,6 @@ class Position:
     stop_loss: Optional[float] = None
     take_profit: Optional[float] = None
     contract_type: str = "linear"  # "linear" 或 "inverse"
-    contract_type: str = "linear"  # "linear" 或 "inverse"
     contract_size: float = 1.0     # 币本位合约面值
     trailing_stop_pct: Optional[float] = None
     highest_price: float = 0.0      # For Long Trailing
@@ -178,7 +177,6 @@ class Position:
         if self.side == Side.LONG:
             return current_price >= self.take_profit
         else:
-            return current_price <= self.take_profit
             return current_price <= self.take_profit
 
     def update_price(self, current_price: float):
@@ -530,7 +528,6 @@ class BacktestPortfolio:
         quantity: float,
         price: float,
         timestamp: datetime,
-        stop_loss_pct: float = None,
         stop_loss_pct: float = None,
         take_profit_pct: float = None,
         trailing_stop_pct: float = None
