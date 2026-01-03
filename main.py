@@ -302,7 +302,7 @@ class MultiAgentTradingBot:
         AI_CANDIDATES = [
             "FETUSDT", "RENDERUSDT", "TAOUSDT", "NEARUSDT", "GRTUSDT", 
             "WLDUSDT", "ARKMUSDT", "LPTUSDT", "THETAUSDT", "ROSEUSDT",
-            "AGIXUSDT", "OCEANUSDT", "RNDRUSDT", # Old/Merged checks
+            # Removed merged/renamed: AGIX, OCEAN, RNDR (now FET/RENDER)
             "PHBUSDT", "CTXCUSDT", "NMRUSDT", "RLCUSDT", "GLMUSDT",
             "IQUSDT", "MDTUSDT", "AIUSDT", "NFPUSDT", "XAIUSDT",
             "JASMYUSDT", "ICPUSDT", "FILUSDT", "VETUSDT", "LINKUSDT",
