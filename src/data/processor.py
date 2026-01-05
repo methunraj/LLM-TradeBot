@@ -43,7 +43,8 @@ class MarketDataProcessor:
         klines: List[Dict], 
         symbol: str, 
         timeframe: str,
-        validate: bool = True
+        validate: bool = True,
+        save_raw: bool = True
     ) -> pd.DataFrame:
         """
         处理K线数据，计算技术指标
@@ -62,7 +63,8 @@ class MarketDataProcessor:
             return pd.DataFrame()
         
         # ✅ Save Step 1: 原始K线数据
-        self.saver.save_step1_klines(klines, symbol, timeframe)
+        if save_raw:
+            self.saver.save_step1_klines(klines, symbol, timeframe)
         
         n_original = len(klines)
         

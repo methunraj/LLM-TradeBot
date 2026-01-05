@@ -308,7 +308,7 @@ class MultiAgentTradingBot:
             for symbol in self.symbols:
                 if symbol not in self.predict_agents:
                     from src.agents.predict_agent import PredictAgent
-                    self.predict_agents[symbol] = PredictAgent(symbol)
+                    self.predict_agents[symbol] = PredictAgent(symbol=symbol)
                     log.info(f"🆕 Initialized PredictAgent for {symbol}")
 
     def _resolve_ai500_symbols(self):
@@ -387,6 +387,11 @@ class MultiAgentTradingBot:
                         if added or removed:
                             log.info(f"📊 AI500 Updated - Added: {added}, Removed: {removed}")
                             log.info(f"📋 Current symbols: {', '.join(self.symbols)}")
+                            for symbol in added:
+                                if symbol not in self.predict_agents:
+                                    from src.agents.predict_agent import PredictAgent
+                                    self.predict_agents[symbol] = PredictAgent(symbol=symbol)
+                                    log.info(f"🆕 Initialized PredictAgent for {symbol}")
                         else:
                             log.info("✅ AI500 Updated - No changes in Top5")
                             
@@ -578,15 +583,14 @@ class MultiAgentTradingBot:
                 self.saver.save_market_data(raw_klines, self.current_symbol, tf, cycle_id=cycle_id)
                 
                 # 处理并保存指标 (Process indicators)
-                df_with_indicators = self.processor.extract_feature_snapshot(getattr(self.processor.process_klines(raw_klines, self.current_symbol, tf), "copy")())
-                # Wait, process_klines returns df. Calling extract_feature_snapshot on it is for features.
-                # The original code:
-                # df_with_indicators = self.processor.process_klines(raw_klines, self.current_symbol, tf)
-                # self.saver.save_indicators(df_with_indicators, self.current_symbol, tf, snapshot_id)
-                # features_df = self.processor.extract_feature_snapshot(df_with_indicators)
-                
-                # Let's restore original lines carefully.
-                df_with_indicators = self.processor.process_klines(raw_klines, self.current_symbol, tf)
+                # Use stable (closed) klines for indicators to avoid look-ahead from live candle
+                stable_klines = raw_klines[:-1] if raw_klines else []
+                df_with_indicators = self.processor.process_klines(
+                    stable_klines,
+                    self.current_symbol,
+                    tf,
+                    save_raw=False
+                )
                 self.saver.save_indicators(df_with_indicators, self.current_symbol, tf, snapshot_id, cycle_id=cycle_id)
                 features_df = self.processor.extract_feature_snapshot(df_with_indicators)
                 self.saver.save_features(features_df, self.current_symbol, tf, snapshot_id, cycle_id=cycle_id)

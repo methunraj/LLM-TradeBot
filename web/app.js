@@ -223,7 +223,7 @@ function updateDashboard() {
             renderMarketData(data.market);
             renderAgents(data.agents);
             renderDecision(data.decision);
-            renderLogs(data.logs);
+            renderLogs(data.logs, data.logs_simplified);
 
             // 🆕 Update K-Line symbol selector with active trading symbols
             if (data.system && data.system.symbols) {
@@ -932,9 +932,12 @@ function updateDecisionFilter(symbols) {
     }
 }
 
-function renderLogs(logs) {
+function renderLogs(logs, simplifiedLogs) {
     const container = document.getElementById('logs-container');
     if (!container) return;
+
+    const safeLogs = Array.isArray(logs) ? logs : [];
+    const safeSimplifiedLogs = Array.isArray(simplifiedLogs) ? simplifiedLogs : [];
 
     // Smart Scroll: Check if user is near bottom before update
     const isScrolledToBottom = container.scrollHeight - container.clientHeight <= container.scrollTop + 100;
@@ -943,9 +946,12 @@ function renderLogs(logs) {
     // Get current log mode from global state (default: simplified)
     const logMode = window.logMode || 'simplified';
 
-    // Filter logs based on mode
-    const filteredLogs = logMode === 'simplified'
-        ? logs.filter(logLine => {
+    const hasSimplifiedLogs = safeSimplifiedLogs.length > 0;
+    const sourceLogs = (logMode === 'simplified' && hasSimplifiedLogs) ? safeSimplifiedLogs : safeLogs;
+
+    // Filter logs based on mode (skip if pre-filtered by server)
+    const filteredLogs = (logMode === 'simplified' && !(hasSimplifiedLogs && sourceLogs === safeSimplifiedLogs))
+        ? sourceLogs.filter(logLine => {
             // Strip ANSI colors for filtering
             const cleanLine = logLine.replace(/\x1b\[[0-9;]*m/g, '');
 
@@ -954,37 +960,46 @@ function renderLogs(logs) {
             // 1. Always show WARNING and ERROR
             if (cleanLine.includes('WARNING') ||
                 cleanLine.includes('ERROR') ||
+                /\bwarn\b/i.test(cleanLine) ||
+                /\berror\b/i.test(cleanLine) ||
                 cleanLine.includes('⚠️') ||
                 cleanLine.includes('❌')) {
                 return true;
             }
 
-            // 2. Show Agent Summary Lines (with result indicators)
+            // 2. Show Agent Summary Lines
             const hasAgentTag = (
                 cleanLine.includes('[📊 SYSTEM]') ||
+                cleanLine.includes('[🔄 CONFIG]') ||
+                cleanLine.includes('[🎯 SYSTEM]') ||
                 cleanLine.includes('[🕵️ ORACLE]') ||
                 cleanLine.includes('[👨‍🔬 STRATEGIST]') ||
                 cleanLine.includes('[🔮 PROPHET]') ||
-                cleanLine.includes('[🐂 BULL]') ||
-                cleanLine.includes('[🐻 BEAR]') ||
+                cleanLine.includes('[🐂 Long Case]') ||
+                cleanLine.includes('[🐻 Short Case]') ||
                 cleanLine.includes('[⚖️ CRITIC]') ||
+                cleanLine.includes('[⚖️ Final Decision]') ||
                 cleanLine.includes('[🛡️ GUARDIAN]') ||
                 cleanLine.includes('[🚀 EXECUTOR]') ||
+                cleanLine.includes('[Execution]') ||
                 cleanLine.includes('[🧠 REFLECTION]')
             );
 
-            const hasResultIndicator = (
-                cleanLine.includes('✅') ||
-                cleanLine.includes('❌') ||
-                cleanLine.includes('⚠️') ||
-                cleanLine.includes('PASS') ||
-                cleanLine.includes('FAIL') ||
-                cleanLine.includes('BLOCK') ||
-                cleanLine.includes('VETO')
+            const hasAgentKeyword = (
+                cleanLine.includes('DataSyncAgent') ||
+                cleanLine.includes('QuantAnalystAgent') ||
+                cleanLine.includes('PredictAgent') ||
+                cleanLine.includes('DecisionCoreAgent') ||
+                cleanLine.includes('RiskAuditAgent') ||
+                cleanLine.includes('ExecutionEngine') ||
+                cleanLine.includes('StrategyEngine') ||
+                cleanLine.includes('ReflectionAgent') ||
+                cleanLine.includes('TrendAgent') ||
+                cleanLine.includes('SetupAgent') ||
+                cleanLine.includes('TriggerAgent')
             );
 
-            // Show if it's an agent line with a result
-            if (hasAgentTag && hasResultIndicator) {
+            if (hasAgentTag || hasAgentKeyword) {
                 return true;
             }
 
@@ -1007,7 +1022,7 @@ function renderLogs(logs) {
 
             return false;
         })
-        : logs; // Show all logs in detailed mode
+        : sourceLogs; // Show all logs in detailed mode
 
     container.innerHTML = filteredLogs.map(logLine => {
         // Strip ANSI colors

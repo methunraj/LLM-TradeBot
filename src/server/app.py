@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import secrets
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 
 from src.server.state import global_state
 
@@ -130,6 +130,7 @@ async def check_auth_status(request: Request):
 @app.get("/api/status")
 async def get_status(authenticated: bool = Depends(verify_auth)):
     import time
+    import re
     
     # Check and update demo expiration status
     if global_state.demo_mode_active and global_state.demo_start_time:
@@ -146,6 +147,72 @@ async def get_status(authenticated: bool = Depends(verify_auth)):
         elapsed = time.time() - global_state.demo_start_time
         demo_time_remaining = max(0, global_state.demo_limit_seconds - elapsed)
     
+    def _filter_simplified_logs(logs: List[str]) -> List[str]:
+        agent_tags = [
+            '[📊 SYSTEM]',
+            '[🔄 CONFIG]',
+            '[🎯 SYSTEM]',
+            '[🕵️ ORACLE]',
+            '[👨‍🔬 STRATEGIST]',
+            '[🔮 PROPHET]',
+            '[🐂 Long Case]',
+            '[🐻 Short Case]',
+            '[⚖️ CRITIC]',
+            '[⚖️ Final Decision]',
+            '[🛡️ GUARDIAN]',
+            '[🚀 EXECUTOR]',
+            '[Execution]',
+            '[🧠 REFLECTION]'
+        ]
+        agent_keywords = [
+            'DataSyncAgent',
+            'QuantAnalystAgent',
+            'PredictAgent',
+            'DecisionCoreAgent',
+            'RiskAuditAgent',
+            'ExecutionEngine',
+            'StrategyEngine',
+            'ReflectionAgent',
+            'TrendAgent',
+            'SetupAgent',
+            'TriggerAgent'
+        ]
+        status_keywords = [
+            '⏹️', '⏸️', '▶️',
+            'STOPPED', 'PAUSED', 'RESUMED', 'START'
+        ]
+        filtered = []
+        for line in logs:
+            clean_line = re.sub(r'\x1b\[[0-9;]*m', '', line or '')
+            if ('WARNING' in clean_line or
+                'ERROR' in clean_line or
+                re.search(r'\bwarn\b', clean_line, re.IGNORECASE) or
+                re.search(r'\berror\b', clean_line, re.IGNORECASE) or
+                '⚠️' in clean_line or
+                '❌' in clean_line):
+                filtered.append(line)
+                continue
+            if any(tag in clean_line for tag in agent_tags):
+                filtered.append(line)
+                continue
+            if any(keyword in clean_line for keyword in agent_keywords):
+                filtered.append(line)
+                continue
+            if any(keyword in clean_line for keyword in status_keywords):
+                filtered.append(line)
+                continue
+            if '━━━' in clean_line or 'Cycle #' in clean_line:
+                filtered.append(line)
+                continue
+        return filtered
+
+    log_tail = 200
+    simplified_tail = 300
+    logs_tail = global_state.recent_logs[-log_tail:]
+    simplified_logs = _filter_simplified_logs(global_state.recent_logs[-simplified_tail:])
+    if len(simplified_logs) > log_tail:
+        simplified_logs = simplified_logs[-log_tail:]
+
     data = {
         "system": {
             "running": global_state.is_running,
@@ -193,7 +260,8 @@ async def get_status(authenticated: bool = Depends(verify_auth)):
         "decision": global_state.latest_decision,
         "decision_history": global_state.decision_history[:10],
         "trade_history": global_state.trade_history[:20],
-        "logs": global_state.recent_logs[-50:]  # Return latest 50 logs (reversed: newest at end)
+        "logs": logs_tail,
+        "logs_simplified": simplified_logs
     }
     return clean_nans(data)
 

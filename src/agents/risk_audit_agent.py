@@ -143,6 +143,9 @@ class RiskAuditAgent:
                 warnings=['观望中']
             )
 
+        if action in ['long', 'short', 'open_long', 'open_short', 'add_position'] and account_balance <= 0:
+            return self._block_decision('insufficient_margin_blocks', f"账户余额无效({account_balance:.2f})，无法开仓")
+
         # 0.1 对抗式数据提取 (Market Awareness)
         regime = decision.get('regime')
         position = decision.get('position')
@@ -493,6 +496,12 @@ class RiskAuditAgent:
         仓位价值 = 数量 * 价格
         占比 = 仓位价值 / 账户余额
         """
+        if account_balance <= 0:
+            return {
+                'passed': False,
+                'reason': "账户余额无效(<=0)，无法计算仓位占比"
+            }
+
         position_value = quantity * entry_price
         position_pct = position_value / account_balance
         
@@ -520,6 +529,12 @@ class RiskAuditAgent:
         """
         if not stop_loss or action in ['close_long', 'close_short', 'hold']:
             return {'passed': True}
+
+        if account_balance <= 0:
+            return {
+                'passed': False,
+                'reason': "账户余额无效(<=0)，无法计算风险敞口"
+            }
         
         risk_exposure = abs(entry_price - stop_loss) * quantity
         risk_pct = risk_exposure / account_balance

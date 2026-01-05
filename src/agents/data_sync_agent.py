@@ -83,21 +83,12 @@ class DataSyncAgent:
         # WebSocket 管理器（可选）
         import os
         self.use_websocket = os.getenv("USE_WEBSOCKET", "true").lower() == "true"
-        self.ws_manager = None
-        self._initial_load_complete = False
+        self.ws_managers = {}
+        self._initial_load_complete = {}
+        self._ws_disabled_symbols = set()
         
         if self.use_websocket:
-            try:
-                from src.api.binance_websocket import BinanceWebSocketManager
-                self.ws_manager = BinanceWebSocketManager(
-                    symbol="BTCUSDT",
-                    timeframes=['5m', '15m', '1h']
-                )
-                self.ws_manager.start()
-                log.info("🚀 WebSocket 数据流已启用")
-            except Exception as e:
-                log.warning(f"WebSocket 启动失败，回退到 REST API: {e}")
-                self.use_websocket = False
+            log.info("🚀 WebSocket 数据流已启用")
         else:
             log.info("📡 Using REST API mode (WebSocket disabled)")
         
@@ -124,13 +115,33 @@ class DataSyncAgent:
         # log.oracle(f"📊 开始并发获取 {symbol} 数据...")
         
         use_rest_fallback = False
+        symbol_key = symbol.upper()
+        ws_manager = None
+        ws_enabled = self.use_websocket and symbol_key not in self._ws_disabled_symbols
         
         # WebSocket 模式：从缓存获取数据
-        if self.use_websocket and self.ws_manager and self._initial_load_complete:
+        if ws_enabled:
+            ws_manager = self.ws_managers.get(symbol_key)
+            if not ws_manager:
+                try:
+                    from src.api.binance_websocket import BinanceWebSocketManager
+                    ws_manager = BinanceWebSocketManager(
+                        symbol=symbol_key,
+                        timeframes=['5m', '15m', '1h']
+                    )
+                    ws_manager.start()
+                    self.ws_managers[symbol_key] = ws_manager
+                    log.info(f"🚀 WebSocket Manager started: {symbol_key}")
+                except Exception as e:
+                    log.warning(f"[{symbol}] WebSocket 启动失败，回退到 REST API: {e}")
+                    self._ws_disabled_symbols.add(symbol_key)
+                    ws_enabled = False
+
+        if ws_enabled and ws_manager and self._initial_load_complete.get(symbol_key):
             # 从 WebSocket 缓存获取数据
-            k5m = self.ws_manager.get_klines('5m', limit)
-            k15m = self.ws_manager.get_klines('15m', limit)
-            k1h = self.ws_manager.get_klines('1h', limit)
+            k5m = ws_manager.get_klines('5m', limit)
+            k15m = ws_manager.get_klines('15m', limit)
+            k1h = ws_manager.get_klines('1h', limit)
             
             # 检查数据是否足够
             min_len = min(len(k5m), len(k15m), len(k1h))
@@ -140,7 +151,6 @@ class DataSyncAgent:
             else:
                 # 仍需异步获取外部数据
                 q_data = await quant_client.fetch_coin_data(symbol)
-                loop = asyncio.get_event_loop()
                 # [DISABLE OI] Commented out due to API errors
                 # b_funding, b_oi = await asyncio.gather(
                 #     loop.run_in_executor(None, self.client.get_funding_rate_with_cache, symbol),
@@ -149,7 +159,7 @@ class DataSyncAgent:
                 b_funding = await self.client.get_funding_rate_with_cache(symbol) # Run non-concurrently or just wait
                 b_oi = {} # Mock empty OI
 
-        if not self.use_websocket or not self.ws_manager or not self._initial_load_complete or use_rest_fallback:
+        if not ws_enabled or not self._initial_load_complete.get(symbol_key) or use_rest_fallback:
             # REST API 模式或首次加载 / 回退模式
             loop = asyncio.get_event_loop()
             
@@ -191,9 +201,9 @@ class DataSyncAgent:
             log.info(f"[{symbol}] Data fetched: 5m={len(k5m)}, 15m={len(k15m)}, 1h={len(k1h)}")
             
             # 标记首次加载完成
-            if not self._initial_load_complete:
-                self._initial_load_complete = True
-                log.info("✅ Initial data loaded, will use WebSocket cache for updates")
+            if ws_enabled and not self._initial_load_complete.get(symbol_key):
+                self._initial_load_complete[symbol_key] = True
+                log.info(f"✅ Initial data loaded ({symbol_key}), will use WebSocket cache for updates")
         
         fetch_duration = (datetime.now() - start_time).total_seconds()
         # log.oracle(f"✅ 数据获取完成，耗时: {fetch_duration:.2f}秒")

@@ -473,14 +473,14 @@ class DecisionCoreAgent:
         # 合理阈值范围：8-15（而不是 20-30）
         base_threshold = 15
         if regime:
-            regime_type = regime.get('regime', '')
-            if regime_type in ['VOLATILE_DIRECTIONLESS', 'choppy']:
+            regime_type = (regime.get('regime', '') or '').lower()
+            if regime_type in ['volatile_directionless', 'choppy']:
                 # 波动无方向市场：大幅降低阈值捕捉信号
                 base_threshold = 8
-            elif regime_type in ['TRENDING', 'TRENDING_UP', 'TRENDING_DOWN']:
+            elif regime_type in ['trending', 'trending_up', 'trending_down']:
                 # 趋势市场：标准阈值
                 base_threshold = 15
-            elif regime_type in ['VOLATILE_TRENDING']:
+            elif regime_type in ['volatile_trending']:
                 # 波动趋势：略微降低
                 base_threshold = 10
         
