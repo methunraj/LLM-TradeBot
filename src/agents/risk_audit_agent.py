@@ -156,7 +156,6 @@ class RiskAuditAgent:
         if isinstance(confidence, (int, float)) and 0 < confidence <= 1:
             confidence *= 100
         high_confidence = confidence >= 80
-        short_confidence = confidence >= 85
         
         # 0.2 市场状态拦截 (Regime Filter)
         if regime:
