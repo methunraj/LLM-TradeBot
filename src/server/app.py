@@ -186,12 +186,11 @@ async def get_status(authenticated: bool = Depends(verify_auth)):
             """Remove file:function patterns like 'src.api.binance_websocket:__init__' from log lines"""
             # Remove ANSI color codes first
             clean = re.sub(r'\x1b\[[0-9;]*m', '', line or '')
-            # Remove timestamp pattern: 2026-01-08 00:00:00 | LEVEL    |
-            clean = re.sub(r'^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s*\|\s*\w+\s*\|\s*', '', clean)
-            # Remove file:function pattern like "src.api.binance_websocket:__init__ -"
-            clean = re.sub(r'^[\w\.]+:[\w_]+ - ', '', clean)
-            # Remove module path pattern like "src.utils.logger:llm_output -"
-            clean = re.sub(r'^src\.[^-]+ - ', '', clean)
+            # Remove timestamp pattern: 2026-01-08 00:00:00 | LEVEL    | module:func -
+            # This captures everything up to and including the " - " after the function name
+            clean = re.sub(r'^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s*\|\s*\w+\s*\|\s*[\w\.]+:[\w_]+\s*-\s*', '', clean)
+            # Fallback: if the above didn't match, try to remove just the module:func part
+            clean = re.sub(r'^[\w\.]+:[\w_]+\s*-\s*', '', clean)
             return clean.strip()
         
         filtered = []

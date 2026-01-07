@@ -83,9 +83,9 @@ class DataSyncAgent:
         """
         self.client = client or BinanceClient()
         
-        # WebSocket 管理器（可选）
+        # WebSocket 管理器（可选，默认禁用以避免事件循环冲突）
         import os
-        self.use_websocket = os.getenv("USE_WEBSOCKET", "true").lower() == "true"
+        self.use_websocket = os.getenv("USE_WEBSOCKET", "false").lower() == "true"
         self.ws_managers = {}
         self._initial_load_complete = {}
         self._ws_disabled_symbols = set()

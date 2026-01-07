@@ -237,8 +237,13 @@ class AccountManager:
         path = Path(filepath) if filepath else self._config_path
         
         if not path.exists():
-            log.warning(f"Accounts config not found: {path}")
-            return 0
+            log.info(f"Accounts config not found: {path}, creating default config...")
+            # Auto-create default config for Railway deployment
+            self.create_default_config()
+            # If creation succeeded, the file should now exist
+            if not path.exists():
+                log.warning(f"Failed to create default accounts config")
+                return 0
         
         try:
             with open(path, 'r', encoding='utf-8') as f:
