@@ -174,32 +174,85 @@ class SimpleTradingBot:
                             'rsi': float(latest_5m.get('rsi', 50)) if hasattr(latest_5m, 'get') else 50,
                             'ema_12': float(latest_5m.get('ema_12', current_price)) if hasattr(latest_5m, 'get') else current_price,
                             'ema_26': float(latest_5m.get('ema_26', current_price)) if hasattr(latest_5m, 'get') else current_price,
+                            'macd': float(latest_5m.get('macd', 0)) if hasattr(latest_5m, 'get') else 0,
+                            'macd_signal': float(latest_5m.get('macd_signal', 0)) if hasattr(latest_5m, 'get') else 0,
                         },
                         '15m': {
                             'rsi': float(latest_15m.get('rsi', 50)) if hasattr(latest_15m, 'get') else 50,
+                            'ema_12': float(latest_15m.get('ema_12', current_price)) if hasattr(latest_15m, 'get') else current_price,
+                            'ema_26': float(latest_15m.get('ema_26', current_price)) if hasattr(latest_15m, 'get') else current_price,
+                            'macd': float(latest_15m.get('macd', 0)) if hasattr(latest_15m, 'get') else 0,
                         },
                         '1h': {
                             'rsi': float(latest_1h.get('rsi', 50)) if hasattr(latest_1h, 'get') else 50,
+                            'ema_12': float(latest_1h.get('ema_12', current_price)) if hasattr(latest_1h, 'get') else current_price,
+                            'ema_26': float(latest_1h.get('ema_26', current_price)) if hasattr(latest_1h, 'get') else current_price,
+                            'macd': float(latest_1h.get('macd', 0)) if hasattr(latest_1h, 'get') else 0,
                         }
                     },
                     'signals': signals
                 }
                 
-                # 构建市场上下文文本
+                # 判断各时间框架趋势
+                def get_trend(ema12, ema26, rsi):
+                    if ema12 > ema26 and rsi > 50:
+                        return "📈 BULLISH"
+                    elif ema12 < ema26 and rsi < 50:
+                        return "📉 BEARISH"
+                    else:
+                        return "➡️ NEUTRAL"
+                
+                trend_5m = get_trend(
+                    market_context_data['indicators']['5m']['ema_12'],
+                    market_context_data['indicators']['5m']['ema_26'],
+                    market_context_data['indicators']['5m']['rsi']
+                )
+                trend_15m = get_trend(
+                    market_context_data['indicators']['15m']['ema_12'],
+                    market_context_data['indicators']['15m']['ema_26'],
+                    market_context_data['indicators']['15m']['rsi']
+                )
+                trend_1h = get_trend(
+                    market_context_data['indicators']['1h']['ema_12'],
+                    market_context_data['indicators']['1h']['ema_26'],
+                    market_context_data['indicators']['1h']['rsi']
+                )
+                
+                # 构建完整的市场上下文文本
                 market_context_text = f"""
 === Market Analysis for {self.current_symbol} ===
 Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 Current Price: ${current_price:,.2f}
 
-📊 Technical Indicators (5m):
+📊 1H TIMEFRAME (PRIMARY TREND):
+- Trend: {trend_1h}
+- RSI: {market_context_data['indicators']['1h']['rsi']:.1f}
+- EMA12: ${market_context_data['indicators']['1h']['ema_12']:,.2f}
+- EMA26: ${market_context_data['indicators']['1h']['ema_26']:,.2f}
+- MACD: {market_context_data['indicators']['1h']['macd']:.4f}
+
+📊 15M TIMEFRAME (CONFLUENCE):
+- Trend: {trend_15m}
+- RSI: {market_context_data['indicators']['15m']['rsi']:.1f}
+- EMA12: ${market_context_data['indicators']['15m']['ema_12']:,.2f}
+- EMA26: ${market_context_data['indicators']['15m']['ema_26']:,.2f}
+- MACD: {market_context_data['indicators']['15m']['macd']:.4f}
+
+📊 5M TIMEFRAME (ENTRY):
+- Trend: {trend_5m}
 - RSI: {market_context_data['indicators']['5m']['rsi']:.1f}
 - EMA12: ${market_context_data['indicators']['5m']['ema_12']:,.2f}
 - EMA26: ${market_context_data['indicators']['5m']['ema_26']:,.2f}
+- MACD: {market_context_data['indicators']['5m']['macd']:.4f}
+- MACD Signal: {market_context_data['indicators']['5m']['macd_signal']:.4f}
 
-📈 Signals:
-- Trend: {signals.get('trend_signal', 'N/A')}
-- Oscillator: {signals.get('oscillator_signal', 'N/A')}
-- Composite: {signals.get('composite_signal', 'N/A')}
+📈 Signal Summary:
+- Trend Signal: {signals.get('trend_signal', 'N/A')}
+- Oscillator Signal: {signals.get('oscillator_signal', 'N/A')}
+- Composite Signal: {signals.get('composite_signal', 'N/A')}
+
+📊 Multi-Timeframe Alignment:
+- 1H + 15M + 5M: {trend_1h} | {trend_15m} | {trend_5m}
 """
                 
                 try:
