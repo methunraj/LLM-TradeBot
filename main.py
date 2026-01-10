@@ -603,11 +603,79 @@ class MultiAgentTradingBot:
             # Step 1: 采样 - 数据先知 (The Oracle)
             if not (hasattr(self, '_headless_mode') and self._headless_mode):
                 print("\n[Step 1/4] 🕵️ The Oracle (Data Agent) - Fetching data...")
-            global_state.oracle_status = "Fetching Data..." 
-            market_snapshot = await self.data_sync_agent.fetch_all_timeframes(
-                self.current_symbol,
-                limit=self.kline_limit
-            )
+            global_state.oracle_status = "Fetching Data..."
+            
+            try:
+                market_snapshot = await self.data_sync_agent.fetch_all_timeframes(
+                    self.current_symbol,
+                    limit=self.kline_limit
+                )
+            except Exception as e:
+                error_msg = f"❌ DATA FETCH FAILED: {str(e)}"
+                log.error(error_msg)
+                global_state.add_log(f"[🚨 CRITICAL] {error_msg}")
+                global_state.oracle_status = "DATA ERROR"
+                
+                # Block trading - return error
+                return {
+                    'status': 'error',
+                    'action': 'blocked',
+                    'details': {
+                        'reason': f'Data API call failed: {str(e)}',
+                        'error_type': 'api_failure'
+                    }
+                }
+            
+            # 🔒 CRITICAL: Validate data completeness before proceeding
+            data_errors = []
+            
+            # Check 5m data
+            if market_snapshot.stable_5m is None or (hasattr(market_snapshot.stable_5m, 'empty') and market_snapshot.stable_5m.empty):
+                data_errors.append("5m data missing or empty")
+            elif len(market_snapshot.stable_5m) < 50:
+                data_errors.append(f"5m data incomplete ({len(market_snapshot.stable_5m)}/50 bars)")
+            
+            # Check 15m data
+            if market_snapshot.stable_15m is None or (hasattr(market_snapshot.stable_15m, 'empty') and market_snapshot.stable_15m.empty):
+                data_errors.append("15m data missing or empty")
+            elif len(market_snapshot.stable_15m) < 20:
+                data_errors.append(f"15m data incomplete ({len(market_snapshot.stable_15m)}/20 bars)")
+            
+            # Check 1h data
+            if market_snapshot.stable_1h is None or (hasattr(market_snapshot.stable_1h, 'empty') and market_snapshot.stable_1h.empty):
+                data_errors.append("1h data missing or empty")
+            elif len(market_snapshot.stable_1h) < 10:
+                data_errors.append(f"1h data incomplete ({len(market_snapshot.stable_1h)}/10 bars)")
+            
+            # Check live price
+            if not market_snapshot.live_5m or market_snapshot.live_5m.get('close', 0) <= 0:
+                data_errors.append("Live price unavailable")
+            
+            # If any data errors, block trading
+            if data_errors:
+                error_msg = f"❌ DATA INCOMPLETE: {'; '.join(data_errors)}"
+                log.error(error_msg)
+                global_state.add_log(f"[🚨 CRITICAL] {error_msg}")
+                global_state.oracle_status = "DATA INCOMPLETE"
+                
+                # Persistent error display
+                print(f"\n{'='*60}")
+                print(f"🚨 TRADING BLOCKED - DATA ERROR")
+                print(f"{'='*60}")
+                for err in data_errors:
+                    print(f"   ❌ {err}")
+                print(f"{'='*60}\n")
+                
+                return {
+                    'status': 'error',
+                    'action': 'blocked',
+                    'details': {
+                        'reason': error_msg,
+                        'error_type': 'data_incomplete',
+                        'errors': data_errors
+                    }
+                }
+            
             global_state.oracle_status = "Data Ready"
             
             # 💰 fetch_position_info logic (New Feature)

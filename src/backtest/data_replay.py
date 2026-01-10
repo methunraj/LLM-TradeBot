@@ -106,37 +106,19 @@ class DataReplayAgent:
     
     async def load_data(self) -> bool:
         """
-        加载历史数据（优先从缓存读取）
+        加载历史数据 (使用统一的 KlineCache)
+        
+        优先从 data/kline_cache/{symbol}/*.parquet 读取
+        只获取增量数据从 API
         
         Returns:
             是否成功加载
         """
-        cache_file = self._get_cache_path()
-        
-        # 尝试从缓存加载
-        if os.path.exists(cache_file):
-            log.info(f"📂 Loading cached data from {cache_file}")
-            try:
-                self._load_from_cache(cache_file)
-                # Verify we actually got data for range
-                if not self.timestamps:
-                    log.warning("Cache loaded but no timestamps in range. Retrying fetch...")
-                elif not self._cache_covers_range():
-                    log.warning(
-                        "Cache range incomplete for requested window "
-                        f"(expected 5m {self._expected_start_5m()} -> {self._expected_end_5m()}, "
-                        f"cache {self._describe_cache_range()}). Refetching..."
-                    )
-                else:
-                    log.info(f"✅ Loaded {len(self.timestamps)} timestamps from cache")
-                    return True
-            except Exception as e:
-                log.warning(f"Cache load failed: {e}, fetching from API...")
-        
-        # 从 API 获取
         log.info(f"📥 Fetching historical data from Binance API...")
+        
         try:
             await self._fetch_from_api()
+            
             if not self._cache_covers_range():
                 log.error(
                     "Fetched data does not fully cover requested range "
@@ -144,10 +126,10 @@ class DataReplayAgent:
                     f"cache {self._describe_cache_range()})."
                 )
                 return False
-            # 保存到缓存
-            self._save_to_cache(cache_file)
-            log.info(f"✅ Fetched and cached {len(self.timestamps)} timestamps")
+            
+            log.info(f"✅ Data ready: {len(self.timestamps)} timestamps")
             return True
+            
         except Exception as e:
             log.error(f"❌ Failed to fetch historical data: {e}")
             return False
