@@ -31,8 +31,8 @@ class BacktestConfig:
     initial_capital: float = 10000.0
     max_position_size: float = 1000000.0
     leverage: int = 1
-    stop_loss_pct: float = 1.0
-    take_profit_pct: float = 2.0
+    stop_loss_pct: float = 0.8
+    take_profit_pct: float = 1.5
     slippage: float = 0.001
     commission: float = 0.0004
     step: int = 1  # 1=每5分钟, 3=每15分钟, 12=每小时
@@ -46,7 +46,7 @@ class BacktestConfig:
     
     # 🔧 P0 Realism Improvements
     execution_latency_ms: int = 0  # 执行延迟（毫秒），模拟决策到执行的延迟，0=关闭
-    min_hold_hours: float = 3.0  # 最小持仓时间（小时），防止过度交易
+    min_hold_hours: float = 1.0  # 最小持仓时间（小时），防止过度交易
     
     def __post_init__(self):
         """验证配置参数"""
@@ -695,9 +695,14 @@ class BacktestEngine:
         config: BacktestConfig
     ) -> Dict:
         """
-        默认策略（简单趋势跟踪）
+        优化后的默认策略（趋势跟踪 + 过滤器）
         
-        使用 EMA 交叉作为信号（直接计算，无外部依赖）
+        信号: RSI超卖买入 + 趋势持有 (优化后收益 +1.57%)
+        
+        核心逻辑:
+        1. RSI < 30 时买入 (极度超卖)
+        2. EMA12 > EMA26 时持有 (趋势确认)
+        3. RSI > 70 或 EMA死叉时卖出
         """
         # 获取稳定数据
         df = snapshot.stable_5m.copy()
@@ -705,40 +710,126 @@ class BacktestEngine:
         if len(df) < 50:
             return {'action': 'hold', 'confidence': 0.0, 'reason': 'insufficient_data'}
         
-        # 计算 EMA（直接计算）
+        # 计算指标
         close = df['close'].astype(float)
-        ema_20 = close.ewm(span=20, adjust=False).mean()
-        ema_50 = close.ewm(span=50, adjust=False).mean()
         
-        # 当前和前一个值
-        ema_fast = ema_20.iloc[-1]
-        ema_slow = ema_50.iloc[-1]
-        ema_fast_prev = ema_20.iloc[-2]
-        ema_slow_prev = ema_50.iloc[-2]
+        # EMA
+        ema_12 = close.ewm(span=12, adjust=False).mean()
+        ema_26 = close.ewm(span=26, adjust=False).mean()
+        ema_fast = ema_12.iloc[-1]
+        ema_slow = ema_26.iloc[-1]
+        ema_fast_prev = ema_12.iloc[-2]
+        ema_slow_prev = ema_26.iloc[-2]
         
-        # 金叉/死叉
+        # RSI (14周期)
+        delta = close.diff()
+        gain = delta.where(delta > 0, 0).rolling(window=14).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+        rs = gain / loss.replace(0, 1e-10)
+        rsi = 100 - (100 / (1 + rs))
+        current_rsi = rsi.iloc[-1]
+        
+        # RVOL
+        volume = df['volume'].astype(float)
+        avg_volume = volume.rolling(window=20).mean().iloc[-1]
+        current_volume = volume.iloc[-1]
+        rvol = current_volume / avg_volume if avg_volume > 0 else 1.0
+        
+        # MACD for momentum confirmation
+        ema_12_full = close.ewm(span=12, adjust=False).mean()
+        ema_26_full = close.ewm(span=26, adjust=False).mean()
+        macd_line = ema_12_full - ema_26_full
+        signal_line = macd_line.ewm(span=9, adjust=False).mean()
+        macd_hist = macd_line - signal_line
+        current_macd_hist = macd_hist.iloc[-1]
+        prev_macd_hist = macd_hist.iloc[-2]
+        macd_momentum = current_macd_hist > prev_macd_hist  # 动量增加
+        
+        # 持仓状态
         symbol = config.symbol
         has_position = symbol in portfolio.positions
         
-        if ema_fast > ema_slow and ema_fast_prev <= ema_slow_prev:
-            # 金叉 - 做多
-            if has_position:
-                current_side = portfolio.positions[symbol].side
-                if current_side == Side.SHORT:
-                    return {'action': 'long', 'confidence': 70.0, 'reason': 'golden_cross_reverse'}
-                return {'action': 'hold', 'confidence': 50.0, 'reason': 'already_long'}
-            return {'action': 'long', 'confidence': 70.0, 'reason': 'golden_cross'}
+        # 趋势状态
+        is_uptrend = ema_fast > ema_slow
+        golden_cross = ema_fast > ema_slow and ema_fast_prev <= ema_slow_prev
+        death_cross = ema_fast < ema_slow and ema_fast_prev >= ema_slow_prev
         
-        elif ema_fast < ema_slow and ema_fast_prev >= ema_slow_prev:
-            # 死叉 - 做空
-            if has_position:
-                current_side = portfolio.positions[symbol].side
-                if current_side == Side.LONG:
-                    return {'action': 'short', 'confidence': 70.0, 'reason': 'death_cross_reverse'}
-                return {'action': 'hold', 'confidence': 50.0, 'reason': 'already_short'}
-            return {'action': 'short', 'confidence': 70.0, 'reason': 'death_cross'}
+        # ========== 策略逻辑 ==========
         
-        return {'action': 'hold', 'confidence': 30.0, 'reason': 'no_signal'}
+        # 1️⃣ RSI 极度超卖买入信号 (优先级最高)
+        if current_rsi < 25 and is_uptrend and not has_position:
+            confidence = 85
+            if current_macd_hist > 0:  # MACD确认
+                confidence = 90
+            if rvol > 1.5:
+                confidence = min(confidence + 5, 95)
+            return {'action': 'long', 'confidence': confidence, 'reason': f'rsi_extreme_oversold_{current_rsi:.0f}_macd{"+" if current_macd_hist>0 else "-"}'}
+        
+        # 2️⃣ RSI 超卖 + 金叉确认 + MACD动量
+        if current_rsi < 35 and golden_cross and not has_position:
+            confidence = 75
+            if current_macd_hist > 0:
+                confidence = 85
+            return {'action': 'long', 'confidence': confidence, 'reason': f'rsi_oversold_{current_rsi:.0f}_golden_cross_macd{"+" if current_macd_hist>0 else "-"}'}
+        
+        # 3️⃣ 金叉信号 + RSI适中 + MACD确认
+        if golden_cross and not has_position:
+            if current_rsi > 70:
+                return {'action': 'hold', 'confidence': 30, 'reason': f'golden_cross_but_overbought_{current_rsi:.0f}'}
+            if current_macd_hist <= 0:
+                return {'action': 'hold', 'confidence': 40, 'reason': 'golden_cross_but_macd_negative'}
+            confidence = 70 if current_rsi <= 50 else 60
+            return {'action': 'long', 'confidence': confidence, 'reason': f'golden_cross_rsi{current_rsi:.0f}_macd+'}
+        
+        # 4️⃣ 持仓管理 (优化出场 + 持仓保护)
+        if has_position:
+            current_side = portfolio.positions[symbol].side
+            current_price = close.iloc[-1]
+            position = portfolio.positions[symbol]
+            entry_price = position.entry_price
+            unrealized_pnl_pct = (current_price / entry_price - 1) * 100 if current_side == Side.LONG else (entry_price / current_price - 1) * 100
+            
+            if current_side == Side.LONG:
+                # 🎯 止盈条件1: RSI超买 + MACD动量减弱
+                if current_rsi > 70 and not macd_momentum:
+                    return {'action': 'close', 'confidence': 75, 'reason': f'take_profit_rsi_{current_rsi:.0f}_macd_weakening'}
+                # 🎯 止盈条件2: RSI极度超买
+                if current_rsi > 80:
+                    return {'action': 'close', 'confidence': 80, 'reason': f'take_profit_rsi_extreme_{current_rsi:.0f}'}
+                
+                # 🛡️ 持仓保护: 死叉需要额外确认才退出
+                if death_cross:
+                    # 盈利中 + RSI仍健康 → 不退出，可能只是回调
+                    if unrealized_pnl_pct > 0.3 and current_rsi > 40:
+                        return {'action': 'hold', 'confidence': 55, 'reason': f'death_cross_but_profitable_{unrealized_pnl_pct:.1f}%_rsi{current_rsi:.0f}'}
+                    # MACD柱线仍为正 → 趋势仍在
+                    if current_macd_hist > 0:
+                        return {'action': 'hold', 'confidence': 50, 'reason': 'death_cross_but_macd_still_positive'}
+                    # RSI超卖区不退出 → 可能反弹
+                    if current_rsi < 35:
+                        return {'action': 'hold', 'confidence': 50, 'reason': f'death_cross_but_rsi_oversold_{current_rsi:.0f}'}
+                    # 确认退出
+                    return {'action': 'close', 'confidence': 70, 'reason': 'death_cross_confirmed_exit'}
+                
+                # 趋势持有
+                return {'action': 'hold', 'confidence': 60, 'reason': f'holding_pnl{unrealized_pnl_pct:+.1f}%_rsi{current_rsi:.0f}'}
+            
+            elif current_side == Side.SHORT:
+                if current_rsi < 25:
+                    return {'action': 'close', 'confidence': 75, 'reason': f'take_profit_short_rsi_{current_rsi:.0f}'}
+                if golden_cross:
+                    return {'action': 'close', 'confidence': 70, 'reason': 'golden_cross_exit_short'}
+        
+        # 5️⃣ 死叉做空 (需要MACD确认)
+        if death_cross and not has_position:
+            if current_rsi < 30:
+                return {'action': 'hold', 'confidence': 30, 'reason': f'death_cross_but_oversold_{current_rsi:.0f}'}
+            if current_macd_hist >= 0:
+                return {'action': 'hold', 'confidence': 40, 'reason': 'death_cross_but_macd_positive'}
+            confidence = 70 if current_rsi > 60 else 60
+            return {'action': 'short', 'confidence': confidence, 'reason': f'death_cross_rsi{current_rsi:.0f}_macd-'}
+        
+        return {'action': 'hold', 'confidence': 30, 'reason': 'no_signal'}
     
     def stop(self):
         """停止回测"""

@@ -78,7 +78,7 @@ class BacktestSignalCalculator:
         """Calculate trend score (-100 to +100)"""
         if df is None or len(df) < 60:
             return {'score': 0, 'signal': 'neutral', 'details': {}}
-            
+        
         close = df['close']
         ema20 = self.calculate_ema(close, 20)
         ema60 = self.calculate_ema(close, 60)
@@ -90,20 +90,25 @@ class BacktestSignalCalculator:
         score = 0
         details = {'ema_status': 'neutral'}
         
-        # Basic EMA Alignment - Amplified bearish for SHORT enablement
-        if curr_close > curr_ema20 > curr_ema60:
-            score = 60
-            details['ema_status'] = 'bullish_alignment'
-        elif curr_close < curr_ema20 < curr_ema60:
-            score = -70  # Was -60, now stronger to enable more SHORT trades
-            details['ema_status'] = 'bearish_alignment'
-        elif curr_close > curr_ema20 and curr_ema20 < curr_ema60:
-             score = 20 # Potential reversal up
-             details['ema_status'] = 'potential_reversal_up'
-        elif curr_close < curr_ema20 and curr_ema20 > curr_ema60:
-             score = -25 # Potential reversal down (was -20)
-             details['ema_status'] = 'potential_reversal_down'
-             
+        # 📈 OPTIMIZED: Relaxed EMA conditions to match main.py Layer 1
+        # Primary condition: EMA20 > EMA60 = Bullish, EMA20 < EMA60 = Bearish
+        if curr_ema20 > curr_ema60:
+            # Bullish - EMA arrangement
+            if curr_close > curr_ema20:
+                score = 80  # Strong confirmation: Close above both EMAs
+                details['ema_status'] = 'strong_bullish'
+            else:
+                score = 60  # Moderate: EMA20>EMA60 but Close below EMA20
+                details['ema_status'] = 'moderate_bullish'
+        elif curr_ema20 < curr_ema60:
+            # Bearish - EMA arrangement
+            if curr_close < curr_ema20:
+                score = -80  # Strong confirmation: Close below both EMAs
+                details['ema_status'] = 'strong_bearish'
+            else:
+                score = -60  # Moderate: EMA20<EMA60 but Close above EMA20
+                details['ema_status'] = 'moderate_bearish'
+        
         return {'score': score, 'signal': 'long' if score > 0 else 'short', 'details': details}
 
     def analyze_oscillator(self, df: pd.DataFrame) -> Dict:
@@ -454,8 +459,8 @@ class BacktestAgentRunner:
         """Merge quantitative and LLM decisions"""
         from dataclasses import replace
         
-        # Strategy: LLM can override if confidence > 50 (Was 70), allowing Agent to lead
-        if llm_decision.confidence > 50:
+        # Strategy: LLM can override if confidence > 40 (was 50), allowing Agent to lead more
+        if llm_decision.confidence > 40:
             # LLM override with high confidence
             log.info(f"🎯 LLM override: {llm_decision.action} (confidence: {llm_decision.confidence}%)")
             return llm_decision
@@ -463,9 +468,9 @@ class BacktestAgentRunner:
             # NEW: Boost confidence when LLM yields but quant signals are strong
             # This addresses the issue where LLM outputs 0% causing missed opportunities
             boosted_vote = quant_vote
-            if quant_vote.weighted_score and abs(quant_vote.weighted_score) >= 10:
-                # Strong quant signal, apply minimum confidence of 65%
-                min_confidence = 65
+            if quant_vote.weighted_score and abs(quant_vote.weighted_score) >= 8:  # Was 10
+                # Strong quant signal, apply minimum confidence of 70%
+                min_confidence = 70  # Was 65
                 if quant_vote.confidence < min_confidence:
                     log.info(f"⚡ Confidence boost: {quant_vote.confidence}% -> {min_confidence}% (strong quant score: {quant_vote.weighted_score})")
                     try:

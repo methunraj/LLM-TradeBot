@@ -992,11 +992,22 @@ class MultiAgentTradingBot:
                 four_layer_result['blocking_reason'] = 'Insufficient 1h data'
                 trend_1h = 'neutral'
             else:
-                # Specification: Close > EMA20 > EMA60 (long), Close < EMA20 < EMA60 (short)
-                if close_1h > ema20_1h > ema60_1h:
+                # 📈 OPTIMIZED: Relaxed trend detection
+                # Primary: EMA20 > EMA60 = Bullish, EMA20 < EMA60 = Bearish
+                # Bonus: Close above/below EMA20 adds confirmation strength
+                if ema20_1h > ema60_1h:
                     trend_1h = 'long'
-                elif close_1h < ema20_1h < ema60_1h:
+                    # Bonus confirmation: Close > EMA20
+                    if close_1h > ema20_1h:
+                        four_layer_result['trend_confirmation'] = 'strong'
+                    else:
+                        four_layer_result['trend_confirmation'] = 'moderate'
+                elif ema20_1h < ema60_1h:
                     trend_1h = 'short'
+                    if close_1h < ema20_1h:
+                        four_layer_result['trend_confirmation'] = 'strong'
+                    else:
+                        four_layer_result['trend_confirmation'] = 'moderate'
                 else:
                     trend_1h = 'neutral'
                 
@@ -1009,10 +1020,11 @@ class MultiAgentTradingBot:
             elif adx_value < 15: # OPTIMIZATION (Phase 2): Lowered from 20
                 four_layer_result['blocking_reason'] = f"Weak Trend Strength (ADX {adx_value:.0f} < 15)"
                 log.info(f"❌ Layer 1 FAIL: ADX={adx_value:.0f} < 15, trend not strong enough")
-            elif trend_1h == 'long' and oi_change < -5.0:
+            # 📈 OPTIMIZED: Raised OI divergence threshold from -5% to -15%
+            elif trend_1h == 'long' and oi_change < -15.0:
                 four_layer_result['blocking_reason'] = f"OI Divergence: Trend UP but OI {oi_change:.1f}%"
                 log.warning(f"🚨 Layer 1 FAIL: OI Divergence - Price up but OI {oi_change:.1f}%")
-            elif trend_1h == 'short' and oi_change > 5.0:
+            elif trend_1h == 'short' and oi_change > 15.0:
                 four_layer_result['blocking_reason'] = f"OI Divergence: Trend DOWN but OI +{oi_change:.1f}%"
                 log.warning(f"🚨 Layer 1 FAIL: OI Divergence - Price down but OI +{oi_change:.1f}%")
             elif trend_1h == 'long' and oi_fuel.get('whale_trap_risk', False):
