@@ -2977,6 +2977,17 @@ def main():
         kline_limit=args.kline_limit
     )
     
+    # 启动 Dashboard Server (跳过 headless 模式) - 优先启动，让用户能立即访问
+    if not args.headless:
+        try:
+            server_thread = threading.Thread(target=start_server, daemon=True)
+            server_thread.start()
+            print("🌐 Dashboard server started at http://localhost:8000")
+        except Exception as e:
+            print(f"⚠️ Failed to start Dashboard: {e}")
+    else:
+        print("🖥️  Headless mode: Web Dashboard disabled")
+    
     # 🔝 AUTO3 STARTUP EXECUTION (MANDATORY - runs before trading starts)
     skip_auto3 = args.skip_auto3 and args.mode == 'once'
     if skip_auto3 and getattr(bot, 'use_auto3', False):
@@ -2986,6 +2997,7 @@ def main():
     if hasattr(bot, 'use_auto3') and bot.use_auto3:
         log.info("=" * 60)
         log.info("🔝 AUTO3 STARTUP - Getting AI500 Top5 and selecting Top2...")
+        log.info("⏳ Dashboard available at http://localhost:8000 while backtest runs...")
         log.info("=" * 60)
         
         import asyncio
@@ -3010,16 +3022,6 @@ def main():
         log.info(f"✅ AUTO3 startup complete: {', '.join(top2)}")
         log.info("🔄 Auto-refresh started (12h interval)")
         log.info("=" * 60)
-    
-    # 启动 Dashboard Server (跳过 headless 模式)
-    if not args.headless:
-        try:
-            server_thread = threading.Thread(target=start_server, daemon=True)
-            server_thread.start()
-        except Exception as e:
-            print(f"⚠️ Failed to start Dashboard: {e}")
-    else:
-        print("🖥️  Headless mode: Web Dashboard disabled")
     
     # 运行
     if args.mode == 'once':

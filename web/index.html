@@ -5,16 +5,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LLM-TradeBot Dashboard</title>
-    <link rel="stylesheet" href="./style.css?v=47">
-    <link rel="stylesheet" href="./style-enhancements.css?v=4">
+    <link rel="stylesheet" href="./style.css?v=nofx_gold_v4">
+    <link rel="stylesheet" href="./style-enhancements.css?v=5">
     <link
-        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;600&display=swap"
+        href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;600&display=swap"
         rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="./i18n.js"></script>
 </head>
 
 <body>
+    <!-- CRT Scanline Effect -->
+    <div class="crt-overlay"></div>
+
     <div class="container">
         <!-- Header -->
         <header class="glass-panel header">
@@ -42,6 +45,16 @@
             </div>
             <div class="status-indicators">
                 <div class="controls">
+                    <!-- Mode Toggle: Test / Live -->
+                    <div class="mode-toggle-container">
+                        <button id="btn-mode-test" class="mode-toggle-btn active" title="Test Mode - No Real Trading">
+                            🧪 Test
+                        </button>
+                        <button id="btn-mode-live" class="mode-toggle-btn" title="Live Mode - Real Trading">
+                            💰 Live
+                        </button>
+                    </div>
+
                     <!-- Settings Button - Elegant Text Style -->
                     <button id="btn-settings" class="btn-settings-elegant" title="Settings">
                         <span class="settings-icon">⚙️</span>
@@ -108,6 +121,57 @@
         <!-- Main Grid -->
         <main class="dashboard-grid">
 
+            <!-- Row 0: K-Line Chart (Left) + Account Summary (Right) -->
+            <section class="row-charts-account"
+                style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px; min-height: 360px;">
+                <!-- K-Line Chart -->
+                <div class="glass-panel card kline-card">
+                    <h2>📈 K-Line Chart</h2>
+                    <div class="kline-container-wrapper">
+                        <div id="tradingview-widget" class="tradingview-widget-container">
+                            <!-- TradingView Widget loads here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Account Summary -->
+                <div class="glass-panel card account-info-card" style="display: flex; flex-direction: column;">
+                    <h2>💰 Account Summary</h2>
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 10px 0;">
+                        <div class="account-stat">
+                            <span class="stat-label">Wallet Balance</span>
+                            <span class="stat-value" id="account-wallet-balance">$0.00</span>
+                        </div>
+                        <div class="account-stat">
+                            <span class="stat-label">Available Balance</span>
+                            <span class="stat-value" id="account-available-balance">$0.00</span>
+                        </div>
+                        <div class="account-stat">
+                            <span class="stat-label">Total Equity</span>
+                            <span class="stat-value" id="acc-equity">$0.00</span>
+                        </div>
+                        <div class="account-stat">
+                            <span class="stat-label">Initial Capital</span>
+                            <span class="stat-value" id="acc-initial">$0.00</span>
+                        </div>
+                        <div class="account-stat highlight">
+                            <span class="stat-label">Total PnL</span>
+                            <span class="stat-value" id="acc-pnl">$0.00</span>
+                        </div>
+                        <div class="account-stat highlight">
+                            <span class="stat-label">PnL %</span>
+                            <span class="stat-value" id="account-total-pnl-pct">0.00%</span>
+                        </div>
+                        <div class="account-stat" id="position-count"
+                            style="margin-top: auto; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);">
+                            📊 Positions: 0
+                        </div>
+                        <div id="position-details" style="font-size: 0.85em; color: #848E9C;">No open positions</div>
+                    </div>
+                </div>
+            </section>
+
+
             <!-- Row 1: Complete Agent Framework Visualization -->
             <section class="row-agent-framework">
                 <div class="glass-panel card agent-framework-card">
@@ -127,21 +191,38 @@
                         <!-- Layer 1: Data Layer -->
                         <div class="flow-layer" data-layer="data">
                             <div class="layer-label">📡 Data Layer</div>
-                            <div class="agent-box" id="flow-datasync">
-                                <div class="agent-header">
-                                    <span class="agent-emoji">🕵️</span>
-                                    <span class="agent-title">DataSync Agent</span>
-                                    <span class="agent-badge idle">Idle</span>
+                            <div class="layer-agents">
+                                <div class="agent-box" id="flow-datasync">
+                                    <div class="agent-header">
+                                        <span class="agent-emoji">🕵️</span>
+                                        <span class="agent-title">DataSync Agent</span>
+                                        <span class="agent-badge idle">Idle</span>
+                                    </div>
+                                    <div class="agent-output">
+                                        <div class="output-row"><span class="output-label">5m:</span><span
+                                                class="output-value" id="out-5m">--</span></div>
+                                        <div class="output-row"><span class="output-label">15m:</span><span
+                                                class="output-value" id="out-15m">--</span></div>
+                                        <div class="output-row"><span class="output-label">1h:</span><span
+                                                class="output-value" id="out-1h">--</span></div>
+                                        <div class="output-row"><span class="output-label">OI:</span><span
+                                                class="output-value" id="out-oi">--</span></div>
+                                    </div>
                                 </div>
-                                <div class="agent-output">
-                                    <div class="output-row"><span class="output-label">5m:</span><span
-                                            class="output-value" id="out-5m">--</span></div>
-                                    <div class="output-row"><span class="output-label">15m:</span><span
-                                            class="output-value" id="out-15m">--</span></div>
-                                    <div class="output-row"><span class="output-label">1h:</span><span
-                                            class="output-value" id="out-1h">--</span></div>
-                                    <div class="output-row"><span class="output-label">OI:</span><span
-                                            class="output-value" id="out-oi">--</span></div>
+                                <div class="agent-box" id="flow-symbol-selector">
+                                    <div class="agent-header">
+                                        <span class="agent-emoji">🎰</span>
+                                        <span class="agent-title">Symbol Selector</span>
+                                        <span class="agent-badge idle">Idle</span>
+                                    </div>
+                                    <div class="agent-output">
+                                        <div class="output-row"><span class="output-label">Mode:</span><span
+                                                class="output-value" id="out-selector-mode">AUTO1</span></div>
+                                        <div class="output-row"><span class="output-label">Symbol:</span><span
+                                                class="output-value" id="out-selector-symbol">--</span></div>
+                                        <div class="output-row"><span class="output-label">Score:</span><span
+                                                class="output-value" id="out-selector-score">--</span></div>
+                                    </div>
                                 </div>
                             </div>
                             <div class="flow-connector vertical">
@@ -186,6 +267,36 @@
                                                 class="output-value" id="out-regime-conf">--</span></div>
                                     </div>
                                 </div>
+                                <div class="agent-box" id="flow-trigger-detector">
+                                    <div class="agent-header">
+                                        <span class="agent-emoji">⚡</span>
+                                        <span class="agent-title">Trigger Detector</span>
+                                        <span class="agent-badge idle">Idle</span>
+                                    </div>
+                                    <div class="agent-output">
+                                        <div class="output-row"><span class="output-label">Pattern:</span><span
+                                                class="output-value" id="out-pattern">--</span></div>
+                                        <div class="output-row"><span class="output-label">Signal:</span><span
+                                                class="output-value" id="out-trigger-signal">--</span></div>
+                                        <div class="output-row"><span class="output-label">Score:</span><span
+                                                class="output-value" id="out-trigger-score">--</span></div>
+                                    </div>
+                                </div>
+                                <div class="agent-box" id="flow-position-analyzer">
+                                    <div class="agent-header">
+                                        <span class="agent-emoji">📍</span>
+                                        <span class="agent-title">Position Analyzer</span>
+                                        <span class="agent-badge idle">Idle</span>
+                                    </div>
+                                    <div class="agent-output">
+                                        <div class="output-row"><span class="output-label">Zone:</span><span
+                                                class="output-value" id="out-zone">--</span></div>
+                                        <div class="output-row"><span class="output-label">S/R:</span><span
+                                                class="output-value" id="out-sr">--</span></div>
+                                        <div class="output-row"><span class="output-label">Range:</span><span
+                                                class="output-value" id="out-range">--</span></div>
+                                    </div>
+                                </div>
                                 <div class="agent-box" id="flow-predict">
                                     <div class="agent-header">
                                         <span class="agent-emoji">🎯</span>
@@ -205,6 +316,62 @@
                             <div class="flow-connector vertical merge">
                                 <div class="flow-line"></div>
                                 <div class="flow-particles" id="particles-analysis"></div>
+                            </div>
+                        </div>
+
+                        <!-- Layer 2.5: LLM Strategy Layer -->
+                        <div class="flow-layer" data-layer="strategy">
+                            <div class="layer-label">🧠 LLM Strategy Layer</div>
+                            <div class="layer-agents">
+                                <div class="agent-box" id="flow-trend-agent">
+                                    <div class="agent-header">
+                                        <span class="agent-emoji">📈</span>
+                                        <span class="agent-title">Trend Agent</span>
+                                        <span class="agent-badge idle">Idle</span>
+                                    </div>
+                                    <div class="agent-output">
+                                        <div class="output-row"><span class="output-label">1h Trend:</span><span
+                                                class="output-value" id="out-trend-1h">--</span></div>
+                                        <div class="output-row"><span class="output-label">Bias:</span><span
+                                                class="output-value" id="out-trend-bias">--</span></div>
+                                        <div class="output-row"><span class="output-label">Conf:</span><span
+                                                class="output-value" id="out-trend-conf">--</span></div>
+                                    </div>
+                                </div>
+                                <div class="agent-box" id="flow-trigger-agent">
+                                    <div class="agent-header">
+                                        <span class="agent-emoji">🔥</span>
+                                        <span class="agent-title">Trigger Agent</span>
+                                        <span class="agent-badge idle">Idle</span>
+                                    </div>
+                                    <div class="agent-output">
+                                        <div class="output-row"><span class="output-label">5m Fire:</span><span
+                                                class="output-value" id="out-fire">--</span></div>
+                                        <div class="output-row"><span class="output-label">Entry:</span><span
+                                                class="output-value" id="out-entry-type">--</span></div>
+                                        <div class="output-row"><span class="output-label">Conf:</span><span
+                                                class="output-value" id="out-fire-conf">--</span></div>
+                                    </div>
+                                </div>
+                                <div class="agent-box" id="flow-ai-filter">
+                                    <div class="agent-header">
+                                        <span class="agent-emoji">🚫</span>
+                                        <span class="agent-title">AI Filter</span>
+                                        <span class="agent-badge idle">Idle</span>
+                                    </div>
+                                    <div class="agent-output">
+                                        <div class="output-row"><span class="output-label">Status:</span><span
+                                                class="output-value" id="out-ai-status">--</span></div>
+                                        <div class="output-row"><span class="output-label">Veto:</span><span
+                                                class="output-value" id="out-ai-veto">--</span></div>
+                                        <div class="output-row"><span class="output-label">Reason:</span><span
+                                                class="output-value" id="out-ai-reason">--</span></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flow-connector vertical">
+                                <div class="flow-line"></div>
+                                <div class="flow-particles" id="particles-strategy"></div>
                             </div>
                         </div>
 
@@ -272,6 +439,21 @@
                                         </div>
                                     </div>
                                 </div>
+                                <div class="agent-box" id="flow-reflection">
+                                    <div class="agent-header">
+                                        <span class="agent-emoji">🪞</span>
+                                        <span class="agent-title">Reflection Agent</span>
+                                        <span class="agent-badge idle">Idle</span>
+                                    </div>
+                                    <div class="agent-output">
+                                        <div class="output-row"><span class="output-label">Trades:</span><span
+                                                class="output-value" id="out-trades-count">--</span></div>
+                                        <div class="output-row"><span class="output-label">Win Rate:</span><span
+                                                class="output-value" id="out-win-rate">--</span></div>
+                                        <div class="output-row"><span class="output-label">Insight:</span><span
+                                                class="output-value" id="out-insight">--</span></div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -283,32 +465,8 @@
                         <div class="legend-item"><span class="legend-dot completed"></span>Completed</div>
                         <div class="legend-item"><span class="legend-dot long"></span>LONG</div>
                         <div class="legend-item"><span class="legend-dot short"></span>SHORT</div>
-                    </div>
-                </div>
-
-                <!-- Account Summary -->
-                <div class="glass-panel card account-summary-card">
-                    <div class="card-header">
-                        <h2>💰 Account</h2>
-                        <span id="sys-env-badge" class="env-badge">TEST</span>
-                    </div>
-                    <div class="account-metrics">
-                        <div class="account-metric">
-                            <span class="metric-label">Balance</span>
-                            <span id="acc-balance" class="metric-value">$0.00</span>
-                        </div>
-                        <div class="account-metric">
-                            <span class="metric-label">Equity</span>
-                            <span id="acc-equity" class="metric-value">$0.00</span>
-                        </div>
-                        <div class="account-metric pnl">
-                            <span class="metric-label">Total PnL</span>
-                            <span id="acc-pnl" class="metric-value neutral">$0.00</span>
-                        </div>
-                        <div class="account-metric">
-                            <span class="metric-label">Positions</span>
-                            <span id="acc-positions" class="metric-value">0</span>
-                        </div>
+                        <button onclick="window.resetAgentPositions()" class="reset-positions-btn"
+                            title="Reset agent positions to default">🔄 Reset Layout</button>
                     </div>
                 </div>
             </section>
@@ -577,83 +735,27 @@
                 <div id="tab-trading" class="tab-pane">
 
                     <div class="form-group">
-                        <label>Trading Symbols</label>
+                        <label>🎰 Symbol Selection Mode</label>
                         <div id="cfg-symbol-container"
-                            style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1);">
-
-                            <!-- Preset Buttons -->
-                            <div style="margin-bottom: 12px; display: flex; gap: 8px;">
-                                <button type="button" class="btn-sm" onclick="selectPreset('major')"
-                                    style="background:#2d3748; color:#fff; border:1px solid rgba(255,255,255,0.2); border-radius:4px; padding:4px 8px; cursor:pointer;">
-                                    Major 4
-                                </button>
-                                <button type="button" class="btn-sm" onclick="selectPreset('ai500')"
-                                    style="background:#553c9a; color:#fff; border:1px solid rgba(255,255,255,0.2); border-radius:4px; padding:4px 8px; cursor:pointer;">
-                                    🤖 AI500 Top 5
-                                </button>
-                                <button type="button" class="btn-sm" onclick="selectPreset('all')"
-                                    style="background:#2d3748; color:#fff; border:1px solid rgba(255,255,255,0.2); border-radius:4px; padding:4px 8px; cursor:pointer;">
-                                    Select All
-                                </button>
-                                <button type="button" class="btn-sm" onclick="selectPreset('clear')"
-                                    style="background:#2d3748; color:#fff; border:1px solid rgba(255,255,255,0.2); border-radius:4px; padding:4px 8px; cursor:pointer;">
-                                    Clear
-                                </button>
-                            </div>
-
-                            <!-- Major Coins -->
-                            <div style="margin-bottom: 10px;">
-                                <div style="color: #a0aec0; font-size: 0.8em; margin-bottom: 5px; font-weight: bold;">⭐
-                                    MAJOR COINS</div>
-                                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px;">
-                                    <label style="cursor:pointer;"><input type="checkbox" name="cfg-symbol"
-                                            value="BTCUSDT"> BTC</label>
-                                    <label style="cursor:pointer;"><input type="checkbox" name="cfg-symbol"
-                                            value="ETHUSDT"> ETH</label>
-                                    <label style="cursor:pointer;"><input type="checkbox" name="cfg-symbol"
-                                            value="SOLUSDT"> SOL</label>
-                                    <label style="cursor:pointer;"><input type="checkbox" name="cfg-symbol"
-                                            value="BNBUSDT"> BNB</label>
+                            style="background: rgba(240, 185, 11, 0.1); padding: 16px; border-radius: 8px; border: 1px solid rgba(240, 185, 11, 0.3);">
+                            <div style="display: flex; align-items: center; gap: 12px;">
+                                <span style="font-size: 2rem;">🎰</span>
+                                <div>
+                                    <div style="font-size: 1.1rem; font-weight: 700; color: #F0B90B;">AUTO1 Mode</div>
+                                    <p style="color: #a0aec0; font-size: 0.85em; margin: 4px 0 0 0;">
+                                        System automatically selects the single best performing symbol based on
+                                        momentum, volume, and technical indicators.
+                                    </p>
                                 </div>
                             </div>
-
-                            <!-- AI500 Top 10 -->
-                            <div>
-                                <div
-                                    style="color: #a0aec0; font-size: 0.8em; margin-bottom: 5px; font-weight: bold; padding-top:5px; border-top:1px solid rgba(255,255,255,0.1);">
-                                    🤖 AI SECTOR (Dynamic)</div>
-                                <div style="display: grid; grid-template-columns: 1fr; gap: 5px;">
-                                    <label
-                                        style="cursor:pointer; display:flex; align-items:center; background:rgba(85, 60, 154, 0.2); padding:8px; border-radius:4px; border:1px solid rgba(85, 60, 154, 0.4);">
-                                        <input type="checkbox" name="cfg-symbol" value="AI500_TOP5"
-                                            style="margin-right:10px;">
-                                        <span>
-                                            <strong style="color:#b794f4;">🤖 AI500 Top 5 Dynamic</strong>
-                                            <br>
-                                            <span style="font-size:0.8em; color:#a0aec0;">Automatically selects Top 5
-                                                AI coins by 24h Volume from 30+ candidates (FET, RENDER, TAO, NEAR,
-                                                etc.)</span>
-                                        </span>
-                                    </label>
+                            <div
+                                style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1);">
+                                <div style="display: flex; gap: 20px; font-size: 0.8em; color: #848E9C;">
+                                    <span>📊 Momentum Score</span>
+                                    <span>📈 Volume Analysis</span>
+                                    <span>🔮 Technical Signals</span>
                                 </div>
                             </div>
-
-                            <script>
-                                function selectPreset(type) {
-                                    const cbs = document.querySelectorAll('input[name="cfg-symbol"]');
-                                    const majorCoins = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT'];
-
-                                    cbs.forEach(cb => {
-                                        if (type === 'clear') cb.checked = false;
-                                        else if (type === 'all') cb.checked = true;
-                                        else if (type === 'major') cb.checked = majorCoins.includes(cb.value);
-                                        // Specific handling for AI preset button if user clicks it
-                                        else if (type === 'ai500') {
-                                            if (cb.value === 'AI500_TOP5') cb.checked = true;
-                                        }
-                                    });
-                                }
-                            </script>
                         </div>
                     </div>
                     <div class="form-group">
@@ -1032,7 +1134,7 @@
         }
     </style>
     </style>
-    <script src="/static/app.js?v=railway_auth_fix_v3"></script>
+    <script src="/static/app.js?v=nofx_gold_v4"></script>
     <script>
         // EMERGENCY FIX & LOGIC V3
         (function () {
@@ -1463,6 +1565,60 @@
                                 }
                             }
                         })();
+                    </script>
+
+                    <!-- TradingView Widget Initialization -->
+                    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+                    <script>
+                        window.loadTradingViewChart = function (symbol) {
+                            symbol = symbol || 'BTCUSDT';
+                            // Convert to TradingView format: BINANCE:BTCUSDT
+                            const tvSymbol = 'BINANCE:' + symbol;
+                            const container = document.getElementById('tradingview-widget');
+                            if (!container) return;
+
+                            // Clear previous widget
+                            container.innerHTML = '';
+
+                            // Create new widget
+                            new TradingView.widget({
+                                "autosize": true,
+                                "symbol": tvSymbol,
+                                "interval": "15",
+                                "timezone": "Etc/UTC",
+                                "theme": "dark",
+                                "style": "1",
+                                "locale": "en",
+                                "toolbar_bg": "#0B0E11",
+                                "enable_publishing": false,
+                                "hide_top_toolbar": false,
+                                "hide_legend": false,
+                                "save_image": false,
+                                "container_id": "tradingview-widget",
+                                "hide_side_toolbar": true,
+                                "allow_symbol_change": true,
+                                "studies": [
+                                    "MAExp@tv-basicstudies",
+                                    "RSI@tv-basicstudies"
+                                ],
+                                "backgroundColor": "rgba(11, 14, 17, 1)",
+                                "gridColor": "rgba(255, 255, 255, 0.05)"
+                            });
+
+                            window.chartInitialized = true;
+                            console.log('📈 TradingView chart loaded:', tvSymbol);
+                        };
+
+                        // Auto-load chart on page load
+                        document.addEventListener('DOMContentLoaded', function () {
+                            setTimeout(function () {
+                                if (window.activeSymbols && window.activeSymbols.length > 0) {
+                                    loadTradingViewChart(window.activeSymbols[0]);
+                                } else {
+                                    loadTradingViewChart('BTCUSDT');
+                                }
+                            }, 1000);
+                        });
                     </script>
 </body>
 

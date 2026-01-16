@@ -989,6 +989,72 @@ function updateAgentFramework(system, decision, agents) {
         if (symbolSpan) symbolSpan.textContent = decision.symbol || '--';
         if (sizeSpan) sizeSpan.textContent = '--';
     }
+
+    // 🆕 Symbol Selector Agent
+    if (system.mode === 'Running') {
+        setAgentStatus('flow-symbol-selector', 'Done');
+        setOutput('out-selector-mode', 'AUTO1');
+        setOutput('out-selector-symbol', decision.symbol || '--');
+        setOutput('out-selector-score', '--');
+
+        // 🆕 Update K-line chart when AUTO1 symbol changes
+        if (decision.symbol && decision.symbol !== window.lastChartSymbol) {
+            window.lastChartSymbol = decision.symbol;
+            if (typeof loadTradingViewChart === 'function') {
+                loadTradingViewChart(decision.symbol);
+                console.log('📈 K-line chart updated to:', decision.symbol);
+            }
+        }
+    }
+
+    // 🆕 Trigger Detector Agent
+    if (decision.action) {
+        setAgentStatus('flow-trigger-detector', 'Done');
+        setOutput('out-pattern', '--');
+        setOutput('out-trigger-signal', decision.action || '--');
+        setOutput('out-trigger-score', '--');
+    }
+
+    // 🆕 Position Analyzer Agent
+    if (decision.position_zone !== undefined || decision.regime) {
+        setAgentStatus('flow-position-analyzer', 'Done');
+        setOutput('out-zone', decision.position_zone || '--');
+        setOutput('out-sr', '--');
+        setOutput('out-range', '--');
+    }
+
+    // 🆕 Trend Agent (LLM)
+    if (system.mode === 'Running') {
+        setAgentStatus('flow-trend-agent', 'Done');
+        setOutput('out-trend-1h', '--');
+        setOutput('out-trend-bias', decision.action || '--');
+        setOutput('out-trend-conf', '--');
+    }
+
+    // 🆕 Trigger Agent (LLM)
+    if (system.mode === 'Running') {
+        setAgentStatus('flow-trigger-agent', 'Done');
+        setOutput('out-fire', decision.action !== 'WAIT' ? '✓' : '--');
+        setOutput('out-entry-type', decision.action || '--');
+        setOutput('out-fire-conf', '--');
+    }
+
+    // 🆕 AI Prediction Filter
+    if (decision.ai_filter_passed !== undefined || system.mode === 'Running') {
+        setAgentStatus('flow-ai-filter', 'Done');
+        const aiStatus = decision.ai_filter_passed === false ? '🚫 Blocked' : '✓ Pass';
+        setOutput('out-ai-status', aiStatus);
+        setOutput('out-ai-veto', decision.ai_filter_passed === false ? 'Yes' : 'No');
+        setOutput('out-ai-reason', decision.ai_filter_reason || '--');
+    }
+
+    // 🆕 Reflection Agent
+    if (system.mode === 'Running') {
+        setAgentStatus('flow-reflection', 'Done');
+        setOutput('out-trades-count', '--');
+        setOutput('out-win-rate', '--');
+        setOutput('out-insight', '--');
+    }
 }
 
 // 🆕 Update K-Line Symbol Selector dynamically
@@ -2266,3 +2332,242 @@ function renderTradeHistory(trades) {
         `;
     }).join('');
 }
+
+// ============================================================
+// 🎯 Agent Box Drag & Drop Functionality
+// ============================================================
+
+(function initAgentDragDrop() {
+    let draggedElement = null;
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let elementStartX = 0;
+    let elementStartY = 0;
+
+    // Wait for DOM to be ready
+    document.addEventListener('DOMContentLoaded', function () {
+        initDraggableAgents();
+    });
+
+    // Also try to init immediately if DOM is already loaded
+    if (document.readyState !== 'loading') {
+        setTimeout(initDraggableAgents, 100);
+    }
+
+    function initDraggableAgents() {
+        const agentBoxes = document.querySelectorAll('.agent-box');
+
+        agentBoxes.forEach(box => {
+            // Mouse events
+            box.addEventListener('mousedown', handleDragStart);
+
+            // Touch events for mobile
+            box.addEventListener('touchstart', handleTouchStart, { passive: false });
+        });
+
+        // Global move and end handlers
+        document.addEventListener('mousemove', handleDragMove);
+        document.addEventListener('mouseup', handleDragEnd);
+        document.addEventListener('touchmove', handleTouchMove, { passive: false });
+        document.addEventListener('touchend', handleTouchEnd);
+
+        console.log('🎯 Agent drag & drop initialized:', agentBoxes.length, 'agents');
+
+        // Load saved positions
+        loadAgentPositions();
+    }
+
+    function handleDragStart(e) {
+        if (e.button !== 0) return; // Only left mouse button
+
+        draggedElement = e.currentTarget;
+        draggedElement.classList.add('dragging');
+
+        const rect = draggedElement.getBoundingClientRect();
+        dragStartX = e.clientX;
+        dragStartY = e.clientY;
+        elementStartX = rect.left;
+        elementStartY = rect.top;
+
+        // Set position to fixed for free movement
+        draggedElement.style.position = 'fixed';
+        draggedElement.style.left = rect.left + 'px';
+        draggedElement.style.top = rect.top + 'px';
+        draggedElement.style.width = rect.width + 'px';
+        draggedElement.style.zIndex = '9999';
+
+        e.preventDefault();
+    }
+
+    function handleDragMove(e) {
+        if (!draggedElement) return;
+
+        const deltaX = e.clientX - dragStartX;
+        const deltaY = e.clientY - dragStartY;
+
+        draggedElement.style.left = (elementStartX + deltaX) + 'px';
+        draggedElement.style.top = (elementStartY + deltaY) + 'px';
+    }
+
+    function handleDragEnd(e) {
+        if (!draggedElement) return;
+
+        draggedElement.classList.remove('dragging');
+
+        // Keep the new position
+        const finalLeft = draggedElement.style.left;
+        const finalTop = draggedElement.style.top;
+
+        // Save position
+        saveAgentPosition(draggedElement.id, finalLeft, finalTop);
+
+        draggedElement = null;
+    }
+
+    // Touch event handlers
+    function handleTouchStart(e) {
+        if (e.touches.length !== 1) return;
+
+        const touch = e.touches[0];
+        draggedElement = e.currentTarget;
+        draggedElement.classList.add('dragging');
+
+        const rect = draggedElement.getBoundingClientRect();
+        dragStartX = touch.clientX;
+        dragStartY = touch.clientY;
+        elementStartX = rect.left;
+        elementStartY = rect.top;
+
+        draggedElement.style.position = 'fixed';
+        draggedElement.style.left = rect.left + 'px';
+        draggedElement.style.top = rect.top + 'px';
+        draggedElement.style.width = rect.width + 'px';
+        draggedElement.style.zIndex = '9999';
+
+        e.preventDefault();
+    }
+
+    function handleTouchMove(e) {
+        if (!draggedElement || e.touches.length !== 1) return;
+
+        const touch = e.touches[0];
+        const deltaX = touch.clientX - dragStartX;
+        const deltaY = touch.clientY - dragStartY;
+
+        draggedElement.style.left = (elementStartX + deltaX) + 'px';
+        draggedElement.style.top = (elementStartY + deltaY) + 'px';
+
+        e.preventDefault();
+    }
+
+    function handleTouchEnd(e) {
+        handleDragEnd(e);
+    }
+
+    // Save agent positions to localStorage
+    function saveAgentPosition(id, left, top) {
+        if (!id) return;
+
+        const positions = JSON.parse(localStorage.getItem('agentPositions') || '{}');
+        positions[id] = { left, top };
+        localStorage.setItem('agentPositions', JSON.stringify(positions));
+        console.log('💾 Saved position for', id);
+    }
+
+    // Load agent positions from localStorage
+    function loadAgentPositions() {
+        const positions = JSON.parse(localStorage.getItem('agentPositions') || '{}');
+
+        Object.entries(positions).forEach(([id, pos]) => {
+            const element = document.getElementById(id);
+            if (element && pos.left && pos.top) {
+                element.style.position = 'fixed';
+                element.style.left = pos.left;
+                element.style.top = pos.top;
+                element.style.zIndex = '100';
+            }
+        });
+
+        if (Object.keys(positions).length > 0) {
+            console.log('📂 Loaded', Object.keys(positions).length, 'agent positions');
+        }
+    }
+
+    // Expose reset function globally
+    window.resetAgentPositions = function () {
+        localStorage.removeItem('agentPositions');
+        location.reload();
+        console.log('🔄 Agent positions reset');
+    };
+})();
+
+// ========================================
+// Test/Live Mode Toggle
+// ========================================
+(function () {
+    const btnTest = document.getElementById('btn-mode-test');
+    const btnLive = document.getElementById('btn-mode-live');
+
+    if (!btnTest || !btnLive) return;
+
+    // Current mode state
+    window.tradingMode = 'test'; // Default to test
+
+    // Test mode click
+    btnTest.addEventListener('click', function () {
+        if (window.tradingMode === 'test') return;
+
+        window.tradingMode = 'test';
+        btnTest.classList.add('active');
+        btnLive.classList.remove('active');
+
+        // Send to backend
+        apiFetch('/api/control', {
+            method: 'POST',
+            body: JSON.stringify({ action: 'set_mode', mode: 'test' })
+        }).then(() => {
+            console.log('🧪 Switched to TEST mode');
+        }).catch(err => console.error('Mode switch failed:', err));
+    });
+
+    // Live mode click
+    btnLive.addEventListener('click', function () {
+        if (window.tradingMode === 'live') return;
+
+        // Show warning
+        const confirmed = confirm(
+            '⚠️ WARNING: Live Trading Mode\n\n' +
+            'You are about to enable LIVE trading with REAL money.\n\n' +
+            '• Real funds will be at risk\n' +
+            '• Ensure API keys are configured correctly\n' +
+            '• Start with small position sizes\n\n' +
+            'Do you want to continue and configure your account?'
+        );
+
+        if (!confirmed) return;
+
+        // Open settings modal for configuration
+        const settingsModal = document.getElementById('settings-modal');
+        if (settingsModal) {
+            settingsModal.style.display = 'flex';
+            // Switch to Trading tab
+            const tradingTab = document.querySelector('[data-tab="trading"]');
+            if (tradingTab) tradingTab.click();
+        }
+
+        // Update UI
+        window.tradingMode = 'live';
+        btnLive.classList.add('active');
+        btnTest.classList.remove('active');
+
+        // Send to backend
+        apiFetch('/api/control', {
+            method: 'POST',
+            body: JSON.stringify({ action: 'set_mode', mode: 'live' })
+        }).then(() => {
+            console.log('💰 Switched to LIVE mode');
+        }).catch(err => console.error('Mode switch failed:', err));
+    });
+
+    console.log('✅ Mode toggle initialized');
+})();
