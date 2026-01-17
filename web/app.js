@@ -207,6 +207,29 @@ window.logout = function () {
     }
 };
 
+function getPreferredSymbol(system, decisionMap) {
+    const selector = document.getElementById('symbol-selector');
+    if (selector && selector.value) return selector.value;
+    if (window.lastChartSymbol) return window.lastChartSymbol;
+    if (system && Array.isArray(system.symbols) && system.symbols.length > 0) {
+        return system.symbols[0];
+    }
+    const keys = decisionMap ? Object.keys(decisionMap) : [];
+    return keys.length > 0 ? keys[0] : null;
+}
+
+function normalizeDecision(decision, system) {
+    if (!decision) return null;
+    if (decision.action !== undefined) return decision;
+    if (typeof decision === 'object') {
+        const symbol = getPreferredSymbol(system, decision);
+        if (symbol && decision[symbol]) return decision[symbol];
+        const keys = Object.keys(decision);
+        return keys.length > 0 ? decision[keys[0]] : null;
+    }
+    return null;
+}
+
 function updateDashboard() {
     apiFetch(API_URL)
         .then(response => {
@@ -219,15 +242,16 @@ function updateDashboard() {
             return response.json();
         })
         .then(data => {
+            const currentDecision = normalizeDecision(data.decision, data.system);
             renderSystemStatus(data.system);
             renderMarketData(data.market);
             renderAgents(data.agents);
-            renderDecision(data.decision);
+            renderDecision(currentDecision);
             renderLogs(data.logs, data.logs_simplified);
 
             // 🆕 Update Agent Framework Visualization
-            if (data.system && data.decision) {
-                updateAgentFramework(data.system, data.decision, data.agents);
+            if (data.system && currentDecision) {
+                updateAgentFramework(data.system, currentDecision, data.agents);
             }
 
             // 🆕 Update K-Line symbol selector with active trading symbols
@@ -871,6 +895,8 @@ function renderDecision(decision) {
 
 // 🆕 Update Agent Framework Visualization
 function updateAgentFramework(system, decision, agents) {
+    decision = normalizeDecision(decision, system);
+
     // Update Cycle Number
     const cycleEl = document.getElementById('framework-cycle');
     if (cycleEl && system.cycle_counter !== undefined) {
@@ -881,6 +907,9 @@ function updateAgentFramework(system, decision, agents) {
 
     // Update Agent Statuses and Outputs based on decision data
     if (!decision) return;
+
+    const agentConfig = window.agentConfig || {};
+    const isEnabled = (key) => agentConfig[key] !== false;
 
     // Helper to set agent badge status
     const setAgentStatus = (agentId, status) => {
@@ -921,17 +950,32 @@ function updateAgentFramework(system, decision, agents) {
     }
 
     // Regime Detector
-    if (decision.regime) {
+    if (!isEnabled('regime_detector_agent')) {
+        setAgentStatus('flow-regime', 'Off');
+        setOutput('out-regime', '--');
+        setOutput('out-adx', '--');
+        setOutput('out-regime-conf', '--');
+    } else if (decision.regime) {
         setAgentStatus('flow-regime', 'Done');
         const regime = decision.regime.regime || 'Unknown';
         const adx = decision.regime.adx !== undefined ? decision.regime.adx.toFixed(1) : '--';
         setOutput('out-regime', regime);
         setOutput('out-adx', adx);
         setOutput('out-regime-conf', '--');
+    } else {
+        setAgentStatus('flow-regime', 'Idle');
+        setOutput('out-regime', '--');
+        setOutput('out-adx', '--');
+        setOutput('out-regime-conf', '--');
     }
 
     // Predict Agent
-    if (decision.prophet_probability !== undefined) {
+    if (!isEnabled('predict_agent')) {
+        setAgentStatus('flow-predict', 'Off');
+        setOutput('out-pup', '--');
+        setOutput('out-pdown', '--');
+        setOutput('out-signal', '--');
+    } else if (decision.prophet_probability !== undefined) {
         setAgentStatus('flow-predict', 'Done');
         const pUp = (decision.prophet_probability * 100).toFixed(0);
         const pDown = ((1 - decision.prophet_probability) * 100).toFixed(0);
@@ -940,13 +984,19 @@ function updateAgentFramework(system, decision, agents) {
         const signal = decision.prophet_probability > 0.55 ? 'LONG' :
             (decision.prophet_probability < 0.45 ? 'SHORT' : 'NEUTRAL');
         setOutput('out-signal', signal);
+    } else {
+        setAgentStatus('flow-predict', 'Idle');
+        setOutput('out-pup', '--');
+        setOutput('out-pdown', '--');
+        setOutput('out-signal', '--');
     }
 
     // Decision Core
     if (decision.action) {
         setAgentStatus('flow-decision', 'Done');
         const action = decision.action.toUpperCase();
-        const conf = decision.confidence ? `${(decision.confidence * 100).toFixed(0)}%` : '0%';
+        const confValue = decision.confidence;
+        const conf = confValue ? `${(confValue > 1 ? confValue : confValue * 100).toFixed(0)}%` : '0%';
 
         const decisionEl = document.getElementById('out-decision');
         if (decisionEl) {
@@ -991,9 +1041,15 @@ function updateAgentFramework(system, decision, agents) {
     }
 
     // 🆕 Symbol Selector Agent
-    if (system.mode === 'Running') {
+    if (!isEnabled('symbol_selector_agent')) {
+        setAgentStatus('flow-symbol-selector', 'Off');
+        setOutput('out-selector-mode', '--');
+        setOutput('out-selector-symbol', '--');
+        setOutput('out-selector-score', '--');
+    } else if (system.mode === 'Running') {
         setAgentStatus('flow-symbol-selector', 'Done');
-        setOutput('out-selector-mode', 'AUTO1');
+        const selectorMode = Array.isArray(system.symbols) && system.symbols.length > 1 ? 'AUTO' : 'MANUAL';
+        setOutput('out-selector-mode', selectorMode);
         setOutput('out-selector-symbol', decision.symbol || '--');
         setOutput('out-selector-score', '--');
 
@@ -1011,52 +1067,116 @@ function updateAgentFramework(system, decision, agents) {
         if (symbolDisplayText && decision.symbol) {
             symbolDisplayText.textContent = decision.symbol;
         }
+    } else {
+        setAgentStatus('flow-symbol-selector', 'Idle');
+        setOutput('out-selector-mode', '--');
+        setOutput('out-selector-symbol', '--');
+        setOutput('out-selector-score', '--');
     }
 
     // 🆕 Trigger Detector Agent
-    if (decision.action) {
-        setAgentStatus('flow-trigger-detector', 'Done');
+    if (!isEnabled('trigger_detector_agent')) {
+        setAgentStatus('flow-trigger-detector', 'Off');
         setOutput('out-pattern', '--');
+        setOutput('out-trigger-signal', '--');
+        setOutput('out-trigger-score', '--');
+    } else if (decision.action) {
+        setAgentStatus('flow-trigger-detector', 'Done');
+        setOutput('out-pattern', decision.trigger_pattern || '--');
         setOutput('out-trigger-signal', decision.action || '--');
+        const rvol = decision.trigger_rvol;
+        setOutput('out-trigger-score', rvol !== undefined && rvol !== null ? `${rvol.toFixed(1)}x` : '--');
+    } else {
+        setAgentStatus('flow-trigger-detector', 'Idle');
+        setOutput('out-pattern', '--');
+        setOutput('out-trigger-signal', '--');
         setOutput('out-trigger-score', '--');
     }
 
     // 🆕 Position Analyzer Agent
-    if (decision.position_zone !== undefined || decision.regime) {
+    if (!isEnabled('position_analyzer_agent')) {
+        setAgentStatus('flow-position-analyzer', 'Off');
+        setOutput('out-zone', '--');
+        setOutput('out-sr', '--');
+        setOutput('out-range', '--');
+    } else if (decision.position_zone !== undefined || decision.position) {
         setAgentStatus('flow-position-analyzer', 'Done');
-        setOutput('out-zone', decision.position_zone || '--');
+        const zone = decision.position_zone || decision.position?.location || '--';
+        setOutput('out-zone', zone);
+        setOutput('out-sr', '--');
+        setOutput('out-range', '--');
+    } else {
+        setAgentStatus('flow-position-analyzer', 'Idle');
+        setOutput('out-zone', '--');
         setOutput('out-sr', '--');
         setOutput('out-range', '--');
     }
 
     // 🆕 Trend Agent (LLM)
-    if (system.mode === 'Running') {
-        setAgentStatus('flow-trend-agent', 'Done');
+    if (!isEnabled('trend_agent')) {
+        setAgentStatus('flow-trend-agent', 'Off');
         setOutput('out-trend-1h', '--');
-        setOutput('out-trend-bias', decision.action || '--');
+        setOutput('out-trend-bias', '--');
+        setOutput('out-trend-conf', '--');
+    } else if (decision.semantic_analyses && decision.semantic_analyses.trend) {
+        setAgentStatus('flow-trend-agent', 'Done');
+        const trend = decision.semantic_analyses.trend;
+        setOutput('out-trend-1h', trend.stance || '--');
+        setOutput('out-trend-bias', trend.metadata?.strength || '--');
+        setOutput('out-trend-conf', trend.metadata?.adx !== undefined ? `${trend.metadata.adx}` : '--');
+    } else {
+        setAgentStatus('flow-trend-agent', 'Idle');
+        setOutput('out-trend-1h', '--');
+        setOutput('out-trend-bias', '--');
         setOutput('out-trend-conf', '--');
     }
 
     // 🆕 Trigger Agent (LLM)
-    if (system.mode === 'Running') {
+    if (!isEnabled('trigger_agent')) {
+        setAgentStatus('flow-trigger-agent', 'Off');
+        setOutput('out-fire', '--');
+        setOutput('out-entry-type', '--');
+        setOutput('out-fire-conf', '--');
+    } else if (decision.semantic_analyses && decision.semantic_analyses.trigger) {
         setAgentStatus('flow-trigger-agent', 'Done');
-        setOutput('out-fire', decision.action !== 'WAIT' ? '✓' : '--');
-        setOutput('out-entry-type', decision.action || '--');
+        const trigger = decision.semantic_analyses.trigger;
+        setOutput('out-fire', trigger.stance || '--');
+        setOutput('out-entry-type', trigger.metadata?.pattern || '--');
+        setOutput('out-fire-conf', trigger.metadata?.rvol !== undefined ? `${trigger.metadata.rvol}x` : '--');
+    } else {
+        setAgentStatus('flow-trigger-agent', 'Idle');
+        setOutput('out-fire', '--');
+        setOutput('out-entry-type', '--');
         setOutput('out-fire-conf', '--');
     }
 
     // 🆕 AI Prediction Filter
-    if (decision.ai_filter_passed !== undefined || system.mode === 'Running') {
+    if (!isEnabled('ai_prediction_filter_agent')) {
+        setAgentStatus('flow-ai-filter', 'Off');
+        setOutput('out-ai-status', '--');
+        setOutput('out-ai-veto', '--');
+        setOutput('out-ai-reason', '--');
+    } else if (decision.ai_filter_passed !== undefined) {
         setAgentStatus('flow-ai-filter', 'Done');
         const aiStatus = decision.ai_filter_passed === false ? '🚫 Blocked' : '✓ Pass';
         setOutput('out-ai-status', aiStatus);
         setOutput('out-ai-veto', decision.ai_filter_passed === false ? 'Yes' : 'No');
         setOutput('out-ai-reason', decision.ai_filter_reason || '--');
+    } else {
+        setAgentStatus('flow-ai-filter', 'Idle');
+        setOutput('out-ai-status', '--');
+        setOutput('out-ai-veto', '--');
+        setOutput('out-ai-reason', '--');
     }
 
     // 🆕 Reflection Agent
-    if (system.mode === 'Running') {
-        setAgentStatus('flow-reflection', 'Done');
+    if (!isEnabled('reflection_agent')) {
+        setAgentStatus('flow-reflection', 'Off');
+        setOutput('out-trades-count', '--');
+        setOutput('out-win-rate', '--');
+        setOutput('out-insight', '--');
+    } else {
+        setAgentStatus('flow-reflection', 'Idle');
         setOutput('out-trades-count', '--');
         setOutput('out-win-rate', '--');
         setOutput('out-insight', '--');
@@ -2622,6 +2742,7 @@ function renderTradeHistory(trades) {
             agents[cb.value] = cb.checked;
         });
 
+        window.agentConfig = agents;
         console.log('🔧 Applying agent config:', agents);
 
         // Send to backend
@@ -2657,8 +2778,10 @@ function renderTradeHistory(trades) {
     async function loadAgentConfig() {
         try {
             const response = await apiFetch('/api/agents/config');
-            if (response && response.agents) {
-                Object.entries(response.agents).forEach(([key, value]) => {
+            const data = await response.json();
+            if (data && data.agents) {
+                window.agentConfig = data.agents;
+                Object.entries(data.agents).forEach(([key, value]) => {
                     const cb = document.querySelector(`input[name="agent-toggle"][value="${key}"]`);
                     if (cb) cb.checked = value;
                 });

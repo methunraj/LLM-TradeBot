@@ -252,6 +252,8 @@ class MultiAgentTradingBot:
         agents_config = self.config.get('agents', {})
         self.agent_config = AgentConfig.from_dict({'agents': agents_config})
         print(f"  📋 Agent Config: {self.agent_config}")
+        global_state.agent_config = self.agent_config.get_enabled_agents()
+        self._last_agent_config = dict(global_state.agent_config)
         
         # Core Agents (always enabled)
         self.data_sync_agent = DataSyncAgent(self.client)
@@ -376,6 +378,62 @@ class MultiAgentTradingBot:
                     from src.agents.predict_agent import PredictAgent
                     self.predict_agents[symbol] = PredictAgent(symbol=symbol)
                     log.info(f"🆕 Initialized PredictAgent for {symbol}")
+
+    def _apply_agent_config(self, agents: Dict[str, bool]) -> None:
+        """Apply runtime agent config and sync optional agent instances."""
+        from src.agents.agent_config import AgentConfig
+
+        self.agent_config = AgentConfig.from_dict({'agents': agents})
+        self._last_agent_config = dict(agents)
+
+        # Optional Agent: RegimeDetector
+        if self.agent_config.regime_detector_agent:
+            if self.regime_detector is None:
+                from src.agents.regime_detector_agent import RegimeDetector
+                self.regime_detector = RegimeDetector()
+                log.info("✅ RegimeDetectorAgent enabled (runtime)")
+        else:
+            self.regime_detector = None
+
+        # Optional Agent: PredictAgent (per symbol)
+        if self.agent_config.predict_agent:
+            for symbol in self.symbols:
+                if symbol not in self.predict_agents:
+                    from src.agents.predict_agent import PredictAgent
+                    self.predict_agents[symbol] = PredictAgent(symbol=symbol)
+                    log.info(f"🆕 Initialized PredictAgent for {symbol} (runtime)")
+        else:
+            self.predict_agents = {}
+
+        # Optional Agent: ReflectionAgent
+        if self.agent_config.reflection_agent:
+            if self.reflection_agent is None:
+                from src.agents.reflection_agent import ReflectionAgent
+                self.reflection_agent = ReflectionAgent()
+                log.info("✅ ReflectionAgent enabled (runtime)")
+        else:
+            self.reflection_agent = None
+
+    def _attach_agent_ui_fields(self, decision_dict: Dict) -> None:
+        """Attach optional agent fields used by the dashboard."""
+        four_layer = getattr(global_state, 'four_layer_result', {}) or {}
+        ai_check = four_layer.get('ai_check', {}) if isinstance(four_layer, dict) else {}
+        if ai_check:
+            decision_dict['ai_filter_passed'] = not ai_check.get('ai_veto', False)
+            decision_dict['ai_filter_reason'] = ai_check.get('reason')
+            decision_dict['ai_filter_signal'] = ai_check.get('ai_signal')
+            decision_dict['ai_filter_confidence'] = ai_check.get('ai_confidence')
+
+        decision_dict['trigger_pattern'] = four_layer.get('trigger_pattern')
+        decision_dict['trigger_rvol'] = four_layer.get('trigger_rvol')
+
+        position = decision_dict.get('position')
+        if isinstance(position, dict) and position.get('location'):
+            decision_dict['position_zone'] = position.get('location')
+
+        semantic_analyses = getattr(global_state, 'semantic_analyses', None)
+        if semantic_analyses:
+            decision_dict['semantic_analyses'] = semantic_analyses
 
     def _resolve_ai500_symbols(self):
         """Dynamic resolution of AI500_TOP5 tag"""
@@ -881,6 +939,7 @@ class MultiAgentTradingBot:
                 }
                 decision_dict['vote_analysis'] = SemanticConverter.convert_analysis_map(decision_dict.get('vote_details', {}))
                 decision_dict['four_layer_status'] = global_state.four_layer_result
+                self._attach_agent_ui_fields(decision_dict)
 
                 global_state.update_decision(decision_dict)
                 self.saver.save_decision(decision_dict, self.current_symbol, snapshot_id, cycle_id=cycle_id)
@@ -1229,133 +1288,147 @@ class MultiAgentTradingBot:
                         log.info(f"✅ Layer 3 PASS: 15m setup ready")
                         
                         # Layer 4: 5min Trigger + Sentiment Risk (Specification Module 4)
-                        from src.agents.trigger_detector_agent import TriggerDetector
-                        trigger_detector = TriggerDetector()
-                        
-                        df_5m = processed_dfs['5m']
-                        trigger_result = trigger_detector.detect_trigger(df_5m, direction=trend_1h)
-                        
-                        # 🆕 Always store trigger data for LLM display
-                        four_layer_result['trigger_pattern'] = trigger_result.get('pattern_type') or 'None'
-                        rvol = trigger_result.get('rvol', 1.0)
-                        four_layer_result['trigger_rvol'] = rvol
-                        
-                        # ⚠️ LOW VOLUME WARNING
-                        if rvol < 0.5:
-                            log.warning(f"⚠️ Low Volume Warning (RVOL {rvol:.1f}x < 0.5) - Trend validation may be unreliable")
-                            if not four_layer_result.get('data_anomalies'): four_layer_result['data_anomalies'] = []
-                            four_layer_result['data_anomalies'].append(f"Low Volume (RVOL {rvol:.1f}x)")
-                        
-                        if not trigger_result['triggered']:
-                            four_layer_result['blocking_reason'] = f"5min trigger not confirmed (RVOL={trigger_result.get('rvol', 1.0):.1f}x)"
-                            log.info(f"⏳ Layer 4 WAIT: No engulfing or breakout pattern (RVOL={trigger_result.get('rvol', 1.0):.1f}x)")
-                        else:
-                            log.info(f"🎯 Layer 4 TRIGGER: {trigger_result['pattern_type']} detected")
+                        if self.agent_config.trigger_detector_agent:
+                            from src.agents.trigger_detector_agent import TriggerDetector
+                            trigger_detector = TriggerDetector()
                             
-                            # Sentiment Risk Adjustment (Specification: Score range -100 to +100)
-                            # Normal zone: -60 to +60
-                            # Extreme Greed: > +80 => TP减半 (防止随时崩盘)
-                            # Extreme Fear: < -80 => 可适当放大仓位/TP
-                            sentiment_score = sentiment.get('total_sentiment_score', 0)
+                            df_5m = processed_dfs['5m']
+                            trigger_result = trigger_detector.detect_trigger(df_5m, direction=trend_1h)
                             
-                            if sentiment_score > 80:  # Extreme Greed
-                                four_layer_result['tp_multiplier'] = 0.5  # 止盈减半
-                                four_layer_result['sl_multiplier'] = 1.0  # 止损不变
-                                log.warning(f"🔴 Extreme Greed ({sentiment_score:.0f}): TP target halved")
-                            elif sentiment_score < -80:  # Extreme Fear
-                                four_layer_result['tp_multiplier'] = 1.5  # 可加大TP
-                                four_layer_result['sl_multiplier'] = 0.8  # 缩小SL
-                                log.info(f"🟢 Extreme Fear ({sentiment_score:.0f}): Be greedy when others are fearful")
+                            # 🆕 Always store trigger data for LLM display
+                            four_layer_result['trigger_pattern'] = trigger_result.get('pattern_type') or 'None'
+                            rvol = trigger_result.get('rvol', 1.0)
+                            four_layer_result['trigger_rvol'] = rvol
+                            
+                            # ⚠️ LOW VOLUME WARNING
+                            if rvol < 0.5:
+                                log.warning(f"⚠️ Low Volume Warning (RVOL {rvol:.1f}x < 0.5) - Trend validation may be unreliable")
+                                if not four_layer_result.get('data_anomalies'): four_layer_result['data_anomalies'] = []
+                                four_layer_result['data_anomalies'].append(f"Low Volume (RVOL {rvol:.1f}x)")
+                            
+                            if not trigger_result['triggered']:
+                                four_layer_result['blocking_reason'] = f"5min trigger not confirmed (RVOL={trigger_result.get('rvol', 1.0):.1f}x)"
+                                log.info(f"⏳ Layer 4 WAIT: No engulfing or breakout pattern (RVOL={trigger_result.get('rvol', 1.0):.1f}x)")
                             else:
-                                four_layer_result['tp_multiplier'] = 1.0
-                                four_layer_result['sl_multiplier'] = 1.0
-                            
-                            # 🆕 Funding Rate Crowding Adjustment
-                            if trend_1h == 'long' and funding_rate > 0.05:
-                                four_layer_result['tp_multiplier'] *= 0.7
-                                log.warning(f"💰 High Funding Rate ({funding_rate:.3f}%): Longs crowded, TP reduced")
-                            elif trend_1h == 'short' and funding_rate < -0.05:
-                                four_layer_result['tp_multiplier'] *= 0.7
-                                log.warning(f"💰 Negative Funding Rate ({funding_rate:.3f}%): Shorts crowded, TP reduced")
-                            
+                                log.info(f"🎯 Layer 4 TRIGGER: {trigger_result['pattern_type']} detected")
+                                
+                                # Sentiment Risk Adjustment (Specification: Score range -100 to +100)
+                                # Normal zone: -60 to +60
+                                # Extreme Greed: > +80 => TP减半 (防止随时崩盘)
+                                # Extreme Fear: < -80 => 可适当放大仓位/TP
+                                sentiment_score = sentiment.get('total_sentiment_score', 0)
+                                
+                                if sentiment_score > 80:  # Extreme Greed
+                                    four_layer_result['tp_multiplier'] = 0.5  # 止盈减半
+                                    four_layer_result['sl_multiplier'] = 1.0  # 止损不变
+                                    log.warning(f"🔴 Extreme Greed ({sentiment_score:.0f}): TP target halved")
+                                elif sentiment_score < -80:  # Extreme Fear
+                                    four_layer_result['tp_multiplier'] = 1.5  # 可加大TP
+                                    four_layer_result['sl_multiplier'] = 0.8  # 缩小SL
+                                    log.info(f"🟢 Extreme Fear ({sentiment_score:.0f}): Be greedy when others are fearful")
+                                else:
+                                    four_layer_result['tp_multiplier'] = 1.0
+                                    four_layer_result['sl_multiplier'] = 1.0
+                                
+                                # 🆕 Funding Rate Crowding Adjustment
+                                if trend_1h == 'long' and funding_rate > 0.05:
+                                    four_layer_result['tp_multiplier'] *= 0.7
+                                    log.warning(f"💰 High Funding Rate ({funding_rate:.3f}%): Longs crowded, TP reduced")
+                                elif trend_1h == 'short' and funding_rate < -0.05:
+                                    four_layer_result['tp_multiplier'] *= 0.7
+                                    log.warning(f"💰 Negative Funding Rate ({funding_rate:.3f}%): Shorts crowded, TP reduced")
+                                
+                                four_layer_result['layer4_pass'] = True
+                                four_layer_result['final_action'] = trend_1h
+                                four_layer_result['trigger_pattern'] = trigger_result['pattern_type']
+                                log.info(f"✅ Layer 4 PASS: Sentiment {sentiment_score:.0f}, Trigger={trigger_result['pattern_type']}")
+                                log.info(f"🎯 ALL LAYERS PASSED: {trend_1h.upper()} with {70 + four_layer_result['confidence_boost']}% confidence")
+                        else:
+                            four_layer_result['trigger_pattern'] = 'disabled'
+                            four_layer_result['trigger_rvol'] = None
                             four_layer_result['layer4_pass'] = True
                             four_layer_result['final_action'] = trend_1h
-                            four_layer_result['trigger_pattern'] = trigger_result['pattern_type']
-                            log.info(f"✅ Layer 4 PASS: Sentiment {sentiment_score:.0f}, Trigger={trigger_result['pattern_type']}")
-                            log.info(f"🎯 ALL LAYERS PASSED: {trend_1h.upper()} with {70 + four_layer_result['confidence_boost']}% confidence")
+                            log.info("⏭️ Layer 4 SKIP: TriggerDetectorAgent disabled")
             
             # Store for LLM context
             global_state.four_layer_result = four_layer_result
             
-            # 🆕 MULTI-AGENT SEMANTIC ANALYSIS
-            if not (hasattr(self, '_headless_mode') and self._headless_mode):
-                print("[Step 2.5/5] 🤖 Multi-Agent Semantic Analysis...")
-            try:
-                from src.agents.trend_agent import TrendAgent
-                from src.agents.setup_agent import SetupAgent
-                from src.agents.trigger_agent import TriggerAgent
+            # 🆕 MULTI-AGENT SEMANTIC ANALYSIS (LLM)
+            if self.agent_config.trend_agent or self.agent_config.trigger_agent:
+                if not (hasattr(self, '_headless_mode') and self._headless_mode):
+                    print("[Step 2.5/5] 🤖 Multi-Agent Semantic Analysis...")
+                try:
+                    # Prepare data for each agent
+                    trend_data = {
+                        'symbol': self.current_symbol,
+                        'close_1h': four_layer_result.get('close_1h', current_price),
+                        'ema20_1h': four_layer_result.get('ema20_1h', current_price),
+                        'ema60_1h': four_layer_result.get('ema60_1h', current_price),
+                        'oi_change': four_layer_result.get('oi_change', 0),
+                        'adx': four_layer_result.get('adx', 20),
+                        'regime': four_layer_result.get('regime', 'unknown')
+                    }
+                    
+                    setup_data = {
+                        'symbol': self.current_symbol,
+                        'close_15m': processed_dfs['15m']['close'].iloc[-1] if len(processed_dfs['15m']) > 0 else current_price,
+                        'kdj_j': four_layer_result.get('kdj_j', 50),
+                        'kdj_k': processed_dfs['15m']['kdj_k'].iloc[-1] if 'kdj_k' in processed_dfs['15m'].columns else 50,
+                        'bb_upper': processed_dfs['15m']['bb_upper'].iloc[-1] if 'bb_upper' in processed_dfs['15m'].columns else current_price * 1.02,
+                        'bb_middle': processed_dfs['15m']['bb_middle'].iloc[-1] if 'bb_middle' in processed_dfs['15m'].columns else current_price,
+                        'bb_lower': processed_dfs['15m']['bb_lower'].iloc[-1] if 'bb_lower' in processed_dfs['15m'].columns else current_price * 0.98,
+                        'trend_direction': trend_1h,  # Use actual 1h trend instead of 'final_action'
+                        'macd_diff': processed_dfs['15m']['macd_diff'].iloc[-1] if 'macd_diff' in processed_dfs['15m'].columns else 0  # 🆕 MACD for 15m analysis
+                    }
+                    
+                    trigger_data = {
+                        'symbol': self.current_symbol,
+                        'pattern': four_layer_result.get('trigger_pattern'),
+                        'rvol': four_layer_result.get('trigger_rvol', 1.0),
+                        'trend_direction': four_layer_result.get('final_action', 'neutral')
+                    }
+                    
+                    # Initialize agents (cached after first use)
+                    tasks = {}
+                    loop = asyncio.get_event_loop()
+                    if self.agent_config.trend_agent:
+                        from src.agents.trend_agent import TrendAgent
+                        from src.agents.setup_agent import SetupAgent
+                        if not hasattr(self, '_trend_agent'):
+                            self._trend_agent = TrendAgent()
+                        if not hasattr(self, '_setup_agent'):
+                            self._setup_agent = SetupAgent()
+                        tasks['trend'] = loop.run_in_executor(None, self._trend_agent.analyze, trend_data)
+                        tasks['setup'] = loop.run_in_executor(None, self._setup_agent.analyze, setup_data)
+                    
+                    if self.agent_config.trigger_agent:
+                        from src.agents.trigger_agent import TriggerAgent
+                        if not hasattr(self, '_trigger_agent'):
+                            self._trigger_agent = TriggerAgent()
+                        tasks['trigger'] = loop.run_in_executor(None, self._trigger_agent.analyze, trigger_data)
+                    
+                    if tasks:
+                        results = await asyncio.gather(*tasks.values())
+                        global_state.semantic_analyses = dict(zip(tasks.keys(), results))
+                    else:
+                        global_state.semantic_analyses = {}
+                    
+                    if global_state.semantic_analyses:
+                        # Log summary via global_state for dashboard
+                        trend_mark = '✓' if global_state.semantic_analyses.get('trend') else '○'
+                        setup_mark = '✓' if global_state.semantic_analyses.get('setup') else '○'
+                        trigger_mark = '✓' if global_state.semantic_analyses.get('trigger') else '○'
+                        global_state.add_log(f"[⚖️ CRITIC] 4-Layer Analysis: Trend={trend_mark} | Setup={setup_mark} | Trigger={trigger_mark}")
                 
-                # Initialize agents (cached after first use)
-                if not hasattr(self, '_trend_agent'):
-                    self._trend_agent = TrendAgent()
-                    self._setup_agent = SetupAgent()
-                    self._trigger_agent = TriggerAgent()
-                
-                # Prepare data for each agent
-                trend_data = {
-                    'symbol': self.current_symbol,
-                    'close_1h': four_layer_result.get('close_1h', current_price),
-                    'ema20_1h': four_layer_result.get('ema20_1h', current_price),
-                    'ema60_1h': four_layer_result.get('ema60_1h', current_price),
-                    'oi_change': four_layer_result.get('oi_change', 0),
-                    'adx': four_layer_result.get('adx', 20),
-                    'regime': four_layer_result.get('regime', 'unknown')
-                }
-                
-                setup_data = {
-                    'symbol': self.current_symbol,
-                    'close_15m': processed_dfs['15m']['close'].iloc[-1] if len(processed_dfs['15m']) > 0 else current_price,
-                    'kdj_j': four_layer_result.get('kdj_j', 50),
-                    'kdj_k': processed_dfs['15m']['kdj_k'].iloc[-1] if 'kdj_k' in processed_dfs['15m'].columns else 50,
-                    'bb_upper': processed_dfs['15m']['bb_upper'].iloc[-1] if 'bb_upper' in processed_dfs['15m'].columns else current_price * 1.02,
-                    'bb_middle': processed_dfs['15m']['bb_middle'].iloc[-1] if 'bb_middle' in processed_dfs['15m'].columns else current_price,
-                    'bb_lower': processed_dfs['15m']['bb_lower'].iloc[-1] if 'bb_lower' in processed_dfs['15m'].columns else current_price * 0.98,
-                    'trend_direction': trend_1h,  # Use actual 1h trend instead of 'final_action'
-                    'macd_diff': processed_dfs['15m']['macd_diff'].iloc[-1] if 'macd_diff' in processed_dfs['15m'].columns else 0  # 🆕 MACD for 15m analysis
-                }
-                
-                trigger_data = {
-                    'symbol': self.current_symbol,
-                    'pattern': four_layer_result.get('trigger_pattern'),
-                    'rvol': four_layer_result.get('trigger_rvol', 1.0),
-                    'trend_direction': four_layer_result.get('final_action', 'neutral')
-                }
-                
-                # Run agents in parallel using asyncio
-                loop = asyncio.get_event_loop()
-                trend_analysis, setup_analysis, trigger_analysis = await asyncio.gather(
-                    loop.run_in_executor(None, self._trend_agent.analyze, trend_data),
-                    loop.run_in_executor(None, self._setup_agent.analyze, setup_data),
-                    loop.run_in_executor(None, self._trigger_agent.analyze, trigger_data)
-                )
-                
-                # Store semantic analyses in global_state
-                global_state.semantic_analyses = {
-                    'trend': trend_analysis,
-                    'setup': setup_analysis,
-                    'trigger': trigger_analysis
-                }
-                
-                # Log summary via global_state for dashboard
-                global_state.add_log(f"[⚖️ CRITIC] 4-Layer Analysis: Trend={len(trend_analysis)>100 and '✓' or '○'} | Setup={len(setup_analysis)>100 and '✓' or '○'} | Trigger={len(trigger_analysis)>100 and '✓' or '○'}")
-                
-            except Exception as e:
-                log.error(f"❌ Multi-Agent analysis failed: {e}")
-                global_state.semantic_analyses = {
-                    'trend': f"Trend analysis unavailable: {e}",
-                    'setup': f"Setup analysis unavailable: {e}",
-                    'trigger': f"Trigger analysis unavailable: {e}"
-                }
+                except Exception as e:
+                    log.error(f"❌ Multi-Agent analysis failed: {e}")
+                    global_state.semantic_analyses = {
+                        'trend': f"Trend analysis unavailable: {e}",
+                        'setup': f"Setup analysis unavailable: {e}",
+                        'trigger': f"Trigger analysis unavailable: {e}"
+                    }
+            else:
+                global_state.semantic_analyses = {}
             
             # Step 3: DeepSeek
             market_data = {
@@ -1565,6 +1638,7 @@ class MultiAgentTradingBot:
                 
                 # 🆕 Add Four-Layer Status for Dashboard
                 decision_dict['four_layer_status'] = global_state.four_layer_result
+                self._attach_agent_ui_fields(decision_dict)
                 
                 # 🆕 Add OI Fuel and KDJ Zone to vote_details for Dashboard
                 if 'vote_details' not in decision_dict:
@@ -1650,15 +1724,16 @@ class MultiAgentTradingBot:
                 'trend_5m_score': trend_data.get('trend_5m_score', 0)
             }
             try:
-                from src.agents.position_analyzer_agent import PositionAnalyzer
-                df_1h = processed_dfs.get('1h')
-                if df_1h is not None and len(df_1h) > 5:
-                    analyzer = PositionAnalyzer()
-                    order_params['position_1h'] = analyzer.analyze_position(
-                        df_1h,
-                        current_price,
-                        timeframe='1h'
-                    )
+                if self.agent_config.position_analyzer_agent:
+                    from src.agents.position_analyzer_agent import PositionAnalyzer
+                    df_1h = processed_dfs.get('1h')
+                    if df_1h is not None and len(df_1h) > 5:
+                        analyzer = PositionAnalyzer()
+                        order_params['position_1h'] = analyzer.analyze_position(
+                            df_1h,
+                            current_price,
+                            timeframe='1h'
+                        )
             except Exception:
                 pass
             
@@ -1743,6 +1818,7 @@ class MultiAgentTradingBot:
             
             # 🆕 Add Four-Layer Status for Dashboard
             decision_dict['four_layer_status'] = global_state.four_layer_result
+            self._attach_agent_ui_fields(decision_dict)
             
             # 🆕 Add OI Fuel and KDJ Zone to vote_details for Dashboard
             if 'vote_details' not in decision_dict:
@@ -2665,6 +2741,11 @@ class MultiAgentTradingBot:
                     log.info("⚙️ Runtime config change detected, reloading symbols...")
                     self._reload_symbols()
                     global_state.config_changed = False  # Reset flag
+                
+                runtime_agents = getattr(global_state, 'agent_config', None)
+                if runtime_agents and runtime_agents != self._last_agent_config:
+                    log.info(f"🔧 Runtime agent config updated: {runtime_agents}")
+                    self._apply_agent_config(runtime_agents)
 
                 # Check stop state FIRST - must break before continue
                 if global_state.execution_mode == 'Stopped':
@@ -3051,4 +3132,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
