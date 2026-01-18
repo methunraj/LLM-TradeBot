@@ -90,7 +90,9 @@ class SymbolSelectorAgent:
         self._refresh_thread: Optional[threading.Thread] = None
         self._stop_refresh = threading.Event()
         
-        log.info(f"🔝 SymbolSelectorAgent (AUTO3) initialized: Two-stage selection, {refresh_interval_hours}h refresh")
+        log.info(
+            f"🔝 SymbolSelectorAgent initialized: AUTO3 backtest ({refresh_interval_hours}h refresh) + AUTO1 momentum"
+        )
 
     def _interval_to_minutes(self, interval: str) -> int:
         if not interval:

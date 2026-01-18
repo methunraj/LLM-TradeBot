@@ -1194,6 +1194,47 @@ function updateAgentFramework(system, decision, agents) {
         setIdleOrOff('flow-reflection', 'reflection_agent', 'sum-reflection', 'Reflection idle.', 'Reflection off.', 'Reflection running.');
     };
 
+    const updateSymbolSelectorCard = () => {
+        if (!isEnabled('symbol_selector_agent')) {
+            setAgentStatus('flow-symbol-selector', 'Off');
+            setOutput('out-selector-mode', '--');
+            setOutput('out-selector-symbol', '--');
+            setOutput('out-selector-score', '--');
+            setSummary('sum-symbol-selector', 'Selector off.');
+            return;
+        }
+
+        const selectorSymbols = Array.isArray(system?.symbols) ? system.symbols : [];
+        const selectorMode = selectorSymbols.length > 1 ? 'AUTO' : 'MANUAL';
+        const selectorSymbol = system?.current_symbol
+            || decision?.symbol
+            || (selectorSymbols.length > 0 ? selectorSymbols[0] : '--');
+
+        if (isRunningMode) {
+            setAgentStatus('flow-symbol-selector', 'Done');
+        } else {
+            setAgentStatus('flow-symbol-selector', 'Idle');
+        }
+
+        setOutput('out-selector-mode', selectorMode);
+        setOutput('out-selector-symbol', selectorSymbol);
+        setOutput('out-selector-score', '--');
+        setSummary('sum-symbol-selector', `${selectorMode} -> ${selectorSymbol}.`);
+
+        if (selectorSymbol !== '--'
+            && selectorSymbol !== window.lastChartSymbol
+            && typeof loadTradingViewChart === 'function') {
+            window.lastChartSymbol = selectorSymbol;
+            loadTradingViewChart(selectorSymbol);
+            console.log('📈 K-line chart updated to:', selectorSymbol);
+        }
+
+        const symbolDisplayText = document.getElementById('symbol-display-text');
+        if (symbolDisplayText && selectorSymbol !== '--') {
+            symbolDisplayText.textContent = selectorSymbol;
+        }
+    };
+
     const currentCycle = system?.cycle_counter;
     const hasCycle = currentCycle !== undefined && currentCycle !== null;
     const decisionCycle = decision?.cycle_number;
@@ -1212,6 +1253,7 @@ function updateAgentFramework(system, decision, agents) {
             clearTimeout(window.frameworkCycleTimer);
         }
         resetFramework({ forceRunning: true });
+        updateSymbolSelectorCard();
         window.frameworkCycleTimer = setTimeout(() => {
             if (window.lastFrameworkCycle === currentCycle && window.lastDecisionCycle !== currentCycle) {
                 resetFramework({ forceRunning: false });
@@ -1232,10 +1274,12 @@ function updateAgentFramework(system, decision, agents) {
                 decision = fallbackDecision;
             } else {
                 resetFramework({ forceRunning: false });
+                updateSymbolSelectorCard();
                 return;
             }
         } else {
             resetFramework({ forceRunning: false });
+            updateSymbolSelectorCard();
             return;
         }
     }
@@ -1472,43 +1516,7 @@ function updateAgentFramework(system, decision, agents) {
     }
 
     // 🆕 Symbol Selector Agent
-    if (!isEnabled('symbol_selector_agent')) {
-        setAgentStatus('flow-symbol-selector', 'Off');
-        setOutput('out-selector-mode', '--');
-        setOutput('out-selector-symbol', '--');
-        setOutput('out-selector-score', '--');
-        setSummary('sum-symbol-selector', 'Selector off.');
-    } else {
-        const selectorSymbols = Array.isArray(system.symbols) ? system.symbols : [];
-        const selectorMode = selectorSymbols.length > 1 ? 'AUTO' : 'MANUAL';
-        const selectorSymbol = system.current_symbol || decision.symbol || (selectorSymbols.length > 0 ? selectorSymbols[0] : '--');
-
-        if (isRunningMode) {
-            setAgentStatus('flow-symbol-selector', 'Done');
-        } else {
-            setAgentStatus('flow-symbol-selector', 'Idle');
-        }
-
-        setOutput('out-selector-mode', selectorMode);
-        setOutput('out-selector-symbol', selectorSymbol);
-        setOutput('out-selector-score', '--');
-        setSummary('sum-symbol-selector', `${selectorMode} -> ${selectorSymbol}.`);
-
-        // 🆕 Update K-line chart when AUTO1 symbol changes
-        if (selectorSymbol !== '--'
-            && selectorSymbol !== window.lastChartSymbol
-            && typeof loadTradingViewChart === 'function') {
-            window.lastChartSymbol = selectorSymbol;
-            loadTradingViewChart(selectorSymbol);
-            console.log('📈 K-line chart updated to:', selectorSymbol);
-        }
-
-        // 🆕 Update current symbol display in framework header
-        const symbolDisplayText = document.getElementById('symbol-display-text');
-        if (symbolDisplayText && selectorSymbol !== '--') {
-            symbolDisplayText.textContent = selectorSymbol;
-        }
-    }
+    updateSymbolSelectorCard();
 
     // 🆕 Trigger Detector Agent
     if (!isEnabled('trigger_detector_agent')) {

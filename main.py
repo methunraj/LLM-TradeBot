@@ -2838,17 +2838,29 @@ class MultiAgentTradingBot:
         
         # 🔮 启动 Prophet 自动训练器 (每 2 小时重新训练)
         from src.models.prophet_model import ProphetAutoTrainer, HAS_LIGHTGBM
-        if HAS_LIGHTGBM:
-            # 为主交易对创建自动训练器
-            primary_agent = self.predict_agents[self.primary_symbol]
-            self.auto_trainer = ProphetAutoTrainer(
-                predict_agent=primary_agent,
-                binance_client=self.client,
-                interval_hours=2.0,  # 每 2 小时训练一次
-                training_days=70,    # 使用最近 70 天数据 (10x samples)
-                symbol=self.primary_symbol
-            )
-            self.auto_trainer.start()
+        if HAS_LIGHTGBM and self.agent_config.predict_agent:
+            # 为主交易对创建自动训练器 (容错: 主交易对未初始化时切换)
+            if self.primary_symbol not in self.predict_agents:
+                fallback_symbol = next(iter(self.predict_agents.keys()), None) or (self.symbols[0] if self.symbols else None)
+                if fallback_symbol and fallback_symbol not in self.predict_agents:
+                    from src.agents.predict_agent import PredictAgent
+                    self.predict_agents[fallback_symbol] = PredictAgent(horizon='30m', symbol=fallback_symbol)
+                    log.info(f"🆕 Initialized PredictAgent for {fallback_symbol} (auto-trainer fallback)")
+                if fallback_symbol:
+                    self.primary_symbol = fallback_symbol
+                else:
+                    log.warning("⚠️ Prophet auto-trainer skipped: no PredictAgent available")
+
+            if self.primary_symbol in self.predict_agents:
+                primary_agent = self.predict_agents[self.primary_symbol]
+                self.auto_trainer = ProphetAutoTrainer(
+                    predict_agent=primary_agent,
+                    binance_client=self.client,
+                    interval_hours=2.0,  # 每 2 小时训练一次
+                    training_days=70,    # 使用最近 70 天数据 (10x samples)
+                    symbol=self.primary_symbol
+                )
+                self.auto_trainer.start()
         
         # 设置初始间隔 (优先使用 CLI 参数，后续 API 可覆盖)
         global_state.cycle_interval = interval_minutes
@@ -2940,7 +2952,13 @@ class MultiAgentTradingBot:
                         log.info("🎰 SymbolSelectorAgent (Cycle 1) running before analysis...")
                         global_state.add_log("[🎰 SELECTOR] Cycle 1 symbol selection started")
                         selector = get_selector()
-                        top_symbols = asyncio.run(selector.select_top3(force_refresh=False))
+                        if self.use_auto3:
+                            top_symbols = asyncio.run(selector.select_top3(force_refresh=False))
+                        else:
+                            selected = asyncio.run(
+                                selector.select_auto1_recent_momentum(candidates=self.symbols)
+                            )
+                            top_symbols = [selected] if selected else []
 
                         if top_symbols:
                             self.symbols = top_symbols
@@ -2954,7 +2972,8 @@ class MultiAgentTradingBot:
                                         self.predict_agents[symbol] = PredictAgent(horizon='30m', symbol=symbol)
                                         log.info(f"🆕 Initialized PredictAgent for {symbol} (Selector)")
 
-                            selector.start_auto_refresh()
+                            if self.use_auto3:
+                                selector.start_auto_refresh()
                             log.info(f"✅ SymbolSelectorAgent ready: {', '.join(top_symbols)}")
                             global_state.add_log(f"[🎰 SELECTOR] Selected: {', '.join(top_symbols)}")
                         else:
