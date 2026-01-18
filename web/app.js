@@ -921,6 +921,47 @@ function renderDecision(decision) {
     // Since we removed #decision-box from HTML, this function can share empty logic or be removed.
 }
 
+function normalizeAgentConfig(rawConfig) {
+    const config = { ...(rawConfig || {}) };
+    const ensure = (key, fallback) => {
+        if (config[key] === undefined) config[key] = fallback;
+    };
+
+    if (config.trend_agent_llm === undefined && config.trend_agent !== undefined) {
+        config.trend_agent_llm = config.trend_agent;
+    }
+    if (config.setup_agent_llm === undefined && config.setup_agent !== undefined) {
+        config.setup_agent_llm = config.setup_agent;
+    }
+    if (config.trigger_agent_llm === undefined && config.trigger_agent !== undefined) {
+        config.trigger_agent_llm = config.trigger_agent;
+    }
+    if (config.reflection_agent_llm === undefined && config.reflection_agent !== undefined) {
+        config.reflection_agent_llm = config.reflection_agent;
+    }
+
+    ensure('trend_agent_llm', false);
+    ensure('setup_agent_llm', false);
+    ensure('trigger_agent_llm', false);
+    ensure('trend_agent_local', false);
+    ensure('setup_agent_local', false);
+    ensure('trigger_agent_local', false);
+    ensure('reflection_agent_llm', true);
+    ensure('reflection_agent_local', false);
+
+    config.trend_agent = Boolean(
+        config.trend_agent_llm ||
+        config.trend_agent_local ||
+        config.setup_agent_llm ||
+        config.setup_agent_local
+    );
+    config.setup_agent = Boolean(config.setup_agent_llm || config.setup_agent_local);
+    config.trigger_agent = Boolean(config.trigger_agent_llm || config.trigger_agent_local);
+    config.reflection_agent = Boolean(config.reflection_agent_llm || config.reflection_agent_local);
+
+    return config;
+}
+
 // 🆕 Update Agent Framework Visualization
 function updateAgentFramework(system, decision, agents) {
     decision = normalizeDecision(decision, system);
@@ -943,8 +984,43 @@ function updateAgentFramework(system, decision, agents) {
 
     // Update Symbol Selector (already handled by updateSymbolSelector)
 
-    const agentConfig = window.agentConfig || {};
+    const agentConfig = normalizeAgentConfig(window.agentConfig || {});
     const isEnabled = (key) => agentConfig[key] !== false;
+
+    const trendTitle = document.getElementById('title-trend-agent');
+    if (trendTitle) {
+        const trendUsesLLM = agentConfig.trend_agent_llm || agentConfig.setup_agent_llm;
+        const trendUsesLocal = agentConfig.trend_agent_local || agentConfig.setup_agent_local;
+        if (trendUsesLLM) {
+            trendTitle.textContent = 'TrendAgentLLM';
+        } else if (trendUsesLocal) {
+            trendTitle.textContent = 'TrendAgent';
+        } else {
+            trendTitle.textContent = 'Trend Agent';
+        }
+    }
+
+    const triggerTitle = document.getElementById('title-trigger-agent');
+    if (triggerTitle) {
+        if (agentConfig.trigger_agent_llm) {
+            triggerTitle.textContent = 'TriggerAgentLLM';
+        } else if (agentConfig.trigger_agent_local) {
+            triggerTitle.textContent = 'TriggerAgent';
+        } else {
+            triggerTitle.textContent = 'Trigger Agent';
+        }
+    }
+
+    const reflectionTitle = document.getElementById('title-reflection-agent');
+    if (reflectionTitle) {
+        if (agentConfig.reflection_agent_llm) {
+            reflectionTitle.textContent = 'ReflectionAgentLLM';
+        } else if (agentConfig.reflection_agent_local) {
+            reflectionTitle.textContent = 'ReflectionAgent';
+        } else {
+            reflectionTitle.textContent = 'Reflection Agent';
+        }
+    }
 
     // Helper to set agent badge status
     const setAgentStatus = (agentId, status) => {
@@ -1743,9 +1819,13 @@ function renderLogs(logs, simplifiedLogs) {
                 cleanLine.includes('ExecutionEngine') ||
                 cleanLine.includes('StrategyEngine') ||
                 cleanLine.includes('ReflectionAgent') ||
+                cleanLine.includes('ReflectionAgentLLM') ||
                 cleanLine.includes('TrendAgent') ||
+                cleanLine.includes('TrendAgentLLM') ||
                 cleanLine.includes('SetupAgent') ||
-                cleanLine.includes('TriggerAgent')
+                cleanLine.includes('SetupAgentLLM') ||
+                cleanLine.includes('TriggerAgent') ||
+                cleanLine.includes('TriggerAgentLLM')
             );
 
             if (hasAgentTag || hasAgentKeyword) {
@@ -3143,19 +3223,32 @@ function renderTradeHistory(trades) {
         'position_analyzer_agent': 'flow-position-analyzer',
         'trigger_detector_agent': 'flow-trigger-detector',
         'trend_agent': 'flow-trend-agent',
+        'trend_agent_llm': 'flow-trend-agent',
+        'setup_agent_llm': 'flow-trend-agent',
+        'trend_agent_local': 'flow-trend-agent',
+        'setup_agent_local': 'flow-trend-agent',
         'trigger_agent': 'flow-trigger-agent',
+        'trigger_agent_llm': 'flow-trigger-agent',
+        'trigger_agent_local': 'flow-trigger-agent',
         'reflection_agent': 'flow-reflection',
+        'reflection_agent_llm': 'flow-reflection',
+        'reflection_agent_local': 'flow-reflection',
         'symbol_selector_agent': 'flow-symbol-selector'
     };
 
     // Function to toggle agent box visibility
     function updateAgentVisibility() {
+        const boxStates = {};
         document.querySelectorAll('input[name="agent-toggle"]').forEach(cb => {
             const boxId = agentBoxMap[cb.value];
+            if (!boxId) return;
+            boxStates[boxId] = boxStates[boxId] || cb.checked;
+        });
+        Object.entries(boxStates).forEach(([boxId, enabled]) => {
             const box = document.getElementById(boxId);
             if (box) {
-                box.style.opacity = cb.checked ? '1' : '0.3';
-                box.style.filter = cb.checked ? 'none' : 'grayscale(100%)';
+                box.style.opacity = enabled ? '1' : '0.3';
+                box.style.filter = enabled ? 'none' : 'grayscale(100%)';
             }
         });
     }
@@ -3172,7 +3265,7 @@ function renderTradeHistory(trades) {
             agents[cb.value] = cb.checked;
         });
 
-        window.agentConfig = agents;
+        window.agentConfig = normalizeAgentConfig(agents);
         console.log('🔧 Applying agent config:', agents);
 
         // Send to backend
@@ -3210,8 +3303,9 @@ function renderTradeHistory(trades) {
             const response = await apiFetch('/api/agents/config');
             const data = await response.json();
             if (data && data.agents) {
-                window.agentConfig = data.agents;
-                Object.entries(data.agents).forEach(([key, value]) => {
+                const normalized = normalizeAgentConfig(data.agents);
+                window.agentConfig = normalized;
+                Object.entries(normalized).forEach(([key, value]) => {
                     const cb = document.querySelector(`input[name="agent-toggle"][value="${key}"]`);
                     if (cb) cb.checked = value;
                 });

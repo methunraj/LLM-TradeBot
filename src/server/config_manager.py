@@ -189,16 +189,21 @@ class ConfigManager:
         """Read agents configuration from config.yaml, return defaults if not found"""
         import yaml
         
-        # Default values (all optional agents enabled by default for this UI)
+        # Default values (UI defaults for optional agents)
         defaults = {
             "predict_agent": True,
             "ai_prediction_filter_agent": True,
             "regime_detector_agent": True,
             "position_analyzer_agent": True,
             "trigger_detector_agent": True,
-            "trend_agent": True,
-            "trigger_agent": True,
-            "reflection_agent": True,
+            "trend_agent_llm": False,
+            "setup_agent_llm": False,
+            "trigger_agent_llm": False,
+            "trend_agent_local": False,
+            "setup_agent_local": False,
+            "trigger_agent_local": False,
+            "reflection_agent_llm": True,
+            "reflection_agent_local": False,
             "symbol_selector_agent": True
         }
         
@@ -208,6 +213,14 @@ class ConfigManager:
                 with open(config_yaml_path, 'r', encoding='utf-8') as f:
                     config_data = yaml.safe_load(f) or {}
                 agents = config_data.get('agents', {})
+                if 'trend_agent' in agents and 'trend_agent_llm' not in agents:
+                    agents['trend_agent_llm'] = agents['trend_agent']
+                if 'setup_agent' in agents and 'setup_agent_llm' not in agents:
+                    agents['setup_agent_llm'] = agents['setup_agent']
+                if 'trigger_agent' in agents and 'trigger_agent_llm' not in agents:
+                    agents['trigger_agent_llm'] = agents['trigger_agent']
+                if 'reflection_agent' in agents and 'reflection_agent_llm' not in agents:
+                    agents['reflection_agent_llm'] = agents['reflection_agent']
                 # Merge with defaults (config values override defaults)
                 return {**defaults, **agents}
         except Exception as e:

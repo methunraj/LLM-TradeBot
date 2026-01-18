@@ -21,7 +21,7 @@ class TestAgentConfigDefaults:
         assert config.predict_agent is True
         assert config.ai_prediction_filter_agent is True
         assert config.regime_detector_agent is True
-        assert config.reflection_agent is True
+        assert config.reflection_agent_llm is True
         assert config.trigger_detector_agent is True
         
     def test_default_disabled_agents(self):
@@ -29,8 +29,12 @@ class TestAgentConfigDefaults:
         config = AgentConfig()
         
         # Should be disabled by default
-        assert config.trend_agent is False
-        assert config.trigger_agent is False
+        assert config.trend_agent_llm is False
+        assert config.setup_agent_llm is False
+        assert config.trigger_agent_llm is False
+        assert config.trend_agent_local is False
+        assert config.setup_agent_local is False
+        assert config.trigger_agent_local is False
         assert config.position_analyzer_agent is False
         assert config.symbol_selector_agent is False
 
@@ -42,7 +46,7 @@ class TestAgentConfigFromDict:
         """Empty config should use defaults"""
         config = AgentConfig.from_dict({})
         assert config.predict_agent is True
-        assert config.trend_agent is False
+        assert config.trend_agent_llm is False
     
     def test_partial_config(self):
         """Partial config should override only specified values"""
@@ -54,10 +58,10 @@ class TestAgentConfigFromDict:
         })
         
         assert config.predict_agent is False
-        assert config.trend_agent is True
+        assert config.trend_agent_llm is True
         # Others should use defaults
-        assert config.reflection_agent is True
-        assert config.trigger_agent is False
+        assert config.reflection_agent_llm is True
+        assert config.trigger_agent_llm is False
     
     def test_full_config(self):
         """Full config should override all values"""
@@ -68,9 +72,14 @@ class TestAgentConfigFromDict:
                 'regime_detector_agent': False,
                 'position_analyzer_agent': True,
                 'trigger_detector_agent': False,
-                'trend_agent': True,
-                'trigger_agent': True,
-                'reflection_agent': False,
+                'trend_agent_llm': True,
+                'setup_agent_llm': True,
+                'trigger_agent_llm': True,
+                'reflection_agent_llm': False,
+                'trend_agent_local': True,
+                'setup_agent_local': False,
+                'trigger_agent_local': True,
+                'reflection_agent_local': True,
                 'symbol_selector_agent': True
             }
         })
@@ -80,9 +89,14 @@ class TestAgentConfigFromDict:
         assert config.regime_detector_agent is False
         assert config.position_analyzer_agent is True
         assert config.trigger_detector_agent is False
-        assert config.trend_agent is True
-        assert config.trigger_agent is True
-        assert config.reflection_agent is False
+        assert config.trend_agent_llm is True
+        assert config.setup_agent_llm is True
+        assert config.trigger_agent_llm is True
+        assert config.reflection_agent_llm is False
+        assert config.trend_agent_local is True
+        assert config.setup_agent_local is False
+        assert config.trigger_agent_local is True
+        assert config.reflection_agent_local is True
         assert config.symbol_selector_agent is True
 
 
@@ -114,10 +128,11 @@ class TestAgentConfigIsEnabled:
     
     def test_is_enabled_snake_case(self):
         """Test is_enabled with snake_case names"""
-        config = AgentConfig(predict_agent=True, trend_agent=False)
+        config = AgentConfig(predict_agent=True, trend_agent_llm=False)
         
         assert config.is_enabled('predict_agent') is True
-        assert config.is_enabled('trend_agent') is False
+        assert config.is_enabled('trend_agent_llm') is False
+        assert config.is_enabled('TrendAgentLLM') is False
     
     def test_is_enabled_unknown_agent(self):
         """Test is_enabled with unknown agent returns False"""
@@ -136,8 +151,8 @@ class TestAgentConfigGetEnabledAgents:
         
         assert isinstance(enabled, dict)
         assert 'predict_agent' in enabled
-        assert 'trend_agent' in enabled
-        assert len(enabled) == 9  # Total number of optional agents
+        assert 'trend_agent_llm' in enabled
+        assert len(enabled) == 14  # Total number of optional agents
 
 
 class TestAgentConfigStr:

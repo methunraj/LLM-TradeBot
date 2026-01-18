@@ -340,12 +340,12 @@
                             <!-- Layer 2.5: LLM Strategy Layer -->
                             <div class="flow-layer" data-layer="strategy">
                                 <div class="flow-layer-row">
-                                    <div class="layer-label">🧠 LLM Strategy Layer</div>
+                                    <div class="layer-label">🧠 Semantic Strategy Layer</div>
                                     <div class="layer-agents">
                                     <div class="agent-box" id="flow-trend-agent">
                                         <div class="agent-header">
                                             <span class="agent-emoji">📈</span>
-                                            <span class="agent-title">Trend Agent</span>
+                                            <span class="agent-title" id="title-trend-agent">Trend Agent</span>
                                             <span class="agent-badge idle">Idle</span>
                                         </div>
                                         <div class="agent-output">
@@ -361,7 +361,7 @@
                                     <div class="agent-box" id="flow-trigger-agent">
                                         <div class="agent-header">
                                             <span class="agent-emoji">🔥</span>
-                                            <span class="agent-title">Trigger Agent</span>
+                                            <span class="agent-title" id="title-trigger-agent">Trigger Agent</span>
                                             <span class="agent-badge idle">Idle</span>
                                         </div>
                                         <div class="agent-output">
@@ -473,7 +473,7 @@
                                     <div class="agent-box" id="flow-reflection">
                                         <div class="agent-header">
                                             <span class="agent-emoji">🪞</span>
-                                            <span class="agent-title">Reflection Agent</span>
+                                            <span class="agent-title" id="title-reflection-agent">Reflection Agent</span>
                                             <span class="agent-badge idle">Idle</span>
                                         </div>
                                         <div class="agent-output">
@@ -504,25 +504,6 @@
                     </div> <!-- End agent-framework-layout -->
                 </div> <!-- End agent-framework-card -->
             </section>
-
-            <!-- Row 2: Agent Activity Feed -->
-            <section class="row-activity">
-                <div class="glass-panel card activity-feed-card">
-                    <div class="card-header">
-                        <h2>📡 Agent Activity Feed</h2>
-                        <span class="activity-count"><span id="activity-count">0</span> events</span>
-                    </div>
-                    <div id="agent-activity-feed" class="activity-feed">
-                        <div class="activity-item placeholder">
-                            <span class="activity-time">--:--:--</span>
-                            <span class="activity-agent">Waiting for agent activity...</span>
-                            <span class="activity-message"></span>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-
 
             <!-- Row 2.5: Trade History (Full Width) -->
             <section class="row-trades">
@@ -559,103 +540,6 @@
                                 <!-- JS Populated -->
                             </tbody>
                         </table>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Row 3: Logs (Full Width) -->
-            <section class="row-logs">
-                <div class="glass-panel card compound-card">
-                    <div class="compound-header"
-                        style="display: flex; justify-content: space-between; align-items: center;">
-                        <h2 data-i18n="section.logs">📡 Live Log Output</h2>
-                        <button id="log-mode-toggle" class="btn-log-mode" title="Toggle log detail level">
-                            <span id="log-mode-icon">📋</span>
-                            <span id="log-mode-text">Simplified</span>
-                        </button>
-                    </div>
-                    <div class="compound-body split-log-view">
-                        <!-- Documentation Sidebar -->
-                        <div class="agent-docs-sidebar custom-scroll">
-                            <div class="agent-doc-item">
-                                <h4 class="agent-title oracle" data-i18n="agent.oracle.title">🕵️ Oracle (DataSync)</h4>
-                                <p class="role" data-i18n="agent.oracle.role">Unified Data Provider. Multi-dimensional
-                                    market snapshot.</p>
-                                <ul>
-                                    <li data-i18n="agent.oracle.feat1">Multi-timeframe data (5m/15m/1h) + Funding Rates
-                                    </li>
-                                    <li data-i18n="agent.oracle.feat2">Time-slice alignment to prevent data drift</li>
-                                    <li data-i18n="agent.oracle.feat3">Dual View: Stable (Closed) + Real-time (Ticking)
-                                    </li>
-                                </ul>
-                            </div>
-                            <div class="agent-doc-item">
-                                <h4 class="agent-title strategist" data-i18n="agent.strategist.title">👨‍🔬 Strategist
-                                    (QuantAnalyst)</h4>
-                                <p class="role" data-i18n="agent.strategist.role">Multi-dimensional Signal Generator.
-                                    Core of Quant Analysis.</p>
-                                <ul>
-                                    <li data-i18n="agent.strategist.feat1">Trend Agent: EMA/MACD Direction Judgment</li>
-                                    <li data-i18n="agent.strategist.feat2">Oscillator Agent: RSI/BB Overbought/Oversold
-                                    </li>
-                                    <li data-i18n="agent.strategist.feat3">Sentiment Agent: Funding Rate/Flow Anomalies
-                                    </li>
-                                </ul>
-                            </div>
-                            <div class="agent-doc-item">
-                                <h4 class="agent-title prophet" data-i18n="agent.prophet.title">🔮 Prophet (Predict)
-                                </h4>
-                                <p class="role" data-i18n="agent.prophet.role">ML Prediction Engine. Probabilistic
-                                    Decision Support.</p>
-                                <ul>
-                                    <li data-i18n="agent.prophet.feat1">LightGBM 50+ Features. Auto-retrain every 2h
-                                    </li>
-                                    <li data-i18n="agent.prophet.feat2">30-min Price Direction Probability (0-100%)</li>
-                                    <li data-i18n="agent.prophet.feat3">SHAP Feature Importance Analysis</li>
-                                </ul>
-                            </div>
-                            <div class="agent-doc-item">
-                                <h4 class="agent-title critic" data-i18n="agent.critic.title">⚖️ Critic (DecisionCore)
-                                </h4>
-                                <p class="role" data-i18n="agent.critic.role">LLM Adversarial Judge. Final Decision Hub.
-                                </p>
-                                <ul>
-                                    <li data-i18n="agent.critic.feat1">Market Regime: Trend / Chop / Chaos</li>
-                                    <li data-i18n="agent.critic.feat2">Price Position: High / Mid / Low</li>
-                                    <li data-i18n="agent.critic.feat3">🐂🐻 Bull/Bear Debate → Weighted Voting</li>
-                                </ul>
-                            </div>
-                            <div class="agent-doc-item">
-                                <h4 class="agent-title guardian" data-i18n="agent.guardian.title">🛡️ Guardian
-                                    (RiskAudit)</h4>
-                                <p class="role" data-i18n="agent.guardian.role">Independent Risk Audit. Has Veto Power.
-                                </p>
-                                <ul>
-                                    <li data-i18n="agent.guardian.feat1">R/R Check: Min 2:1 Risk-Reward</li>
-                                    <li data-i18n="agent.guardian.feat2">Drawdown Protection: Auto-pause on threshold
-                                    </li>
-                                    <li data-i18n="agent.guardian.feat3">Twisted Protection: Block counter-trend trades
-                                    </li>
-                                </ul>
-                            </div>
-                            <div class="agent-doc-item">
-                                <h4 class="agent-title reflection" data-i18n="agent.mentor.title">🪞 Mentor (Reflection)
-                                </h4>
-                                <p class="role" data-i18n="agent.mentor.role">Trade Review Analysis. Continuous
-                                    Evolution.</p>
-                                <ul>
-                                    <li data-i18n="agent.mentor.feat1">Triggers LLM Deep Review every 10 trades</li>
-                                    <li data-i18n="agent.mentor.feat2">Pattern Recognition: Success/Failure summary</li>
-                                    <li data-i18n="agent.mentor.feat3">Insight Injection: Feedback to Critic for
-                                        optimization</li>
-                                </ul>
-                            </div>
-                        </div>
-
-                        <!-- Logs Terminal -->
-                        <div id="logs-container" class="logs-scroll custom-scroll">
-                            <!-- JS Populated -->
-                        </div>
                     </div>
                 </div>
             </section>
@@ -886,17 +770,56 @@
                                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                                     <label class="agent-checkbox"
                                         style="cursor:pointer; display:flex; align-items:center; padding:6px 8px; background:rgba(255,255,255,0.05); border-radius:4px;">
-                                        <input type="checkbox" name="agent-toggle" value="trend_agent" checked
+                                        <input type="checkbox" name="agent-toggle" value="trend_agent_llm" checked
                                             style="margin-right:8px;">
-                                        <span>TrendAgent <span
+                                        <span>TrendAgentLLM <span
                                                 style="color:#718096;font-size:0.8em;">(1h趋势LLM)</span></span>
                                     </label>
                                     <label class="agent-checkbox"
                                         style="cursor:pointer; display:flex; align-items:center; padding:6px 8px; background:rgba(255,255,255,0.05); border-radius:4px;">
-                                        <input type="checkbox" name="agent-toggle" value="trigger_agent" checked
+                                        <input type="checkbox" name="agent-toggle" value="setup_agent_llm" checked
+                                            style="margin-right:8px;">
+                                        <span>SetupAgentLLM <span
+                                                style="color:#718096;font-size:0.8em;">(15m入场LLM)</span></span>
+                                    </label>
+                                    <label class="agent-checkbox"
+                                        style="cursor:pointer; display:flex; align-items:center; padding:6px 8px; background:rgba(255,255,255,0.05); border-radius:4px;">
+                                        <input type="checkbox" name="agent-toggle" value="trigger_agent_llm" checked
+                                            style="margin-right:8px;">
+                                        <span>TriggerAgentLLM <span
+                                                style="color:#718096;font-size:0.8em;">(5m触发LLM)</span></span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Local Analysis (No LLM) -->
+                            <div
+                                style="background: rgba(66, 153, 225, 0.08); padding: 12px; border-radius: 6px; margin-bottom: 10px; border: 1px solid rgba(66, 153, 225, 0.25);">
+                                <div style="color: #63b3ed; font-size: 0.8em; margin-bottom: 8px; font-weight: bold;">🧩
+                                    Local Semantic Analysis <span
+                                        style="background:#2b6cb0;color:#fff;padding:1px 6px;border-radius:3px;font-size:0.7em;margin-left:5px;">No API</span>
+                                </div>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                                    <label class="agent-checkbox"
+                                        style="cursor:pointer; display:flex; align-items:center; padding:6px 8px; background:rgba(255,255,255,0.05); border-radius:4px;">
+                                        <input type="checkbox" name="agent-toggle" value="trend_agent_local" checked
+                                            style="margin-right:8px;">
+                                        <span>TrendAgent <span
+                                                style="color:#718096;font-size:0.8em;">(1h规则)</span></span>
+                                    </label>
+                                    <label class="agent-checkbox"
+                                        style="cursor:pointer; display:flex; align-items:center; padding:6px 8px; background:rgba(255,255,255,0.05); border-radius:4px;">
+                                        <input type="checkbox" name="agent-toggle" value="setup_agent_local" checked
+                                            style="margin-right:8px;">
+                                        <span>SetupAgent <span
+                                                style="color:#718096;font-size:0.8em;">(15m规则)</span></span>
+                                    </label>
+                                    <label class="agent-checkbox"
+                                        style="cursor:pointer; display:flex; align-items:center; padding:6px 8px; background:rgba(255,255,255,0.05); border-radius:4px;">
+                                        <input type="checkbox" name="agent-toggle" value="trigger_agent_local" checked
                                             style="margin-right:8px;">
                                         <span>TriggerAgent <span
-                                                style="color:#718096;font-size:0.8em;">(5m触发LLM)</span></span>
+                                                style="color:#718096;font-size:0.8em;">(5m规则)</span></span>
                                     </label>
                                 </div>
                             </div>
@@ -908,10 +831,17 @@
                                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                                     <label class="agent-checkbox"
                                         style="cursor:pointer; display:flex; align-items:center; padding:6px 8px; background:rgba(255,255,255,0.05); border-radius:4px;">
-                                        <input type="checkbox" name="agent-toggle" value="reflection_agent" checked
+                                        <input type="checkbox" name="agent-toggle" value="reflection_agent_llm" checked
+                                            style="margin-right:8px;">
+                                        <span>ReflectionAgentLLM <span
+                                                style="color:#718096;font-size:0.8em;">(交易反思LLM)</span></span>
+                                    </label>
+                                    <label class="agent-checkbox"
+                                        style="cursor:pointer; display:flex; align-items:center; padding:6px 8px; background:rgba(255,255,255,0.05); border-radius:4px;">
+                                        <input type="checkbox" name="agent-toggle" value="reflection_agent_local" checked
                                             style="margin-right:8px;">
                                         <span>ReflectionAgent <span
-                                                style="color:#718096;font-size:0.8em;">(交易反思)</span></span>
+                                                style="color:#718096;font-size:0.8em;">(本地反思)</span></span>
                                     </label>
                                     <label class="agent-checkbox"
                                         style="cursor:pointer; display:flex; align-items:center; padding:6px 8px; background:rgba(255,255,255,0.05); border-radius:4px;">

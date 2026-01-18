@@ -1466,8 +1466,8 @@ class MultiAgentTradingBot:
             global_state.four_layer_result = four_layer_result
             
             # 🆕 MULTI-AGENT SEMANTIC ANALYSIS (LLM/Local)
-            use_trend_llm = self.agent_config.trend_agent_llm
-            use_trend_local = self.agent_config.trend_agent_local
+            use_trend_llm = self.agent_config.trend_agent_llm or self.agent_config.setup_agent_llm
+            use_trend_local = self.agent_config.trend_agent_local or self.agent_config.setup_agent_local
             use_trigger_llm = self.agent_config.trigger_agent_llm
             use_trigger_local = self.agent_config.trigger_agent_local
             use_trend = use_trend_llm or use_trend_local
