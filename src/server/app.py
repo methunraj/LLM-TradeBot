@@ -296,6 +296,7 @@ async def control_bot(cmd: ControlCommand, authenticated: bool = Depends(verify_
     ) and not openai_key and not claude_key
     
     if action == "start":
+        was_stopped = global_state.execution_mode == "Stopped"
         # Check if demo has expired
         if global_state.demo_expired:
             raise HTTPException(
@@ -316,6 +317,11 @@ async def control_bot(cmd: ControlCommand, authenticated: bool = Depends(verify_
             global_state.demo_start_time = None
         
         global_state.execution_mode = "Running"
+        if was_stopped:
+            global_state.cycle_counter = 0
+            global_state.current_cycle_id = ""
+            global_state.cycle_positions_opened = 0
+            global_state.add_log("🔁 Cycle counter reset after stop")
         global_state.add_log("▶️ System Resumed by User")
         
     elif action == "pause":

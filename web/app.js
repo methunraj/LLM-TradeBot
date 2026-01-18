@@ -230,6 +230,30 @@ function normalizeDecision(decision, system) {
     return null;
 }
 
+function buildDecisionMap(decision, history) {
+    const merged = {};
+    if (decision && typeof decision === 'object') {
+        if (decision.action !== undefined) {
+            const symbol = decision.symbol || 'UNKNOWN';
+            merged[symbol] = decision;
+        } else {
+            Object.keys(decision).forEach(key => {
+                merged[key] = decision[key];
+            });
+        }
+    }
+
+    if (Array.isArray(history)) {
+        history.forEach(entry => {
+            if (entry && entry.symbol && merged[entry.symbol] === undefined) {
+                merged[entry.symbol] = entry;
+            }
+        });
+    }
+
+    return merged;
+}
+
 function updateDashboard() {
     apiFetch(API_URL)
         .then(response => {
@@ -242,7 +266,8 @@ function updateDashboard() {
             return response.json();
         })
         .then(data => {
-            const currentDecision = normalizeDecision(data.decision, data.system);
+            const decisionMap = buildDecisionMap(data.decision, data.decision_history);
+            const currentDecision = normalizeDecision(decisionMap, data.system) || data.decision_history?.[0] || null;
             renderSystemStatus(data.system);
             renderMarketData(data.market);
             renderAgents(data.agents);
@@ -250,7 +275,7 @@ function updateDashboard() {
             renderLogs(data.logs, data.logs_simplified);
 
             // 🆕 Update Agent Framework Visualization
-            if (data.system && currentDecision) {
+            if (data.system) {
                 updateAgentFramework(data.system, currentDecision, data.agents);
             }
 
@@ -897,6 +922,16 @@ function renderDecision(decision) {
 function updateAgentFramework(system, decision, agents) {
     decision = normalizeDecision(decision, system);
 
+    const resolveMode = (sys) => {
+        const raw = sys?.mode || (sys?.running ? 'Running' : 'Stopped');
+        return typeof raw === 'string' ? raw.trim() : raw;
+    };
+    const mode = resolveMode(system);
+    const modeLower = typeof mode === 'string' ? mode.toLowerCase() : '';
+    const isRunningMode = modeLower === 'running' || modeLower === 'online' || modeLower === 'active';
+    const isPausedMode = modeLower === 'paused';
+    const isStoppedMode = modeLower === 'stopped';
+
     // Update Cycle Number
     const cycleEl = document.getElementById('framework-cycle');
     if (cycleEl && system.cycle_counter !== undefined) {
@@ -905,28 +940,66 @@ function updateAgentFramework(system, decision, agents) {
 
     // Update Symbol Selector (already handled by updateSymbolSelector)
 
-    // Update Agent Statuses and Outputs based on decision data
-    if (!decision) return;
-
     const agentConfig = window.agentConfig || {};
     const isEnabled = (key) => agentConfig[key] !== false;
 
     // Helper to set agent badge status
     const setAgentStatus = (agentId, status) => {
         const badge = document.querySelector(`#${agentId} .agent-badge`);
+        const box = document.getElementById(agentId);
+        let statusClass = 'idle';
+        if (status === 'Running') statusClass = 'running';
+        else if (status === 'Done') statusClass = 'completed';
+        else if (status === 'Off') statusClass = 'off';
+        if (box) {
+            const currentClass = box.classList.contains('running')
+                ? 'running'
+                : box.classList.contains('completed')
+                    ? 'completed'
+                    : box.classList.contains('off')
+                        ? 'off'
+                        : box.classList.contains('idle')
+                            ? 'idle'
+                            : null;
+            if (currentClass === statusClass) {
+                if (badge) {
+                    badge.textContent = status;
+                    badge.className = 'agent-badge';
+                    badge.classList.add(statusClass);
+                }
+                return;
+            }
+        }
+        if (box) {
+            box.classList.remove('running', 'completed', 'idle', 'off');
+            box.classList.add(statusClass);
+        }
         if (badge) {
             badge.textContent = status;
             badge.className = 'agent-badge';
-            if (status === 'Running') badge.classList.add('running');
-            else if (status === 'Done') badge.classList.add('completed');
-            else badge.classList.add('idle');
+            badge.classList.add(statusClass);
         }
     };
 
     // Helper to set output value
     const setOutput = (id, value) => {
         const el = document.getElementById(id);
-        if (el) el.textContent = value || '--';
+        if (!el) return;
+        if (value === undefined || value === null || value === '') {
+            el.textContent = '--';
+            return;
+        }
+        el.textContent = value;
+    };
+
+    const setSummary = (id, text) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (text === undefined || text === null || text === '') {
+            el.textContent = '--';
+            return;
+        }
+        el.textContent = text;
     };
 
     const formatNumber = (value, digits = 2) => {
@@ -936,16 +1009,143 @@ function updateAgentFramework(system, decision, agents) {
         return digits === null ? String(num) : num.toFixed(digits);
     };
 
+    const formatPercent = (value, digits = 0) => {
+        if (value === undefined || value === null) return '--';
+        let num = Number(value);
+        if (!Number.isFinite(num)) return '--';
+        if (num > 0 && num <= 1) num *= 100;
+        return `${num.toFixed(digits)}%`;
+    };
+    const voteAnalysis = decision?.vote_analysis || {};
+    const adxFallback = decision?.regime?.adx ?? decision?.four_layer_status?.adx;
+
+    const resetFramework = () => {
+        const outputIds = [
+            'out-5m', 'out-15m', 'out-1h', 'out-oi',
+            'out-selector-mode', 'out-selector-symbol', 'out-selector-score',
+            'out-ema', 'out-rsi', 'out-macd', 'out-bb',
+            'out-regime', 'out-adx', 'out-regime-conf',
+            'out-pattern', 'out-trigger-signal', 'out-trigger-score',
+            'out-zone', 'out-sr', 'out-range',
+            'out-pup', 'out-pdown', 'out-signal',
+            'out-trend-1h', 'out-trend-bias', 'out-trend-conf',
+            'out-fire', 'out-entry-type', 'out-fire-conf',
+            'out-ai-status', 'out-ai-veto', 'out-ai-reason',
+            'out-bull', 'out-bear',
+            'out-risk', 'out-size', 'out-sl', 'out-tp',
+            'out-trades-count', 'out-win-rate', 'out-insight'
+        ];
+        outputIds.forEach((id) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.textContent = '--';
+            el.classList.remove('bullish', 'bearish');
+        });
+
+        const decisionEl = document.getElementById('out-decision');
+        if (decisionEl) {
+            const actionSpan = decisionEl.querySelector('.decision-action');
+            const confSpan = decisionEl.querySelector('.decision-conf');
+            if (actionSpan) {
+                actionSpan.textContent = 'WAIT';
+                actionSpan.className = 'decision-action';
+            }
+            if (confSpan) confSpan.textContent = '--';
+        }
+
+        const finalEl = document.getElementById('out-final');
+        if (finalEl) {
+            const finalAction = finalEl.querySelector('.final-action');
+            if (finalAction) {
+                finalAction.textContent = '--';
+                finalAction.className = 'final-action';
+            }
+        }
+        const finalSymbol = document.getElementById('final-symbol');
+        if (finalSymbol) finalSymbol.textContent = '--';
+        const finalSize = document.getElementById('final-size');
+        if (finalSize) finalSize.textContent = '--';
+
+        const setIdleOrOff = (id, key, summaryId, idleText, offText, runningText) => {
+            const enabled = key ? isEnabled(key) : true;
+            if (enabled) {
+                setAgentStatus(id, isRunningMode ? 'Running' : 'Idle');
+                setSummary(summaryId, isRunningMode ? runningText : idleText);
+            } else {
+                setAgentStatus(id, 'Off');
+                setSummary(summaryId, offText);
+            }
+        };
+
+        const dataSummary = isPausedMode
+            ? 'Feed paused.'
+            : (isStoppedMode ? 'Feed stopped.' : (isRunningMode ? 'Feed running.' : 'Feed idle.'));
+
+        const runningSummary = isRunningMode ? 'Cycle running.' : 'Cycle idle.';
+
+        setIdleOrOff('flow-datasync', null, 'sum-datasync', dataSummary, dataSummary, 'Feed running.');
+        setIdleOrOff('flow-symbol-selector', 'symbol_selector_agent', 'sum-symbol-selector', 'Selector idle.', 'Selector off.', 'Selector running.');
+        setIdleOrOff('flow-quant', null, 'sum-quant', 'Indicators pending.', 'Indicators pending.', 'Quant running.');
+        setIdleOrOff('flow-regime', 'regime_detector_agent', 'sum-regime', 'Regime pending.', 'Regime off.', 'Regime running.');
+        setIdleOrOff('flow-trigger-detector', 'trigger_detector_agent', 'sum-trigger-detector', 'Trigger detector idle.', 'Trigger detector off.', 'Trigger detector running.');
+        setIdleOrOff('flow-position-analyzer', 'position_analyzer_agent', 'sum-position-analyzer', 'Position pending.', 'Position off.', 'Position running.');
+        setIdleOrOff('flow-predict', 'predict_agent', 'sum-predict', 'Predict pending.', 'Predict off.', 'Predict running.');
+        setIdleOrOff('flow-trend-agent', 'trend_agent', 'sum-trend-agent', 'Trend idle.', 'Trend agent off.', 'Trend running.');
+        setIdleOrOff('flow-trigger-agent', 'trigger_agent', 'sum-trigger-agent', 'Trigger idle.', 'Trigger agent off.', 'Trigger running.');
+        setIdleOrOff('flow-ai-filter', 'ai_prediction_filter_agent', 'sum-ai-filter', 'AI filter idle.', 'AI filter off.', 'AI filter running.');
+        setIdleOrOff('flow-decision', null, 'sum-decision', 'Decision pending.', 'Decision pending.', 'Decision running.');
+        setIdleOrOff('flow-risk', null, 'sum-risk', 'Risk idle.', 'Risk idle.', 'Risk running.');
+        setIdleOrOff('flow-output', null, 'sum-output', 'Output pending.', 'Output pending.', runningSummary);
+        setIdleOrOff('flow-reflection', 'reflection_agent', 'sum-reflection', 'Reflection idle.', 'Reflection off.', 'Reflection running.');
+    };
+
+    const currentCycle = system?.cycle_counter;
+    const hasCycle = currentCycle !== undefined && currentCycle !== null;
+    const decisionCycle = decision?.cycle_number;
+    const decisionHasCycle = decisionCycle !== undefined && decisionCycle !== null;
+    const decisionIsCurrent = !hasCycle || !decisionHasCycle
+        ? true
+        : Number(decisionCycle) === Number(currentCycle);
+
+    if (hasCycle && window.lastFrameworkCycle === undefined) {
+        window.lastFrameworkCycle = currentCycle;
+    }
+
+    if (hasCycle && window.lastFrameworkCycle !== currentCycle) {
+        window.lastFrameworkCycle = currentCycle;
+        if (!decisionIsCurrent) {
+            resetFramework();
+            return;
+        }
+    }
+
+    // Update Agent Statuses and Outputs based on decision data
+    if (!decision || (hasCycle && decisionHasCycle && !decisionIsCurrent)) {
+        resetFramework();
+        return;
+    }
+
     // DataSync Agent - Always show as completed when we have data
-    if (system.mode === 'Running') {
+    if (isRunningMode) {
         setAgentStatus('flow-datasync', 'Done');
         // Update data outputs if available
         setOutput('out-5m', '✓');
         setOutput('out-15m', '✓');
         setOutput('out-1h', '✓');
-        const oiChange = decision.four_layer_status?.oi_change;
-        setOutput('out-oi', oiChange !== undefined && oiChange !== null ? `${oiChange.toFixed(1)}%` : '✓');
+        const oiChange = decision.four_layer_status?.oi_change ?? decision.vote_details?.oi_fuel?.oi_change_24h;
+        setOutput('out-oi', oiChange !== undefined && oiChange !== null ? `${formatNumber(oiChange, 1)}%` : '✓');
     }
+    const oiSummary = decision.four_layer_status?.oi_change ?? decision.vote_details?.oi_fuel?.oi_change_24h;
+    let dataSummary = 'Feed idle.';
+    if (isRunningMode) {
+        const oiPart = oiSummary !== undefined && oiSummary !== null ? ` | OI ${formatNumber(oiSummary, 1)}%` : '';
+        dataSummary = `Feed 5/15/1h${oiPart}.`;
+    } else if (isPausedMode) {
+        dataSummary = 'Feed paused.';
+    } else if (isStoppedMode) {
+        dataSummary = 'Feed stopped.';
+    }
+    setSummary('sum-datasync', dataSummary);
 
     // Quant Analyst - Show indicators from decision
     const indicatorSnapshot = decision.indicator_snapshot || null;
@@ -973,12 +1173,16 @@ function updateAgentFramework(system, decision, agents) {
             setOutput('out-rsi', rsiValue);
             setOutput('out-macd', macdValue);
             setOutput('out-bb', bbLabel);
+            setSummary('sum-quant', `EMA ${emaLabel} | RSI ${rsiValue} | MACD ${macdValue} | BB ${bbLabel}.`);
         } else {
             setOutput('out-ema', '--');
             setOutput('out-rsi', '--');
             setOutput('out-macd', '--');
             setOutput('out-bb', '--');
+            setSummary('sum-quant', 'Indicators pending.');
         }
+    } else {
+        setSummary('sum-quant', 'Quant idle.');
     }
 
     // Regime Detector
@@ -987,22 +1191,30 @@ function updateAgentFramework(system, decision, agents) {
         setOutput('out-regime', '--');
         setOutput('out-adx', '--');
         setOutput('out-regime-conf', '--');
-    } else if (decision.regime) {
-        setAgentStatus('flow-regime', 'Done');
-        const regime = decision.regime.regime || 'Unknown';
-        const adx = decision.regime.adx !== undefined ? decision.regime.adx.toFixed(1) : '--';
-        const confValue = decision.regime.confidence;
-        const conf = confValue !== undefined && confValue !== null
-            ? `${(confValue <= 1 ? confValue * 100 : confValue).toFixed(0)}%`
-            : '--';
-        setOutput('out-regime', regime);
-        setOutput('out-adx', adx);
-        setOutput('out-regime-conf', conf);
+        setSummary('sum-regime', 'Regime off.');
     } else {
-        setAgentStatus('flow-regime', 'Idle');
-        setOutput('out-regime', '--');
-        setOutput('out-adx', '--');
-        setOutput('out-regime-conf', '--');
+        const regimeData = decision.regime || decision.four_layer_status || null;
+        if (regimeData) {
+            setAgentStatus('flow-regime', 'Done');
+            const regime = regimeData.regime || 'Unknown';
+            const adxValue = regimeData.adx;
+            const adx = adxValue !== undefined && adxValue !== null ? formatNumber(adxValue, 1) : '--';
+            const conf = decision.regime?.confidence !== undefined && decision.regime?.confidence !== null
+                ? formatPercent(decision.regime.confidence, 0)
+                : '--';
+            const confPart = conf !== '--' ? ` | Conf ${conf}` : '';
+
+            setOutput('out-regime', regime);
+            setOutput('out-adx', adx);
+            setOutput('out-regime-conf', conf);
+            setSummary('sum-regime', `Regime ${regime} | ADX ${adx}${confPart}.`);
+        } else {
+            setAgentStatus('flow-regime', 'Idle');
+            setOutput('out-regime', '--');
+            setOutput('out-adx', '--');
+            setOutput('out-regime-conf', '--');
+            setSummary('sum-regime', 'Regime pending.');
+        }
     }
 
     // Predict Agent
@@ -1011,20 +1223,25 @@ function updateAgentFramework(system, decision, agents) {
         setOutput('out-pup', '--');
         setOutput('out-pdown', '--');
         setOutput('out-signal', '--');
-    } else if (decision.prophet_probability !== undefined) {
+        setSummary('sum-predict', 'Predict off.');
+    } else if (decision.prophet_probability !== undefined || decision.vote_details?.prophet !== undefined) {
         setAgentStatus('flow-predict', 'Done');
-        const pUp = (decision.prophet_probability * 100).toFixed(0);
-        const pDown = ((1 - decision.prophet_probability) * 100).toFixed(0);
+        let prob = decision.prophet_probability ?? decision.vote_details?.prophet;
+        if (typeof prob === 'number' && prob > 1) prob = prob / 100;
+        const pUp = (prob * 100).toFixed(0);
+        const pDown = ((1 - prob) * 100).toFixed(0);
         setOutput('out-pup', `${pUp}%`);
         setOutput('out-pdown', `${pDown}%`);
-        const signal = decision.prophet_probability > 0.55 ? 'LONG' :
-            (decision.prophet_probability < 0.45 ? 'SHORT' : 'NEUTRAL');
+        const signal = prob > 0.55 ? 'LONG' :
+            (prob < 0.45 ? 'SHORT' : 'NEUTRAL');
         setOutput('out-signal', signal);
+        setSummary('sum-predict', `P(Up) ${pUp}% | ${signal}.`);
     } else {
         setAgentStatus('flow-predict', 'Idle');
         setOutput('out-pup', '--');
         setOutput('out-pdown', '--');
         setOutput('out-signal', '--');
+        setSummary('sum-predict', 'Predict pending.');
     }
 
     // Decision Core
@@ -1051,7 +1268,16 @@ function updateAgentFramework(system, decision, agents) {
 
             setOutput('out-bull', bullConf !== undefined ? `${bullConf}% ${bullStance}` : '--');
             setOutput('out-bear', bearConf !== undefined ? `${bearConf}% ${bearStance}` : '--');
+
+            const bullText = bullConf !== undefined && bullConf !== null ? `BULL ${bullConf}%` : 'BULL --';
+            const bearText = bearConf !== undefined && bearConf !== null ? `BEAR ${bearConf}%` : 'BEAR --';
+            setSummary('sum-decision', `DECISION ${action} ${conf} | ${bullText} | ${bearText}.`);
+        } else {
+            setSummary('sum-decision', `DECISION ${action} ${conf}.`);
         }
+    } else {
+        setAgentStatus('flow-decision', 'Idle');
+        setSummary('sum-decision', 'Decision pending.');
     }
 
     // Risk Audit
@@ -1085,11 +1311,21 @@ function updateAgentFramework(system, decision, agents) {
         setOutput('out-size', sizeLabel);
         setOutput('out-sl', fmtPct(slPct));
         setOutput('out-tp', fmtPct(tpPct));
+        if (decision.guardian_passed === false) {
+            const reason = decision.guardian_reason || 'blocked by risk audit';
+            setSummary('sum-risk', `RISK BLOCKED: ${reason}.`);
+        } else {
+            setSummary('sum-risk', `RISK ${riskLevel} | Size ${sizeLabel} | SL ${fmtPct(slPct)} | TP ${fmtPct(tpPct)}.`);
+        }
+    } else {
+        setAgentStatus('flow-risk', 'Idle');
+        setSummary('sum-risk', 'Risk idle.');
     }
 
     // Final Output
     const finalEl = document.getElementById('out-final');
     if (finalEl && decision.action) {
+        setAgentStatus('flow-output', 'Done');
         const actionDiv = finalEl.querySelector('.final-action');
         const symbolSpan = document.getElementById('final-symbol');
         const sizeSpan = document.getElementById('final-size');
@@ -1106,6 +1342,11 @@ function updateAgentFramework(system, decision, agents) {
         if (actionDiv) actionDiv.textContent = decision.action.toUpperCase();
         if (symbolSpan) symbolSpan.textContent = decision.symbol || '--';
         if (sizeSpan) sizeSpan.textContent = sizeLabel;
+        const symbolText = decision.symbol || '--';
+        setSummary('sum-output', `EXEC ${decision.action.toUpperCase()} ${symbolText} ${sizeLabel}.`);
+    } else {
+        setAgentStatus('flow-output', 'Idle');
+        setSummary('sum-output', 'Output pending.');
     }
 
     // 🆕 Symbol Selector Agent
@@ -1114,12 +1355,15 @@ function updateAgentFramework(system, decision, agents) {
         setOutput('out-selector-mode', '--');
         setOutput('out-selector-symbol', '--');
         setOutput('out-selector-score', '--');
-    } else if (system.mode === 'Running') {
+        setSummary('sum-symbol-selector', 'Selector off.');
+    } else if (isRunningMode) {
         setAgentStatus('flow-symbol-selector', 'Done');
         const selectorMode = Array.isArray(system.symbols) && system.symbols.length > 1 ? 'AUTO' : 'MANUAL';
         setOutput('out-selector-mode', selectorMode);
         setOutput('out-selector-symbol', decision.symbol || '--');
         setOutput('out-selector-score', '--');
+        const symbolText = decision.symbol || '--';
+        setSummary('sum-symbol-selector', `${selectorMode} -> ${symbolText}.`);
 
         // 🆕 Update K-line chart when AUTO1 symbol changes
         if (decision.symbol && decision.symbol !== window.lastChartSymbol) {
@@ -1140,6 +1384,7 @@ function updateAgentFramework(system, decision, agents) {
         setOutput('out-selector-mode', '--');
         setOutput('out-selector-symbol', '--');
         setOutput('out-selector-score', '--');
+        setSummary('sum-symbol-selector', 'Selector idle.');
     }
 
     // 🆕 Trigger Detector Agent
@@ -1148,17 +1393,22 @@ function updateAgentFramework(system, decision, agents) {
         setOutput('out-pattern', '--');
         setOutput('out-trigger-signal', '--');
         setOutput('out-trigger-score', '--');
+        setSummary('sum-trigger-detector', 'Trigger detector off.');
     } else if (decision.action) {
         setAgentStatus('flow-trigger-detector', 'Done');
         setOutput('out-pattern', decision.trigger_pattern || '--');
         setOutput('out-trigger-signal', decision.action || '--');
         const rvol = decision.trigger_rvol;
         setOutput('out-trigger-score', rvol !== undefined && rvol !== null ? `${rvol.toFixed(1)}x` : '--');
+        const pattern = decision.trigger_pattern || 'None';
+        const rvolText = rvol !== undefined && rvol !== null ? `${rvol.toFixed(1)}x` : '--';
+        setSummary('sum-trigger-detector', `Pattern ${pattern} | RVOL ${rvolText} | ${decision.action}.`);
     } else {
         setAgentStatus('flow-trigger-detector', 'Idle');
         setOutput('out-pattern', '--');
         setOutput('out-trigger-signal', '--');
         setOutput('out-trigger-score', '--');
+        setSummary('sum-trigger-detector', 'Trigger detector idle.');
     }
 
     // 🆕 Position Analyzer Agent
@@ -1167,6 +1417,7 @@ function updateAgentFramework(system, decision, agents) {
         setOutput('out-zone', '--');
         setOutput('out-sr', '--');
         setOutput('out-range', '--');
+        setSummary('sum-position-analyzer', 'Position off.');
     } else {
         const positionInfo = decision.order_params?.position_1h || decision.position || null;
         if (decision.position_zone !== undefined || positionInfo) {
@@ -1191,11 +1442,14 @@ function updateAgentFramework(system, decision, agents) {
             setOutput('out-zone', zone);
             setOutput('out-sr', srLabel);
             setOutput('out-range', rangeLabel);
+            const pctLabel = posPct !== undefined && posPct !== null ? `${formatNumber(posPct, 0)}%` : '--';
+            setSummary('sum-position-analyzer', `Zone ${zone} | Range ${srLabel} | Pos ${pctLabel}.`);
         } else {
             setAgentStatus('flow-position-analyzer', 'Idle');
             setOutput('out-zone', '--');
             setOutput('out-sr', '--');
             setOutput('out-range', '--');
+            setSummary('sum-position-analyzer', 'Position pending.');
         }
     }
 
@@ -1205,17 +1459,33 @@ function updateAgentFramework(system, decision, agents) {
         setOutput('out-trend-1h', '--');
         setOutput('out-trend-bias', '--');
         setOutput('out-trend-conf', '--');
+        setSummary('sum-trend-agent', 'Trend agent off.');
     } else if (decision.semantic_analyses && decision.semantic_analyses.trend) {
         setAgentStatus('flow-trend-agent', 'Done');
         const trend = decision.semantic_analyses.trend;
         setOutput('out-trend-1h', trend.stance || '--');
         setOutput('out-trend-bias', trend.metadata?.strength || '--');
         setOutput('out-trend-conf', trend.metadata?.adx !== undefined ? `${trend.metadata.adx}` : '--');
+        const stance = trend.stance || 'neutral';
+        const strength = trend.metadata?.strength || 'neutral';
+        const adxVal = trend.metadata?.adx;
+        const adxText = adxVal !== undefined && adxVal !== null ? formatNumber(adxVal, 1) : '--';
+        setSummary('sum-trend-agent', `Trend ${stance} | ${strength} | ADX ${adxText}.`);
+    } else if (voteAnalysis.trend_1h || voteAnalysis.trend_15m || adxFallback !== undefined) {
+        setAgentStatus('flow-trend-agent', 'Done');
+        const stance = voteAnalysis.trend_1h || 'neutral';
+        const strength = voteAnalysis.trend_15m || '--';
+        const adxText = adxFallback !== undefined && adxFallback !== null ? formatNumber(adxFallback, 1) : '--';
+        setOutput('out-trend-1h', stance);
+        setOutput('out-trend-bias', strength);
+        setOutput('out-trend-conf', adxText);
+        setSummary('sum-trend-agent', `Trend ${stance} | ${strength} | ADX ${adxText}.`);
     } else {
         setAgentStatus('flow-trend-agent', 'Idle');
         setOutput('out-trend-1h', '--');
         setOutput('out-trend-bias', '--');
         setOutput('out-trend-conf', '--');
+        setSummary('sum-trend-agent', 'Trend idle.');
     }
 
     // 🆕 Trigger Agent (LLM)
@@ -1224,17 +1494,34 @@ function updateAgentFramework(system, decision, agents) {
         setOutput('out-fire', '--');
         setOutput('out-entry-type', '--');
         setOutput('out-fire-conf', '--');
+        setSummary('sum-trigger-agent', 'Trigger agent off.');
     } else if (decision.semantic_analyses && decision.semantic_analyses.trigger) {
         setAgentStatus('flow-trigger-agent', 'Done');
         const trigger = decision.semantic_analyses.trigger;
         setOutput('out-fire', trigger.stance || '--');
         setOutput('out-entry-type', trigger.metadata?.pattern || '--');
         setOutput('out-fire-conf', trigger.metadata?.rvol !== undefined ? `${trigger.metadata.rvol}x` : '--');
+        const stance = trigger.stance || 'neutral';
+        const pattern = trigger.metadata?.pattern || 'None';
+        const rvol = trigger.metadata?.rvol;
+        const rvolText = rvol !== undefined && rvol !== null ? `${formatNumber(rvol, 1)}x` : '--';
+        setSummary('sum-trigger-agent', `Trigger ${stance} | ${pattern} | RVOL ${rvolText}.`);
+    } else if (decision.trigger_pattern || decision.trigger_rvol !== undefined || decision.action) {
+        setAgentStatus('flow-trigger-agent', 'Done');
+        const action = decision.action ? decision.action.toUpperCase() : 'NEUTRAL';
+        const pattern = decision.trigger_pattern || 'None';
+        const rvol = decision.trigger_rvol;
+        const rvolText = rvol !== undefined && rvol !== null ? `${formatNumber(rvol, 1)}x` : '--';
+        setOutput('out-fire', action);
+        setOutput('out-entry-type', pattern);
+        setOutput('out-fire-conf', rvolText);
+        setSummary('sum-trigger-agent', `Trigger ${action} | ${pattern} | RVOL ${rvolText}.`);
     } else {
         setAgentStatus('flow-trigger-agent', 'Idle');
         setOutput('out-fire', '--');
         setOutput('out-entry-type', '--');
         setOutput('out-fire-conf', '--');
+        setSummary('sum-trigger-agent', 'Trigger idle.');
     }
 
     // 🆕 AI Prediction Filter
@@ -1243,17 +1530,24 @@ function updateAgentFramework(system, decision, agents) {
         setOutput('out-ai-status', '--');
         setOutput('out-ai-veto', '--');
         setOutput('out-ai-reason', '--');
+        setSummary('sum-ai-filter', 'AI filter off.');
     } else if (decision.ai_filter_passed !== undefined) {
         setAgentStatus('flow-ai-filter', 'Done');
         const aiStatus = decision.ai_filter_passed === false ? '🚫 Blocked' : '✓ Pass';
         setOutput('out-ai-status', aiStatus);
         setOutput('out-ai-veto', decision.ai_filter_passed === false ? 'Yes' : 'No');
         setOutput('out-ai-reason', decision.ai_filter_reason || '--');
+        const aiSignal = decision.ai_filter_signal || 'N/A';
+        const conf = decision.ai_filter_confidence !== undefined && decision.ai_filter_confidence !== null
+            ? formatPercent(decision.ai_filter_confidence, 0)
+            : '--';
+        setSummary('sum-ai-filter', `AI ${decision.ai_filter_passed ? 'PASS' : 'BLOCK'} | SIG ${aiSignal} | ${conf}.`);
     } else {
         setAgentStatus('flow-ai-filter', 'Idle');
         setOutput('out-ai-status', '--');
         setOutput('out-ai-veto', '--');
         setOutput('out-ai-reason', '--');
+        setSummary('sum-ai-filter', 'AI filter idle.');
     }
 
     // 🆕 Reflection Agent
@@ -1262,6 +1556,7 @@ function updateAgentFramework(system, decision, agents) {
         setOutput('out-trades-count', '--');
         setOutput('out-win-rate', '--');
         setOutput('out-insight', '--');
+        setSummary('sum-reflection', 'Reflection off.');
     } else if (decision.reflection) {
         setAgentStatus('flow-reflection', 'Done');
         const tradesCount = decision.reflection.trades;
@@ -1271,11 +1566,18 @@ function updateAgentFramework(system, decision, agents) {
         setOutput('out-trades-count', tradesCount !== undefined && tradesCount !== null ? `${tradesCount}` : '--');
         setOutput('out-win-rate', winRate !== undefined && winRate !== null ? `${winRate.toFixed(1)}%` : '--');
         setOutput('out-insight', insight || '--');
+        const count = decision.reflection.count !== undefined && decision.reflection.count !== null
+            ? ` #${decision.reflection.count}`
+            : '';
+        const winText = winRate !== undefined && winRate !== null ? `${winRate.toFixed(1)}%` : '--';
+        const tradesText = tradesCount !== undefined && tradesCount !== null ? `${tradesCount}` : '--';
+        setSummary('sum-reflection', `Reflection${count} | Trades ${tradesText} | WR ${winText}.`);
     } else {
         setAgentStatus('flow-reflection', 'Idle');
         setOutput('out-trades-count', '--');
         setOutput('out-win-rate', '--');
         setOutput('out-insight', '--');
+        setSummary('sum-reflection', 'Reflection idle.');
     }
 }
 

@@ -2324,6 +2324,18 @@ tr:first-child td {
     overflow: hidden;
 }
 
+.agent-box::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: transparent;
+    opacity: 0;
+    transition: opacity 0.3s ease, background 0.3s ease;
+}
+
 .agent-box::after {
     content: "";
     position: absolute;
@@ -2357,14 +2369,69 @@ tr:first-child td {
 }
 
 .agent-box.running {
-    border-color: rgba(0, 214, 143, 0.5);
-    box-shadow: 0 0 20px rgba(0, 214, 143, 0.15);
-    animation: agentPulse 1s ease-in-out infinite;
+    border-color: rgba(255, 208, 76, 0.12);
+    border-width: 1px;
+    box-shadow: 0 0 8px rgba(240, 185, 11, 0.15), 0 0 0 1px rgba(240, 185, 11, 0.12) inset, inset 2px 0 0 rgba(255, 200, 60, 0.2);
+    background: linear-gradient(145deg, rgba(58, 40, 12, 0.55), rgba(22, 16, 8, 0.6)), radial-gradient(circle at top right, rgba(255, 220, 110, 0.08), transparent 65%);
+    filter: saturate(1.08) brightness(1.02);
+    animation: statusFlashRunning 1s ease-out;
+    will-change: border-color, box-shadow;
 }
 
 .agent-box.completed {
-    border-color: rgba(0, 214, 143, 0.4);
-    background: linear-gradient(135deg, rgba(0, 214, 143, 0.08) 0%, rgba(0, 214, 143, 0.02) 100%);
+    border-color: rgba(0, 255, 170, 0.12);
+    border-width: 1px;
+    background: linear-gradient(145deg, rgba(6, 40, 30, 0.6) 0%, rgba(6, 24, 20, 0.62) 100%), radial-gradient(circle at top right, rgba(0, 255, 170, 0.08), transparent 65%);
+    box-shadow: 0 0 8px rgba(0, 214, 143, 0.16), 0 0 0 1px rgba(0, 214, 143, 0.12) inset, inset 2px 0 0 rgba(0, 214, 143, 0.2);
+    filter: saturate(1.06) brightness(1.02);
+    animation: statusFlashCompleted 1s ease-out;
+}
+
+.agent-box.idle {
+    border-color: rgba(255, 255, 255, 0.06);
+    border-width: 1px;
+    background: linear-gradient(145deg, rgba(6, 10, 16, 0.92), rgba(8, 12, 18, 0.75));
+    box-shadow: 0 0 0 rgba(0, 0, 0, 0), inset 2px 0 0 rgba(255, 255, 255, 0.04);
+    opacity: 0.85;
+    animation: statusFlashIdle 1s ease-out;
+}
+
+.agent-box.off {
+    border-color: rgba(255, 255, 255, 0.1);
+    border-width: 1px;
+    background: linear-gradient(145deg, rgba(8, 8, 10, 0.96), rgba(10, 10, 12, 0.85)), radial-gradient(circle at top right, rgba(255, 255, 255, 0.04), transparent 70%);
+    box-shadow: 0 0 6px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.04) inset, inset 2px 0 0 rgba(255, 255, 255, 0.08);
+    opacity: 0.4;
+    filter: grayscale(1) saturate(0) brightness(0.5) contrast(0.8);
+    animation: statusFlashOff 1s ease-out;
+}
+
+.agent-box.idle::before {
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.05));
+    opacity: 0.6;
+}
+
+.agent-box.off::before {
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.08));
+    opacity: 0.7;
+}
+
+.agent-box.running::before {
+    background: linear-gradient(90deg, rgba(240, 185, 11, 0.6), rgba(255, 221, 120, 0.6));
+    opacity: 0.6;
+    height: 2px;
+}
+
+.agent-box.running::after {
+    opacity: 0.12;
+    background: linear-gradient(120deg, transparent 0%, rgba(255, 225, 140, 0.2) 50%, transparent 100%);
+    animation: none;
+}
+
+.agent-box.completed::before {
+    background: linear-gradient(90deg, rgba(0, 214, 143, 0.6), rgba(100, 255, 200, 0.6));
+    opacity: 0.6;
+    height: 2px;
 }
 
 .agent-header {
@@ -2398,19 +2465,30 @@ tr:first-child td {
 }
 
 .agent-badge.idle {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.08);
     color: var(--text-muted);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.agent-badge.off {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(200, 205, 215, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.18);
 }
 
 .agent-badge.running {
-    background: rgba(251, 191, 36, 0.15);
-    color: var(--accent-gold);
+    background: linear-gradient(135deg, rgba(240, 185, 11, 0.95), rgba(255, 214, 120, 0.85));
+    color: #101418;
+    border: 1px solid rgba(240, 185, 11, 0.8);
+    box-shadow: 0 0 12px rgba(240, 185, 11, 0.4);
     animation: badgePulse 1s ease-in-out infinite;
 }
 
 .agent-badge.completed {
-    background: rgba(0, 214, 143, 0.15);
-    color: var(--accent-green);
+    background: linear-gradient(135deg, rgba(0, 214, 143, 0.85), rgba(84, 255, 196, 0.85));
+    color: #07120e;
+    border: 1px solid rgba(0, 214, 143, 0.7);
+    box-shadow: 0 0 10px rgba(0, 214, 143, 0.35);
 }
 
 /* Agent Output */
@@ -2418,6 +2496,18 @@ tr:first-child td {
     display: flex;
     flex-direction: column;
     gap: 4px;
+}
+
+.agent-summary {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px dashed rgba(255, 255, 255, 0.08);
+    font-size: 0.72rem;
+    line-height: 1.4;
+    color: var(--text-secondary);
+    font-family: var(--font-display);
+    letter-spacing: 0.02em;
+    min-height: 1.2em;
 }
 
 .output-row {
@@ -2606,6 +2696,29 @@ tr:first-child td {
 
     50% {
         opacity: 0.6;
+    }
+}
+
+@keyframes agentPulseStrong {
+    0%,
+    100% {
+        transform: translateY(0) scale(1);
+        box-shadow: 0 0 26px rgba(240, 185, 11, 0.35), 0 0 0 1px rgba(240, 185, 11, 0.25) inset;
+    }
+
+    50% {
+        transform: translateY(-2px) scale(1.01);
+        box-shadow: 0 0 34px rgba(240, 185, 11, 0.45), 0 0 0 1px rgba(240, 185, 11, 0.3) inset;
+    }
+}
+
+@keyframes runningSweep {
+    0% {
+        transform: translateX(-55%);
+    }
+
+    100% {
+        transform: translateX(55%);
     }
 }
 

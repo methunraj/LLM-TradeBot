@@ -5,8 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LLM-TradeBot Dashboard</title>
-    <link rel="stylesheet" href="/static/style.css?v=20260117_0255">
-    <link rel="stylesheet" href="/static/style-enhancements.css?v=20260117_0247">
+    <link rel="stylesheet" href="/static/style.css?v=20260117_0710">
+    <link rel="stylesheet" href="/static/style-enhancements.css?v=20260117_0710">
     <link
         href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;600&display=swap"
         rel="stylesheet">
@@ -178,7 +178,7 @@
                     <div class="card-header framework-header">
                         <div class="framework-title-block">
                             <h2 class="framework-title">🤖 Multi-Agent Decision Framework</h2>
-                            <p class="framework-subtitle">Signal → Audit → Execute</p>
+                            <p class="framework-subtitle">Signal -> Audit -> Execute</p>
                         </div>
                         <div class="framework-controls">
                             <span id="framework-cycle" class="cycle-badge">Cycle #0</span>
@@ -284,6 +284,7 @@
                                             <div class="output-row"><span class="output-label">OI:</span><span
                                                     class="output-value" id="out-oi">--</span></div>
                                         </div>
+                                        <div class="agent-summary" id="sum-datasync">--</div>
                                     </div>
                                     <div class="agent-box" id="flow-symbol-selector">
                                         <div class="agent-header">
@@ -299,6 +300,7 @@
                                             <div class="output-row"><span class="output-label">Score:</span><span
                                                     class="output-value" id="out-selector-score">--</span></div>
                                         </div>
+                                        <div class="agent-summary" id="sum-symbol-selector">--</div>
                                     </div>
                                     </div>
                                 </div>
@@ -329,6 +331,7 @@
                                             <div class="output-row"><span class="output-label">BB:</span><span
                                                     class="output-value" id="out-bb">--</span></div>
                                         </div>
+                                        <div class="agent-summary" id="sum-quant">--</div>
                                     </div>
                                     <div class="agent-box" id="flow-regime">
                                         <div class="agent-header">
@@ -344,6 +347,7 @@
                                             <div class="output-row"><span class="output-label">Conf:</span><span
                                                     class="output-value" id="out-regime-conf">--</span></div>
                                         </div>
+                                        <div class="agent-summary" id="sum-regime">--</div>
                                     </div>
                                     <div class="agent-box" id="flow-trigger-detector">
                                         <div class="agent-header">
@@ -359,6 +363,7 @@
                                             <div class="output-row"><span class="output-label">Score:</span><span
                                                     class="output-value" id="out-trigger-score">--</span></div>
                                         </div>
+                                        <div class="agent-summary" id="sum-trigger-detector">--</div>
                                     </div>
                                     <div class="agent-box" id="flow-position-analyzer">
                                         <div class="agent-header">
@@ -374,6 +379,7 @@
                                             <div class="output-row"><span class="output-label">Range:</span><span
                                                     class="output-value" id="out-range">--</span></div>
                                         </div>
+                                        <div class="agent-summary" id="sum-position-analyzer">--</div>
                                     </div>
                                     <div class="agent-box" id="flow-predict">
                                         <div class="agent-header">
@@ -389,6 +395,7 @@
                                             <div class="output-row"><span class="output-label">Signal:</span><span
                                                     class="output-value" id="out-signal">--</span></div>
                                         </div>
+                                        <div class="agent-summary" id="sum-predict">--</div>
                                     </div>
                                     </div>
                                 </div>
@@ -417,6 +424,7 @@
                                             <div class="output-row"><span class="output-label">Conf:</span><span
                                                     class="output-value" id="out-trend-conf">--</span></div>
                                         </div>
+                                        <div class="agent-summary" id="sum-trend-agent">--</div>
                                     </div>
                                     <div class="agent-box" id="flow-trigger-agent">
                                         <div class="agent-header">
@@ -432,6 +440,7 @@
                                             <div class="output-row"><span class="output-label">Conf:</span><span
                                                     class="output-value" id="out-fire-conf">--</span></div>
                                         </div>
+                                        <div class="agent-summary" id="sum-trigger-agent">--</div>
                                     </div>
                                     <div class="agent-box" id="flow-ai-filter">
                                         <div class="agent-header">
@@ -447,6 +456,7 @@
                                             <div class="output-row"><span class="output-label">Reason:</span><span
                                                     class="output-value" id="out-ai-reason">--</span></div>
                                         </div>
+                                        <div class="agent-summary" id="sum-ai-filter">--</div>
                                     </div>
                                     </div>
                                 </div>
@@ -481,6 +491,7 @@
                                                 </div>
                                             </div>
                                         </div>
+                                        <div class="agent-summary" id="sum-decision">--</div>
                                     </div>
                                     </div>
                                 </div>
@@ -511,6 +522,7 @@
                                             <div class="output-row"><span class="output-label">TP:</span><span
                                                     class="output-value" id="out-tp">--</span></div>
                                         </div>
+                                        <div class="agent-summary" id="sum-risk">--</div>
                                     </div>
                                     <div class="agent-box final-output" id="flow-output">
                                         <div class="agent-header">
@@ -524,6 +536,7 @@
                                                 <span id="final-size">--</span>
                                             </div>
                                         </div>
+                                        <div class="agent-summary" id="sum-output">--</div>
                                     </div>
                                     <div class="agent-box" id="flow-reflection">
                                         <div class="agent-header">
@@ -539,6 +552,7 @@
                                             <div class="output-row"><span class="output-label">Insight:</span><span
                                                     class="output-value" id="out-insight">--</span></div>
                                         </div>
+                                        <div class="agent-summary" id="sum-reflection">--</div>
                                     </div>
                                     </div>
                                 </div>
@@ -1222,7 +1236,7 @@
         }
     </style>
     </style>
-    <script src="/static/app.js?v=20260117_0259"></script>
+    <script src="/static/app.js?v=20260117_0715"></script>
     <script>
         // EMERGENCY FIX & LOGIC V3
         (function () {
