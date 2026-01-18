@@ -116,22 +116,23 @@ class SymbolSelectorAgent:
         window_minutes: int = AUTO1_WINDOW_MINUTES,
         interval: str = AUTO1_INTERVAL,
         threshold_pct: float = AUTO1_THRESHOLD_PCT
-    ) -> Optional[str]:
+    ) -> List[str]:
         """
-        Select single symbol by recent momentum (AUTO1).
+        Select symbols by recent momentum (AUTO1).
 
-        Picks the strongest mover over the last N minutes. If no symbol
-        exceeds the threshold, falls back to the strongest mover anyway.
+        Picks the strongest UP and DOWN movers over the last N minutes.
+        If a direction is not "clear" (below threshold), it will still
+        return the strongest mover but log the weak signal.
         """
         try:
             from src.api.binance_client import BinanceClient
         except Exception as e:
             log.error(f"❌ AUTO1 failed: BinanceClient unavailable: {e}")
-            return self.FALLBACK_SYMBOLS[0]
+            return [self.FALLBACK_SYMBOLS[0]]
 
         symbols = candidates or await self._get_expanded_candidates()
         if not symbols:
-            return self.FALLBACK_SYMBOLS[0]
+            return [self.FALLBACK_SYMBOLS[0]]
 
         interval_minutes = self._interval_to_minutes(interval)
         limit = max(2, int(window_minutes / interval_minutes))
@@ -158,21 +159,39 @@ class SymbolSelectorAgent:
         if not results:
             fallback = symbols[0] if symbols else self.FALLBACK_SYMBOLS[0]
             log.warning(f"⚠️ AUTO1 empty results, fallback to {fallback}")
-            return fallback
+            return [fallback]
 
-        results.sort(key=lambda x: abs(x["change_pct"]), reverse=True)
-        best = results[0]
-        direction = "UP" if best["change_pct"] >= 0 else "DOWN"
-        magnitude = abs(best["change_pct"])
+        best_up = max(results, key=lambda x: x["change_pct"])
+        best_down = min(results, key=lambda x: x["change_pct"])
 
-        if magnitude >= threshold_pct:
-            log.info(f"🎯 AUTO1 selected {best['symbol']} ({direction} {best['change_pct']:+.2f}%)")
-        else:
-            log.info(
-                f"ℹ️ AUTO1 no clear trend (<{threshold_pct:.2f}%), "
-                f"fallback to {best['symbol']} ({direction} {best['change_pct']:+.2f}%)"
-            )
-        return best["symbol"]
+        selected = []
+        if best_up["change_pct"] > 0:
+            selected.append(best_up["symbol"])
+        if best_down["change_pct"] < 0 and best_down["symbol"] not in selected:
+            selected.append(best_down["symbol"])
+
+        if not selected:
+            results.sort(key=lambda x: abs(x["change_pct"]), reverse=True)
+            best = results[0]
+            selected.append(best["symbol"])
+
+        def log_selection(label: str, entry: Dict[str, float]) -> None:
+            magnitude = abs(entry["change_pct"])
+            direction = "UP" if entry["change_pct"] >= 0 else "DOWN"
+            if magnitude >= threshold_pct:
+                log.info(f"🎯 AUTO1 {label}: {entry['symbol']} ({direction} {entry['change_pct']:+.2f}%)")
+            else:
+                log.info(
+                    f"ℹ️ AUTO1 {label} weak (<{threshold_pct:.2f}%): "
+                    f"{entry['symbol']} ({direction} {entry['change_pct']:+.2f}%)"
+                )
+
+        if best_up["symbol"] in selected:
+            log_selection("UP", best_up)
+        if best_down["symbol"] in selected and best_down["symbol"] != best_up["symbol"]:
+            log_selection("DOWN", best_down)
+
+        return selected
     
     async def select_top3(self, force_refresh: bool = False) -> List[str]:
         """

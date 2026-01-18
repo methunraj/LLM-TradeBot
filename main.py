@@ -213,6 +213,10 @@ class MultiAgentTradingBot:
         self.test_mode = test_mode
         global_state.is_test_mode = test_mode  # Set test mode in global state
         global_state.symbols = self.symbols  # 🆕 Sync symbols to global state for API
+
+        # Symbol selector cadence (AUTO1/AUTO3)
+        self.selector_interval_sec = 10 * 60
+        self.selector_last_run = 0.0
         
         # 交易参数
         self.max_position_size = max_position_size
@@ -2955,10 +2959,9 @@ class MultiAgentTradingBot:
                         if self.use_auto3:
                             top_symbols = asyncio.run(selector.select_top3(force_refresh=False))
                         else:
-                            selected = asyncio.run(
+                            top_symbols = asyncio.run(
                                 selector.select_auto1_recent_momentum(candidates=self.symbols)
-                            )
-                            top_symbols = [selected] if selected else []
+                            ) or []
 
                         if top_symbols:
                             self.symbols = top_symbols
