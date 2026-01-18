@@ -21,6 +21,7 @@ class SharedState:
     cycle_interval: int = 3  # Cycle interval in minutes (default 3)
     cycle_positions_opened: int = 0  # Positions opened in current cycle
     symbols: List[str] = field(default_factory=list)  # 🆕 Active trading symbols (supports AI500 Top5)
+    current_symbol: str = ""  # 🆕 Symbol currently being analyzed
     
     # Config Reload Flag (for Railway runtime config changes)
     config_changed: bool = False  # Set to True when config is updated via API

@@ -209,6 +209,7 @@ class MultiAgentTradingBot:
             log.info(f"Primary symbol {configured_primary} not in symbols list, using {self.primary_symbol}")
         
         self.current_symbol = self.primary_symbol  # 当前处理的交易对
+        global_state.current_symbol = self.current_symbol
         self.test_mode = test_mode
         global_state.is_test_mode = test_mode  # Set test mode in global state
         global_state.symbols = self.symbols  # 🆕 Sync symbols to global state for API
@@ -802,6 +803,7 @@ class MultiAgentTradingBot:
         
         # Update Dashboard Status
         global_state.is_running = True
+        global_state.current_symbol = self.current_symbol
         # Removed verbose log: Starting trading cycle
         
         try:
@@ -2990,6 +2992,7 @@ class MultiAgentTradingBot:
                 latest_prices = {}  # Store latest prices for PnL calculation
                 for symbol in self.symbols:
                     self.current_symbol = symbol  # 设置当前处理的交易对
+                    global_state.current_symbol = symbol
                     
                     # Analyze each symbol first without executing OPEN actions
                     result = asyncio.run(self.run_trading_cycle(analyze_only=True))

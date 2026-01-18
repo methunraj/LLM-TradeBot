@@ -288,6 +288,16 @@ function updateDashboard() {
                 updateDecisionFilter(data.system.symbols);  // 🆕 Also update decision filter
             }
 
+            const headerSymbol = (data.system && data.system.current_symbol)
+                || currentDecision?.symbol
+                || (Array.isArray(data.system?.symbols) && data.system.symbols.length > 0 ? data.system.symbols[0] : null);
+            if (headerSymbol) {
+                const symbolDisplayText = document.getElementById('symbol-display-text');
+                if (symbolDisplayText) {
+                    symbolDisplayText.textContent = headerSymbol;
+                }
+            }
+
             // New Renderers
             // Account & Positions Logic
             let activeAccount = data.account;
@@ -1467,7 +1477,7 @@ function updateAgentFramework(system, decision, agents) {
     } else {
         const selectorSymbols = Array.isArray(system.symbols) ? system.symbols : [];
         const selectorMode = selectorSymbols.length > 1 ? 'AUTO' : 'MANUAL';
-        const selectorSymbol = decision.symbol || (selectorSymbols.length > 0 ? selectorSymbols[0] : '--');
+        const selectorSymbol = system.current_symbol || decision.symbol || (selectorSymbols.length > 0 ? selectorSymbols[0] : '--');
 
         if (isRunningMode) {
             setAgentStatus('flow-symbol-selector', 'Done');
