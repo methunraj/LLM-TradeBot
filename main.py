@@ -2950,11 +2950,17 @@ class MultiAgentTradingBot:
                 if cycle_num == 1:
                     global_state.clear_init_logs()
 
-                # 🔝 Symbol Selector Agent must run first in cycle 1 (if enabled)
-                if cycle_num == 1 and self.agent_config.symbol_selector_agent:
+                # 🔝 Symbol Selector Agent runs every 10 minutes (must run before analysis)
+                should_run_selector = (
+                    self.agent_config.symbol_selector_agent
+                    and (self.selector_last_run == 0.0
+                         or (time.time() - self.selector_last_run) >= self.selector_interval_sec)
+                )
+                if should_run_selector:
+                    selector_started = time.time()
                     try:
-                        log.info("🎰 SymbolSelectorAgent (Cycle 1) running before analysis...")
-                        global_state.add_log("[🎰 SELECTOR] Cycle 1 symbol selection started")
+                        log.info("🎰 SymbolSelectorAgent running before analysis...")
+                        global_state.add_log("[🎰 SELECTOR] Symbol selection started")
                         selector = get_selector()
                         if self.use_auto3:
                             top_symbols = asyncio.run(selector.select_top3(force_refresh=False))
@@ -2968,6 +2974,9 @@ class MultiAgentTradingBot:
                             self.current_symbol = top_symbols[0]
                             global_state.symbols = top_symbols
                             global_state.current_symbol = self.current_symbol
+                            if self.primary_symbol not in self.symbols:
+                                self.primary_symbol = self.current_symbol
+                                log.info(f"🔄 Primary symbol updated to {self.primary_symbol} (selector)")
 
                             if self.agent_config.predict_agent:
                                 for symbol in top_symbols:
@@ -2985,6 +2994,8 @@ class MultiAgentTradingBot:
                     except Exception as e:
                         log.error(f"❌ SymbolSelectorAgent failed: {e}")
                         global_state.add_log(f"[🎰 SELECTOR] Failed: {e}")
+                    finally:
+                        self.selector_last_run = selector_started
                 
                 # 🧪 Test Mode: Record start of cycle account state (for Net Value Curve)
                 if self.test_mode:
@@ -3263,6 +3274,10 @@ def main():
         test_mode=args.test,
         kline_limit=args.kline_limit
     )
+
+    # Set initial execution mode before dashboard starts
+    auto_start = args.headless or args.auto_start
+    global_state.execution_mode = "Running" if auto_start else "Stopped"
     
     # 启动 Dashboard Server (跳过 headless 模式) - 优先启动，让用户能立即访问
     if not args.headless:
@@ -3275,13 +3290,13 @@ def main():
     else:
         print("🖥️  Headless mode: Web Dashboard disabled")
     
-    # 🔝 AUTO3 STARTUP EXECUTION (MANDATORY - runs before trading starts)
+    # 🔝 AUTO3 STARTUP EXECUTION (only for once mode; continuous uses selector loop)
     skip_auto3 = args.skip_auto3 and args.mode == 'once'
     if skip_auto3 and getattr(bot, 'use_auto3', False):
         log.info("⏭️ AUTO3 skipped for once mode")
         bot.use_auto3 = False
 
-    if hasattr(bot, 'use_auto3') and bot.use_auto3:
+    if args.mode == 'once' and hasattr(bot, 'use_auto3') and bot.use_auto3:
         log.info("=" * 60)
         log.info("🔝 AUTO3 STARTUP - Getting AI500 Top5 and selecting Top2...")
         log.info("⏳ Dashboard available at http://localhost:8000 while backtest runs...")
@@ -3330,8 +3345,9 @@ def main():
             log.info("🚀 Auto-start enabled: Trading begins immediately...")
         else:
             # Default to Stopped - Wait for user to click Start button
-            global_state.execution_mode = "Stopped"
-            log.info("🚀 System ready (Stopped). Waiting for user to click Start button...")
+            if global_state.execution_mode != "Running":
+                global_state.execution_mode = "Stopped"
+                log.info("🚀 System ready (Stopped). Waiting for user to click Start button...")
         
         global_state.is_running = True  # Keep event loop running
         bot.run_continuous(interval_minutes=args.interval, headless=args.headless)
