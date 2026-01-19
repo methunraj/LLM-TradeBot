@@ -1107,7 +1107,7 @@
         }
     </style>
     </style>
-    <script src="/static/app.js?v=20260120_0007"></script>
+    <script src="/static/app.js?v=20260120_0051"></script>
     <script>
         // Inline script removed (logic handled in app.js).
     </script>
@@ -1474,6 +1474,9 @@
                     <script>
                         window.loadTradingViewChart = function (symbol) {
                             symbol = symbol || 'BTCUSDT';
+                            if (window.lastChartSymbol === symbol) {
+                                return;
+                            }
                             // Convert to TradingView format: BINANCE:BTCUSDT
                             const tvSymbol = 'BINANCE:' + symbol;
                             const container = document.getElementById('tradingview-widget');
@@ -1508,6 +1511,7 @@
                             });
 
                             window.chartInitialized = true;
+                            window.lastChartSymbol = symbol;
                             console.log('📈 TradingView chart loaded:', tvSymbol);
                         };
 

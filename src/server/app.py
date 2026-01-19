@@ -281,7 +281,7 @@ async def get_status(authenticated: bool = Depends(verify_auth)):
         "logs": logs_tail,
         "logs_simplified": simplified_logs
     }
-    return clean_nans(data)
+    return clean_nans(global_state._serialize_obj(data))
 
 @app.post("/api/control")
 async def control_bot(cmd: ControlCommand, authenticated: bool = Depends(verify_admin)):

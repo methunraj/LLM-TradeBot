@@ -212,6 +212,7 @@ window.logout = function () {
 function getPreferredSymbol(system, decisionMap) {
     const selector = document.getElementById('symbol-selector');
     if (selector && selector.value) return selector.value;
+    if (system && system.current_symbol) return system.current_symbol;
     if (window.lastChartSymbol) return window.lastChartSymbol;
     if (system && Array.isArray(system.symbols) && system.symbols.length > 0) {
         return system.symbols[0];
@@ -288,7 +289,9 @@ function updateDashboard() {
                 updateDecisionFilter(data.system.symbols);  // 🆕 Also update decision filter
             }
 
+            const preferredSymbol = getPreferredSymbol(data.system, decisionMap);
             const headerSymbol = (data.system && data.system.current_symbol)
+                || preferredSymbol
                 || currentDecision?.symbol
                 || (Array.isArray(data.system?.symbols) && data.system.symbols.length > 0 ? data.system.symbols[0] : null);
             if (headerSymbol) {
@@ -296,10 +299,12 @@ function updateDashboard() {
                 if (symbolDisplayText) {
                     symbolDisplayText.textContent = headerSymbol;
                 }
-                if (typeof loadTradingViewChart === 'function' && headerSymbol !== window.lastChartSymbol) {
-                    window.lastChartSymbol = headerSymbol;
-                    loadTradingViewChart(headerSymbol);
-                }
+            }
+            if (preferredSymbol
+                && typeof loadTradingViewChart === 'function'
+                && preferredSymbol !== window.lastChartSymbol) {
+                window.lastChartSymbol = preferredSymbol;
+                loadTradingViewChart(preferredSymbol);
             }
 
             // New Renderers
@@ -824,10 +829,7 @@ function updatePositionInfo(account, positions = []) {
 
 // ... (renderSystemStatus and others remain same)
 
-// Init
-initChart();
-setInterval(updateDashboard, 2000); // Poll every 2s
-updateDashboard();
+// Init (handled in main DOMContentLoaded)
 
 // Note: Control button event listeners moved to setupEventListeners() at end of file
 // Symbol Selector - handled directly in index.html by TradingView loader
@@ -1249,18 +1251,7 @@ function updateAgentFramework(system, decision, agents) {
             : '';
         setSummary('sum-symbol-selector', `${selectorMode} -> ${selectorSymbol}${biasPart}${changePart}${volPart}.`);
 
-        if (selectorSymbol !== '--'
-            && selectorSymbol !== window.lastChartSymbol
-            && typeof loadTradingViewChart === 'function') {
-            window.lastChartSymbol = selectorSymbol;
-            loadTradingViewChart(selectorSymbol);
-            console.log('📈 K-line chart updated to:', selectorSymbol);
-        }
-
-        const symbolDisplayText = document.getElementById('symbol-display-text');
-        if (symbolDisplayText && selectorSymbol !== '--') {
-            symbolDisplayText.textContent = selectorSymbol;
-        }
+        // Chart updates are handled in updateDashboard to avoid auto-refresh.
     };
 
     const currentCycle = system?.cycle_counter;

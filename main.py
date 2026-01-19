@@ -404,7 +404,7 @@ class MultiAgentTradingBot:
                 top_symbols = asyncio.run(selector.select_top3(force_refresh=False))
             else:
                 top_symbols = asyncio.run(
-                    selector.select_auto1_recent_momentum(candidates=self.symbols)
+                    selector.select_auto1_recent_momentum()
                 ) or []
 
             if top_symbols:
@@ -3206,9 +3206,19 @@ class MultiAgentTradingBot:
                     print(f"\n🎯 本周期最优开仓机会: {best_decision['symbol']} (信心度: {best_decision['confidence']:.1f}%)")
                     global_state.add_log(f"[🎯 SYSTEM] Best: {best_decision['symbol']} (Conf: {best_decision['confidence']:.1f}%)")
                     
-                    # 只执行最优的一个
-                    # 注意：实际执行已经在 run_trading_cycle 中完成了
-                    # 这里只是记录和通知
+                    # 只执行最优的一个（重新运行完整执行流程）
+                    try:
+                        self.current_symbol = best_decision['symbol']
+                        global_state.current_symbol = self.current_symbol
+                        exec_result = asyncio.run(self.run_trading_cycle(analyze_only=False))
+                        exec_action = exec_result.get('action', 'unknown')
+                        exec_status = exec_result.get('status', 'unknown')
+                        global_state.add_log(
+                            f"[🎯 SYSTEM] Executed: {self.current_symbol} {exec_action} ({exec_status})"
+                        )
+                    except Exception as e:
+                        log.error(f"❌ Best decision execution failed: {e}", exc_info=True)
+                        global_state.add_log(f"[🎯 SYSTEM] Execution failed: {e}")
                     
                     # 如果有其他开仓机会被跳过，记录下来
                     if len(all_decisions) > 1:

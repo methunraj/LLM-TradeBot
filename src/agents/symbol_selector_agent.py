@@ -3,7 +3,7 @@
 ====================================================================
 
 Responsibilities:
-1. Get AI500 Top 10 + Major coins by volume
+1. Get AI500 Top 10 by volume
 2. Stage 1: Coarse filter (1h backtest) → Top 5
 3. Stage 2: Fine filter (15m backtest) → Top 3
 4. 6-hour refresh cycle
@@ -35,7 +35,7 @@ class SymbolSelectorAgent:
     Automated symbol selection based on backtest performance (AUTO3)
     
     Two-Stage Workflow:
-    1. Get AI500 Top 10 + Major coins by 24h volume (~16 symbols)
+    1. Get AI500 Top 10 by 24h volume
     2. Stage 1: Coarse filter (1h backtest, step=12) → Top 5
     3. Stage 2: Fine filter (15m backtest, step=3) → Top 3
     4. Cache results for 6 hours
@@ -52,10 +52,8 @@ class SymbolSelectorAgent:
         "ACTUSDT", "GOATUSDT", "TURBOUSDT", "PNUTUSDT"
     ]
     
-    # Major coins to include alongside AI500
-    MAJOR_COINS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT", "DOGEUSDT"]
     
-    FALLBACK_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]  # Top 3 fallback
+    FALLBACK_SYMBOLS = ["FETUSDT", "RENDERUSDT", "TAOUSDT"]  # AI500 fallback
 
     AUTO1_WINDOW_MINUTES = 30
     AUTO1_THRESHOLD_PCT = 0.8
@@ -79,7 +77,6 @@ class SymbolSelectorAgent:
             lookback_hours: Backtest lookback period (default: 24h)
         """
         self.ai500_candidates = self.AI500_CANDIDATES
-        self.major_coins = self.MAJOR_COINS
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.cache_file = self.cache_dir / "auto_top3_cache.json"
@@ -272,7 +269,7 @@ class SymbolSelectorAgent:
             log.info("🔄 STAGE 1: Coarse Filter (1h backtest)")
             log.info("=" * 60)
             
-            # Get AI500 Top 10 + Major coins
+            # Get AI500 Top 10
             candidates = await self._get_expanded_candidates()
             log.info(f"📊 Candidates ({len(candidates)}): {candidates}")
             
@@ -331,7 +328,7 @@ class SymbolSelectorAgent:
             return self.FALLBACK_SYMBOLS
     
     async def _get_expanded_candidates(self) -> List[str]:
-        """Get AI500 Top 10 + Major coins by 24h volume"""
+        """Get AI500 Top 10 by 24h volume"""
         try:
             from src.api.binance_client import BinanceClient
             
@@ -352,21 +349,14 @@ class SymbolSelectorAgent:
             ai_stats.sort(key=lambda x: x[1], reverse=True)
             ai500_top10 = [x[0] for x in ai_stats[:10]]
             
-            # Combine with major coins (avoid duplicates)
-            candidates = list(ai500_top10)
-            for coin in self.major_coins:
-                if coin not in candidates:
-                    candidates.append(coin)
-            
             log.info(f"📊 AI500 Top 10: {ai500_top10}")
-            log.info(f"📊 + Major coins: {self.major_coins}")
             
-            return candidates
+            return ai500_top10
             
         except Exception as e:
             log.error(f"Failed to get expanded candidates: {e}")
-            # Fallback: first 10 AI500 + majors
-            return self.ai500_candidates[:10] + self.major_coins
+            # Fallback: first 10 AI500
+            return self.ai500_candidates[:10]
     
     async def _run_backtests_stage(
         self,

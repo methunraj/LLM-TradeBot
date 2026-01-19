@@ -128,6 +128,8 @@ class SharedState:
             return int(obj)
         if isinstance(obj, (np.floating, np.float32, np.float64)):
             return float(obj)
+        if isinstance(obj, (np.bool_,)):
+            return bool(obj)
         if isinstance(obj, np.ndarray):
             return obj.tolist()
         if isinstance(obj, dict):
