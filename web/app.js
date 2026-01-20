@@ -1210,6 +1210,20 @@ function updateAgentFramework(system, decision, agents) {
             return;
         }
 
+        const lang = window.currentLang === 'zh' ? 'zh' : 'en';
+        const biasLabels = {
+            en: {
+                up: 'Bullish',
+                down: 'Bearish',
+                flat: 'Neutral'
+            },
+            zh: {
+                up: '看涨',
+                down: '看跌',
+                flat: '中性'
+            }
+        };
+
         const selectorSymbols = Array.isArray(system?.symbols) ? system.symbols : [];
         const selectorMode = selectorInfo.mode
             || (selectorSymbols.length > 1 ? 'AUTO' : 'MANUAL');
@@ -1223,9 +1237,9 @@ function updateAgentFramework(system, decision, agents) {
         let selectorBias = '--';
         if (selectorInfo.direction) {
             const dir = String(selectorInfo.direction).toUpperCase();
-            if (dir === 'UP' || dir === 'BULL' || dir === 'BULLISH') selectorBias = '看涨';
-            else if (dir === 'DOWN' || dir === 'BEAR' || dir === 'BEARISH') selectorBias = '看跌';
-            else if (dir === 'FLAT' || dir === 'NEUTRAL') selectorBias = '中性';
+            if (dir === 'UP' || dir === 'BULL' || dir === 'BULLISH') selectorBias = biasLabels[lang].up;
+            else if (dir === 'DOWN' || dir === 'BEAR' || dir === 'BEARISH') selectorBias = biasLabels[lang].down;
+            else if (dir === 'FLAT' || dir === 'NEUTRAL') selectorBias = biasLabels[lang].flat;
         }
 
         if (isRunningMode) {

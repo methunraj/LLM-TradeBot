@@ -485,6 +485,8 @@ LLM-TradeBot/
 
 The system uses a **Four-Layer Strategy Filter** architecture with **17 specialized Agents** collaborating to make trading decisions. Core agents are always enabled, while optional agents can be configured via Dashboard or `config.yaml`.
 
+![Multi-Agent Decision Framework](./docs/Multi-Agent%20Decision%20Framework.png)
+
 **Key Feature**: Agents have **LLM** and **Local** variants - LLM versions use AI for semantic analysis, while Local versions use fast rule-based heuristics.
 
 #### Core Agents (Always Enabled)
