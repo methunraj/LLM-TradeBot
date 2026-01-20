@@ -237,9 +237,10 @@ class MultiAgentTradingBot:
         if self.test_mode:
             saved_va = self.saver.load_virtual_account()
             if saved_va:
-                global_state.virtual_balance = saved_va.get('balance', 1000.0)
-                global_state.virtual_positions = saved_va.get('positions', {})
-                log.info(f"💰 Loaded persistent virtual account: Bal=${global_state.virtual_balance:.2f}, Pos={list(global_state.virtual_positions.keys())}")
+                log.info("💰 Found persistent virtual account. Resetting to initial balance for new session.")
+            global_state.virtual_balance = global_state.virtual_initial_balance
+            global_state.virtual_positions = {}
+            self._save_virtual_state()
         global_state.saver = self.saver # ✅ 将 saver 共享到全局状态，供各 Agent 使用
         
         
@@ -3307,6 +3308,18 @@ class MultiAgentTradingBot:
                 cycle_num = global_state.cycle_counter
                 cycle_id = f"cycle_{cycle_num:04d}_{int(time.time())}"
                 global_state.current_cycle_id = cycle_id
+
+                # 🧪 Test Mode: reset per-cycle baseline for PnL display
+                if self.test_mode:
+                    baseline = global_state.account_overview.get('total_equity', 0)
+                    if not baseline:
+                        unrealized = sum(
+                            float(pos.get('unrealized_pnl', 0) or 0)
+                            for pos in global_state.virtual_positions.values()
+                        )
+                        baseline = global_state.virtual_balance + unrealized
+                    global_state.virtual_initial_balance = baseline
+                    global_state.initial_balance = baseline
 
                 # 🧹 Clear initialization logs when Cycle 1 starts (sync with Recent Decisions)
                 if cycle_num == 1:
