@@ -3457,10 +3457,13 @@ class MultiAgentTradingBot:
                     current_interval = global_state.cycle_interval
                     wait_seconds = current_interval * 60
 
-                    # Run symbol selector on schedule (independent of cycle interval)
+                    # Run symbol selector on schedule (every 10 minutes, skip if holding positions)
+                    # Note: _run_symbol_selector also has internal position check for safety
+                    has_positions = bool(self._get_active_position_symbols())
                     if (self.agent_config.symbol_selector_agent
                             and (time.time() - self.selector_last_run) >= self.selector_interval_sec
-                            and global_state.execution_mode == "Running"):
+                            and global_state.execution_mode == "Running"
+                            and not has_positions):
                         self._run_symbol_selector(reason="scheduled")
                     
                     # 如果已经等待足够时间，结束等待
