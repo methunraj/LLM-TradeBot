@@ -64,11 +64,11 @@ class RiskAuditAgent:
     
     def __init__(
         self, 
-        max_leverage: float = 10.0,
-        max_position_pct: float = 0.3,  # 最大单仓位占比（30%）
-        max_total_risk_pct: float = 0.02,  # 最大总风险敞口（2%）
-        min_stop_loss_pct: float = 0.005,  # 最小止损距离（0.5%）
-        max_stop_loss_pct: float = 0.05,  # 最大止损距离（5%）
+        max_leverage: float = 12.0,
+        max_position_pct: float = 0.35,  # 最大单仓位占比（35%）
+        max_total_risk_pct: float = 0.012,  # 最大总风险敞口（1.2%）
+        min_stop_loss_pct: float = 0.002,  # 最小止损距离（0.2%）
+        max_stop_loss_pct: float = 0.025,  # 最大止损距离（2.5%）
     ):
         """
         初始化风控守护者 (The Guardian)
@@ -163,23 +163,24 @@ class RiskAuditAgent:
         if regime:
             r_type = regime.get('regime')
             if r_type == 'unknown':
-                if confidence < 65:
+                if confidence < 55:
                     return self._block_decision('total_blocks', "市场状态不明确，暂停开仓")
                 warnings.append("⚠️ 市场状态不明确，谨慎开仓")
             if r_type == 'volatile':
-                if confidence < 70:
+                if confidence < 60:
                     return self._block_decision('total_blocks', f"市场高波动(ATR {regime.get('atr_pct', 0):.2f}%)，风险控制拦截")
                 warnings.append(f"⚠️ 市场高波动(ATR {regime.get('atr_pct', 0):.2f}%)，谨慎开仓")
             if r_type == 'choppy':
-                if confidence < 70:  # Optimized: was 65
-                    return self._block_decision('total_blocks', f"震荡市信心不足({confidence:.1f} < 70)，拦截开仓")
-                if confidence < 80:  # Optimized: was 75
-                    warnings.append(f"⚠️ 震荡市信心一般({confidence:.1f} < 80)，谨慎开仓")
+                if confidence < 60:
+                    return self._block_decision('total_blocks', f"震荡市信心不足({confidence:.1f} < 60)，拦截开仓")
+                if confidence < 70:
+                    warnings.append(f"⚠️ 震荡市信心一般({confidence:.1f} < 70)，谨慎开仓")
 
         regime_name = str((decision.get('regime') or {}).get('regime', '')).lower()
         trend_scores = decision.get('trend_scores') or {}
         t_1h = trend_scores.get('trend_1h_score')
         t_15m = trend_scores.get('trend_15m_score')
+        t_5m = trend_scores.get('trend_5m_score')
         osc_scores = decision.get('oscillator_scores') or decision.get('oscillator') or {}
         osc_values = [
             osc_scores.get('osc_1h_score'),
@@ -189,19 +190,28 @@ class RiskAuditAgent:
         osc_values = [v for v in osc_values if isinstance(v, (int, float))]
         osc_min = min(osc_values) if osc_values else None
         long_strong_setup = False
-        if is_long and osc_min is not None and isinstance(t_1h, (int, float)) and isinstance(t_15m, (int, float)):
-            if t_1h >= 60 and t_15m >= 20 and osc_min > -20 and 'downtrend' not in regime_name:
-                long_strong_setup = True
+        if is_long and osc_min is not None:
+            if isinstance(t_5m, (int, float)) and isinstance(t_15m, (int, float)):
+                if t_5m >= 20 and t_15m >= 15 and osc_min > -30:
+                    long_strong_setup = True
+            if not long_strong_setup and isinstance(t_1h, (int, float)) and isinstance(t_15m, (int, float)):
+                if t_1h >= 50 and t_15m >= 15 and osc_min > -25 and 'downtrend' not in regime_name:
+                    long_strong_setup = True
         short_strong_setup = False
-        if is_short and isinstance(t_1h, (int, float)) and isinstance(t_15m, (int, float)) and osc_min is not None:
-            if t_1h <= -60 and t_15m <= -20 and osc_min <= -40 and 'uptrend' not in regime_name:
-                short_strong_setup = True
-        # Phase 3: Lower SHORT confidence from 75% to 60%
-        short_confidence = confidence >= 60  # Phase 3: 75 -> 60
+        if is_short and osc_min is not None:
+            if isinstance(t_5m, (int, float)) and isinstance(t_15m, (int, float)):
+                if t_5m <= -20 and t_15m <= -15 and osc_min <= -30:
+                    short_strong_setup = True
+            if not short_strong_setup and isinstance(t_1h, (int, float)) and isinstance(t_15m, (int, float)):
+                if t_1h <= -50 and t_15m <= -15 and osc_min <= -30 and 'uptrend' not in regime_name:
+                    short_strong_setup = True
+        short_confidence = confidence >= 55
         if is_short and not short_confidence:
-            return self._block_decision('total_blocks', f"空头信心不足({confidence:.1f} < 60)，拦截做空")
+            return self._block_decision('total_blocks', f"空头信心不足({confidence:.1f} < 55)，拦截做空")
         if is_short and not short_strong_setup:
-            return self._block_decision('total_blocks', "空头信号未达到强共振条件，拦截做空")
+            if confidence < 65:
+                return self._block_decision('total_blocks', "空头信号未达到强共振条件，拦截做空")
+            warnings.append("⚠️ 空头共振偏弱，谨慎做空")
         # 🔧 OPTIMIZATION: Relax symbol-specific filters (was blocking all trades)
         # Changed from hard blocks to conditional warnings
         symbol = decision.get('symbol')
@@ -209,15 +219,15 @@ class RiskAuditAgent:
         
         # FILUSDT: Discourage SHORT but allow with high confidence
         if symbol_upper == "FILUSDT":
-            if is_short and confidence < 80:  # Changed from blanket ban
-                return self._block_decision('total_blocks', "FILUSDT做空需高信心(≥80%)")
+            if is_short and confidence < 70:
+                return self._block_decision('total_blocks', "FILUSDT做空需高信心(≥70%)")
             elif is_short:
                 warnings.append("⚠️ FILUSDT做空风险较高，谨慎操作")
         
         # FETUSDT: Similar relaxation
         if symbol_upper == "FETUSDT":
-            if is_short and confidence < 80:
-                return self._block_decision('total_blocks', "FETUSDT做空需高信心(≥80%)")
+            if is_short and confidence < 70:
+                return self._block_decision('total_blocks', "FETUSDT做空需高信心(≥70%)")
         
         # 🔧 OPTIMIZATION: Relax LINKUSDT/FILUSDT LONG requirements
         # Changed from 85% confidence requirement to 75%
@@ -239,28 +249,27 @@ class RiskAuditAgent:
             short_pos_pct = pos_pct
             if pos_1h and isinstance(pos_1h.get('position_pct'), (int, float)):
                 short_pos_pct = pos_1h.get('position_pct', pos_pct)
-            short_pos_threshold = 75 if not short_strong_setup else 60
+            short_pos_threshold = 65 if not short_strong_setup else 55
 
             if location == 'middle' or 40 <= pos_pct <= 60:
                 if not ((is_short and short_strong_setup and short_pos_pct >= short_pos_threshold) or (is_long and long_strong_setup)):
-                    # Phase 3: 75% → 60%
-                    if confidence < 60:
+                    if confidence < 55:
                         return self._block_decision('total_blocks', f"价格处于区间中部({pos_pct:.1f}%)，R/R极差，禁止开仓")
                     warnings.append(f"⚠️ 价格处于区间中部({pos_pct:.1f}%)，R/R偏弱，谨慎开仓")
             
             if is_long and pos_pct > 70:
-                if pos_pct > 80 and confidence < 60 and not long_strong_setup:  # Phase 3: 75 -> 60
+                if pos_pct > 80 and confidence < 55 and not long_strong_setup:
                     return self._block_decision('total_blocks', f"做多位置过高({pos_pct:.1f}%)，存在回调风险")
                 warnings.append(f"⚠️ 做多位置偏高({pos_pct:.1f}%)，谨慎开仓")
             
             if is_short and short_pos_pct < short_pos_threshold:
-                if confidence < 80 and not short_strong_setup:
+                if confidence < 70 and not short_strong_setup:
                     return self._block_decision('total_blocks', f"做空位置偏低({short_pos_pct:.1f}%)，需接近1h阻力带(≥{short_pos_threshold:.0f}%)")
                 warnings.append(f"⚠️ 做空位置偏低({short_pos_pct:.1f}%)，谨慎开仓")
 
         # 0.35 方向不明时的做多收紧 (Volatile Directionless Guard)
         if regime_name == 'volatile_directionless' and is_long and not long_strong_setup:
-            if confidence < 80:
+            if confidence < 70:
                 return self._block_decision('total_blocks', "方向不明(volatile_directionless)，做多需更强趋势确认")
             warnings.append("⚠️ 方向不明(volatile_directionless)，谨慎做多")
 
@@ -275,12 +284,14 @@ class RiskAuditAgent:
         if osc_values:
             osc_min = min(osc_values)
             osc_max = max(osc_values)
-            if is_long and osc_min <= -60:
+            if is_long and osc_min <= -70:
                 return self._block_decision('total_blocks', f"震荡指标强烈超买({osc_min:.0f})，避免追高做多")
-            if is_short and osc_max >= 40:
+            if is_short and osc_max >= 50:
                 return self._block_decision('total_blocks', f"震荡指标强烈超卖({osc_max:.0f})，避免追低做空")
-            if is_short and osc_min > -10:
-                return self._block_decision('total_blocks', f"空头缺乏超买信号(最弱:{osc_min:+.0f})，避免弱势做空")
+            if is_short and osc_min > -5:
+                if confidence < 70:
+                    return self._block_decision('total_blocks', f"空头缺乏超买信号(最弱:{osc_min:+.0f})，避免弱势做空")
+                warnings.append(f"⚠️ 空头超买信号偏弱(最弱:{osc_min:+.0f})")
 
         # 0.6 空头趋势强度过滤 (Backtest 优化: 空头全败 -> 提高门槛)
         trend_scores = decision.get('trend_scores') or {}
@@ -288,19 +299,19 @@ class RiskAuditAgent:
         t_15m = trend_scores.get('trend_15m_score')
         if is_short:
             # 若缺少趋势分数，则跳过此规则
-            if isinstance(t_1h, (int, float)) and t_1h > -60:
-                if confidence < 80:
+            if isinstance(t_1h, (int, float)) and t_1h > -40:
+                if confidence < 70:
                     return self._block_decision('total_blocks', f"空头趋势不足(1h={t_1h:+.0f})，避免逆势做空")
                 warnings.append(f"⚠️ 空头趋势偏弱(1h={t_1h:+.0f})，谨慎做空")
-            if isinstance(t_15m, (int, float)) and t_15m > -20:
-                if confidence < 80:
+            if isinstance(t_15m, (int, float)) and t_15m > -10:
+                if confidence < 70:
                     return self._block_decision('total_blocks', f"空头趋势不足(15m={t_15m:+.0f})，避免逆势做空")
                 warnings.append(f"⚠️ 空头趋势偏弱(15m={t_15m:+.0f})，谨慎做空")
             # Regime 反向过滤 (仅在可识别趋势时启用)
             regime = decision.get('regime') or {}
             regime_name = str(regime.get('regime', '')).lower()
             if regime_name in ['trending_up'] or 'uptrend' in regime_name:
-                if confidence < 80:
+                if confidence < 70:
                     return self._block_decision('total_blocks', f"趋势向上({regime.get('regime')}), 禁止逆势做空")
                 warnings.append(f"⚠️ 趋势向上({regime.get('regime')}), 谨慎做空")
 
@@ -313,8 +324,8 @@ class RiskAuditAgent:
             reward = abs(take_profit - entry_price)
             if risk > 0:
                 rr_ratio = reward / risk
-                if rr_ratio < 1.5:
-                    return self._block_decision('total_blocks', f"风险回报比不足({rr_ratio:.2f} < 1.5)")
+                if rr_ratio < 1.15:
+                    return self._block_decision('total_blocks', f"风险回报比不足({rr_ratio:.2f} < 1.15)")
         
         # 1. 【一票否决】检查逆向开仓
         if current_position:
@@ -515,8 +526,8 @@ class RiskAuditAgent:
             dynamic_stop_pct = min(max(atr_pct * 1.5 / 100, self.min_stop_loss_pct), self.max_stop_loss_pct)
             log.debug(f"📊 ATR-based stop: ATR={atr_pct:.2f}%, dynamic_stop={dynamic_stop_pct:.2%}")
         else:
-            # 无 ATR 数据，使用默认 2%
-            dynamic_stop_pct = 0.02
+            # 无 ATR 数据，使用默认 1%
+            dynamic_stop_pct = 0.01
         
         if not stop_loss:
             # 没有设置止损，使用动态止损距离

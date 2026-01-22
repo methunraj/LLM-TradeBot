@@ -2763,9 +2763,9 @@ class MultiAgentTradingBot:
         else:
             available_balance = self._get_account_balance()
         
-        # 动态仓位计算：置信度 100% 时使用可用余额的 30%
-        # 公式: 仓位比例 = 基础比例(30%) × 置信度
-        base_position_pct = 0.30  # 最大仓位比例 30%
+        # 动态仓位计算：置信度 100% 时使用可用余额的 33%
+        # 公式: 仓位比例 = 基础比例(33%) × 置信度
+        base_position_pct = 1 / 3  # 最大仓位比例 33%
         conf_pct = confidence
         if isinstance(conf_pct, (int, float)) and 0 < conf_pct <= 1:
             conf_pct *= 100

@@ -35,7 +35,7 @@ trading:
 # 风控配置
 risk:
   max_risk_per_trade_pct: 1.5  # 单笔最大风险
-  max_total_position_pct: 30.0  # 最大总仓位
+  max_total_position_pct: 33.3  # 最大总仓位
   max_leverage: 5
   max_consecutive_losses: 3
   stop_trading_on_drawdown_pct: 10.0

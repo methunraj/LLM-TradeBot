@@ -96,6 +96,7 @@ let curveBaselineBalance = null;
 let curveBaselineTime = null;
 let curveBaselineLabelKey = 'chart.initial';
 let balanceSessionKey = null;
+let baselineLoadedFromStorage = false;
 const BASELINE_STORAGE_PREFIX = 'rtBalanceBaseline:';
 
 const CHART_COLORS = {
@@ -161,6 +162,15 @@ function saveBaselineToStorage(sessionKey, baseline) {
     if (!sessionKey || !baseline) return;
     try {
         localStorage.setItem(`${BASELINE_STORAGE_PREFIX}${sessionKey}`, JSON.stringify(baseline));
+    } catch {
+        // Ignore storage failures
+    }
+}
+
+function clearBaselineFromStorage(sessionKey) {
+    if (!sessionKey) return;
+    try {
+        localStorage.removeItem(`${BASELINE_STORAGE_PREFIX}${sessionKey}`);
     } catch {
         // Ignore storage failures
     }
@@ -436,11 +446,13 @@ function updateDashboard() {
                     curveBaselineBalance = null;
                     curveBaselineTime = null;
                     curveBaselineLabelKey = 'chart.initial';
+                    baselineLoadedFromStorage = false;
                     const stored = loadBaselineFromStorage(balanceSessionKey);
                     if (stored) {
                         curveBaselineBalance = stored.balance;
                         curveBaselineTime = stored.time;
                         curveBaselineLabelKey = stored.labelKey || 'chart.cycle_start';
+                        baselineLoadedFromStorage = true;
                     }
                 }
             }
@@ -568,9 +580,11 @@ function updateDashboard() {
                     curveBaselineBalance = null;
                     curveBaselineTime = null;
                     curveBaselineLabelKey = 'chart.initial';
+                    baselineLoadedFromStorage = false;
+                    clearBaselineFromStorage(balanceSessionKey);
                 }
 
-                if (cycleCounter === 1 && lastCycleCounter !== 1) {
+                if (cycleCounter === 1 && lastCycleCounter !== 1 && !baselineLoadedFromStorage) {
                     realtimeBalanceHistory = [];
                     curveBaselineBalance = null;
                     curveBaselineTime = null;
@@ -580,6 +594,17 @@ function updateDashboard() {
                 if (cycleCounter === 1 && curveBaselineBalance === null && balanceSnapshot) {
                     curveBaselineBalance = balanceSnapshot.realtimeBalance;
                     curveBaselineTime = formatTimestamp();
+                    saveBaselineToStorage(balanceSessionKey, {
+                        balance: curveBaselineBalance,
+                        time: curveBaselineTime,
+                        labelKey: curveBaselineLabelKey
+                    });
+                }
+
+                if (cycleCounter >= 1 && curveBaselineBalance === null && balanceSnapshot) {
+                    curveBaselineBalance = balanceSnapshot.realtimeBalance;
+                    curveBaselineTime = formatTimestamp();
+                    curveBaselineLabelKey = 'chart.cycle_start';
                     saveBaselineToStorage(balanceSessionKey, {
                         balance: curveBaselineBalance,
                         time: curveBaselineTime,
@@ -1083,8 +1108,9 @@ function updateRealtimeBalance({ account, system, virtualAccount, chartData, pos
     const { initial, realized, unrealized, realtimeBalance } = snapshot;
     const displayInitial = Number.isFinite(curveBaselineBalance) ? curveBaselineBalance : initial;
     const pnlAmount = realtimeBalance - displayInitial;
+    const currentBalanceDisplay = displayInitial + pnlAmount;
 
-    setTxt('account-realtime-balance', fmt(realtimeBalance));
+    setTxt('account-realtime-balance', fmt(currentBalanceDisplay));
     setTxt('account-realtime-initial', fmt(displayInitial));
     setTxt('account-realtime-realized', fmt(realized));
     setTxt('account-realtime-unrealized', fmt(unrealized));

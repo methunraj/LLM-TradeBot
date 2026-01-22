@@ -587,8 +587,8 @@ class BacktestEngine:
                     self.config.max_position_size * leverage
                 )
             else:
-                # 默认逻辑：与实盘一致（最大30%，按置信度缩放）
-                base_position_pct = 0.30
+                # 默认逻辑：与实盘一致（最大33%，按置信度缩放）
+                base_position_pct = 1 / 3
                 position_pct = base_position_pct * (confidence / 100)
                 position_size = available_cash * position_pct
 
