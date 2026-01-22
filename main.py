@@ -2250,10 +2250,27 @@ class MultiAgentTradingBot:
                     # Test Mode: Use virtual balance
                     wallet_bal = global_state.virtual_balance
                     avail_bal = global_state.virtual_balance
-                    unrealized_pnl = 0.0 # Updated at end of cycle
                     
-                    # Log for debugging
-                    # log.info(f"Test Mode: Using virtual balance ${avail_bal}")
+                    # Calculate unrealized PnL from open positions
+                    unrealized_pnl = sum(
+                        pos.get('unrealized_pnl', 0) 
+                        for pos in global_state.virtual_positions.values()
+                    )
+                    
+                    # Total Equity = Balance + Unrealized PnL
+                    total_equity = wallet_bal + unrealized_pnl
+                    
+                    # Total PnL = Current Equity - Initial Balance
+                    initial_balance = global_state.virtual_initial_balance
+                    total_pnl = total_equity - initial_balance
+                    
+                    # Update State (must call to sync with frontend)
+                    global_state.update_account(
+                        equity=total_equity,
+                        available=avail_bal,
+                        wallet=wallet_bal,
+                        pnl=total_pnl  # ✅ Fix: Pass total PnL, not unrealized only
+                    )
                     
                     account_balance = avail_bal
                 else:
