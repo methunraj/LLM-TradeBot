@@ -352,7 +352,18 @@ const i18n = {
         'reason.多空分歧': 'Bull-bear disagreement',
         'reason.信心不足': 'Confidence insufficient',
         'reason.等待更好入场点': 'Waiting for better entry',
-        'reason.HOLD决策': 'HOLD decision'
+        'reason.HOLD决策': 'HOLD decision',
+
+        // Symbol Ranking
+        'section.symbol_ranking': 'Symbol Performance Ranking',
+        'table.pnl': 'PnL ($)',
+        'table.return_rate': 'Return (%)',
+        'table.trades': 'Trades',
+        'table.win_rate': 'Win Rate',
+        'ranking.no_trades': 'No completed trades in current session',
+        'ranking.total_pnl': 'Total PnL',
+        'ranking.total_trades': 'Trades',
+        'ranking.overall_win_rate': 'Win Rate'
     },
 
     zh: {
@@ -690,7 +701,18 @@ const i18n = {
         'summary.output.blocked': '执行拦截',
         'summary.output.format': '执行 {action} {symbol} {size}',
         'summary.decision.pending': '等待决策',
-        'summary.blocked.reason': '被风控拦截'
+        'summary.blocked.reason': '被风控拦截',
+
+        // Symbol Ranking
+        'section.symbol_ranking': '营收币种排名',
+        'table.pnl': '盈亏 ($)',
+        'table.return_rate': '收益率 (%)',
+        'table.trades': '交易次数',
+        'table.win_rate': '胜率',
+        'ranking.no_trades': '当前会话暂无已平仓交易',
+        'ranking.total_pnl': '总盈亏',
+        'ranking.total_trades': '交易次数',
+        'ranking.overall_win_rate': '综合胜率'
     }
 };
 

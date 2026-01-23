@@ -398,6 +398,73 @@ async def test_log(authenticated: bool = Depends(verify_auth)):
         "latest_logs": global_state.recent_logs[-5:] if global_state.recent_logs else []
     }
 
+@app.get("/api/symbol_stats")
+async def get_symbol_stats(authenticated: bool = Depends(verify_auth)):
+    """
+    Get per-symbol performance statistics for current session only (cycle >= 1)
+    Returns: List of symbol stats sorted by PnL descending
+    """
+    from collections import defaultdict
+    
+    # Filter trades from current session (cycle >= 1)
+    current_session_trades = [
+        trade for trade in global_state.trade_history 
+        if trade.get('cycle', 0) >= 1
+    ]
+    
+    # Aggregate by symbol
+    symbol_stats = defaultdict(lambda: {
+        'total_pnl': 0.0,
+        'total_cost': 0.0,
+        'trade_count': 0,
+        'win_count': 0,
+        'loss_count': 0,
+        'trades': []
+    })
+    
+    for trade in current_session_trades:
+        symbol = trade.get('symbol', 'UNKNOWN')
+        pnl = trade.get('pnl', 0.0)
+        cost = trade.get('cost', 0.0) or trade.get('position_size_usd', 0.0)
+        
+        stats = symbol_stats[symbol]
+        stats['total_pnl'] += pnl
+        stats['total_cost'] += cost
+        stats['trade_count'] += 1
+        stats['trades'].append(trade)
+        
+        if pnl > 0:
+            stats['win_count'] += 1
+        elif pnl < 0:
+            stats['loss_count'] += 1
+    
+    # Calculate derived metrics
+    result = []
+    for symbol, stats in symbol_stats.items():
+        win_rate = (stats['win_count'] / stats['trade_count'] * 100) if stats['trade_count'] > 0 else 0
+        return_rate = (stats['total_pnl'] / stats['total_cost'] * 100) if stats['total_cost'] > 0 else 0
+        
+        result.append({
+            'symbol': symbol,
+            'total_pnl': round(stats['total_pnl'], 2),
+            'return_rate': round(return_rate, 2),
+            'trade_count': stats['trade_count'],
+            'win_count': stats['win_count'],
+            'loss_count': stats['loss_count'],
+            'win_rate': round(win_rate, 1)
+        })
+    
+    # Sort by total PnL descending
+    result.sort(key=lambda x: x['total_pnl'], reverse=True)
+    
+    return {
+        "status": "success",
+        "data": result,
+        "total_symbols": len(result),
+        "session_trade_count": len(current_session_trades)
+    }
+
+
 @app.post("/api/upload_prompt")
 async def upload_prompt(file: UploadFile = File(...), authenticated: bool = Depends(verify_admin)):
     try:

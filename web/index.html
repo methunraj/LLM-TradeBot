@@ -192,42 +192,52 @@
                                 <div class="flow-layer-row">
                                     <div class="layer-label" data-i18n="framework.layer.data">📡 Data Layer</div>
                                     <div class="layer-agents">
-                                    <div class="agent-box" id="flow-datasync">
-                                        <div class="agent-header">
-                                            <span class="agent-emoji">🕵️</span>
-                                            <span class="agent-title" data-i18n="agent.card.datasync">DataSync Agent</span>
-                                            <span class="agent-badge idle">Idle</span>
+                                        <div class="agent-box" id="flow-datasync">
+                                            <div class="agent-header">
+                                                <span class="agent-emoji">🕵️</span>
+                                                <span class="agent-title" data-i18n="agent.card.datasync">DataSync
+                                                    Agent</span>
+                                                <span class="agent-badge idle">Idle</span>
+                                            </div>
+                                            <div class="agent-output">
+                                                <div class="output-row"><span class="output-label"
+                                                        id="label-tf-1">TF1:</span><span class="output-value"
+                                                        id="out-tf-1">--</span></div>
+                                                <div class="output-row"><span class="output-label"
+                                                        id="label-tf-2">TF2:</span><span class="output-value"
+                                                        id="out-tf-2">--</span></div>
+                                                <div class="output-row"><span class="output-label"
+                                                        id="label-tf-3">TF3:</span><span class="output-value"
+                                                        id="out-tf-3">--</span></div>
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.oi">OI:</span><span class="output-value"
+                                                        id="out-oi">--</span></div>
+                                            </div>
+                                            <div class="agent-summary" id="sum-datasync">--</div>
                                         </div>
-                                        <div class="agent-output">
-                                            <div class="output-row"><span class="output-label" id="label-tf-1">TF1:</span><span
-                                                    class="output-value" id="out-tf-1">--</span></div>
-                                            <div class="output-row"><span class="output-label" id="label-tf-2">TF2:</span><span
-                                                    class="output-value" id="out-tf-2">--</span></div>
-                                            <div class="output-row"><span class="output-label" id="label-tf-3">TF3:</span><span
-                                                    class="output-value" id="out-tf-3">--</span></div>
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.oi">OI:</span><span
-                                                    class="output-value" id="out-oi">--</span></div>
+                                        <div class="agent-box" id="flow-symbol-selector">
+                                            <div class="agent-header">
+                                                <span class="agent-emoji">🎰</span>
+                                                <span class="agent-title" data-i18n="agent.card.symbol_selector">Symbol
+                                                    Selector</span>
+                                                <span class="agent-badge idle">Idle</span>
+                                            </div>
+                                            <div class="agent-output">
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.mode">Mode:</span><span
+                                                        class="output-value" id="out-selector-mode">AUTO1</span></div>
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.symbol">Symbol:</span><span
+                                                        class="output-value" id="out-selector-symbol">--</span></div>
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.bias">Bias:</span><span
+                                                        class="output-value" id="out-selector-bias">--</span></div>
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.score">Score:</span><span
+                                                        class="output-value" id="out-selector-score">--</span></div>
+                                            </div>
+                                            <div class="agent-summary" id="sum-symbol-selector">--</div>
                                         </div>
-                                        <div class="agent-summary" id="sum-datasync">--</div>
-                                    </div>
-                                    <div class="agent-box" id="flow-symbol-selector">
-                                        <div class="agent-header">
-                                            <span class="agent-emoji">🎰</span>
-                                            <span class="agent-title" data-i18n="agent.card.symbol_selector">Symbol Selector</span>
-                                            <span class="agent-badge idle">Idle</span>
-                                        </div>
-                                        <div class="agent-output">
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.mode">Mode:</span><span
-                                                    class="output-value" id="out-selector-mode">AUTO1</span></div>
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.symbol">Symbol:</span><span
-                                                    class="output-value" id="out-selector-symbol">--</span></div>
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.bias">Bias:</span><span
-                                                    class="output-value" id="out-selector-bias">--</span></div>
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.score">Score:</span><span
-                                                    class="output-value" id="out-selector-score">--</span></div>
-                                        </div>
-                                        <div class="agent-summary" id="sum-symbol-selector">--</div>
-                                    </div>
                                     </div>
                                 </div>
                                 <div class="flow-connector vertical">
@@ -239,90 +249,112 @@
                             <!-- Layer 2: Analysis Layer -->
                             <div class="flow-layer" data-layer="analysis">
                                 <div class="flow-layer-row">
-                                    <div class="layer-label" data-i18n="framework.layer.analysis">📊 Analysis Layer</div>
+                                    <div class="layer-label" data-i18n="framework.layer.analysis">📊 Analysis Layer
+                                    </div>
                                     <div class="layer-agents">
-                                    <div class="agent-box" id="flow-quant">
-                                        <div class="agent-header">
-                                            <span class="agent-emoji">👨‍🔬</span>
-                                            <span class="agent-title" data-i18n="agent.card.quant">Quant Analyst</span>
-                                            <span class="agent-badge idle">Idle</span>
+                                        <div class="agent-box" id="flow-quant">
+                                            <div class="agent-header">
+                                                <span class="agent-emoji">👨‍🔬</span>
+                                                <span class="agent-title" data-i18n="agent.card.quant">Quant
+                                                    Analyst</span>
+                                                <span class="agent-badge idle">Idle</span>
+                                            </div>
+                                            <div class="agent-output">
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.ema">EMA:</span><span
+                                                        class="output-value" id="out-ema">--</span></div>
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.rsi">RSI:</span><span
+                                                        class="output-value" id="out-rsi">--</span></div>
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.macd">MACD:</span><span
+                                                        class="output-value" id="out-macd">--</span></div>
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.bb">BB:</span><span class="output-value"
+                                                        id="out-bb">--</span></div>
+                                            </div>
+                                            <div class="agent-summary" id="sum-quant">--</div>
                                         </div>
-                                        <div class="agent-output">
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.ema">EMA:</span><span
-                                                    class="output-value" id="out-ema">--</span></div>
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.rsi">RSI:</span><span
-                                                    class="output-value" id="out-rsi">--</span></div>
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.macd">MACD:</span><span
-                                                    class="output-value" id="out-macd">--</span></div>
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.bb">BB:</span><span
-                                                    class="output-value" id="out-bb">--</span></div>
+                                        <div class="agent-box" id="flow-regime">
+                                            <div class="agent-header">
+                                                <span class="agent-emoji">🔮</span>
+                                                <span class="agent-title" data-i18n="agent.card.regime">Regime
+                                                    Detector</span>
+                                                <span class="agent-badge idle">Idle</span>
+                                            </div>
+                                            <div class="agent-output">
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.state">State:</span><span
+                                                        class="output-value" id="out-regime">--</span></div>
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.adx">ADX:</span><span
+                                                        class="output-value" id="out-adx">--</span></div>
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.conf">Conf:</span><span
+                                                        class="output-value" id="out-regime-conf">--</span></div>
+                                            </div>
+                                            <div class="agent-summary" id="sum-regime">--</div>
                                         </div>
-                                        <div class="agent-summary" id="sum-quant">--</div>
-                                    </div>
-                                    <div class="agent-box" id="flow-regime">
-                                        <div class="agent-header">
-                                            <span class="agent-emoji">🔮</span>
-                                            <span class="agent-title" data-i18n="agent.card.regime">Regime Detector</span>
-                                            <span class="agent-badge idle">Idle</span>
+                                        <div class="agent-box" id="flow-trigger-detector">
+                                            <div class="agent-header">
+                                                <span class="agent-emoji">⚡</span>
+                                                <span class="agent-title"
+                                                    data-i18n="agent.card.trigger_detector">Trigger Detector</span>
+                                                <span class="agent-badge idle">Idle</span>
+                                            </div>
+                                            <div class="agent-output">
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.pattern">Pattern:</span><span
+                                                        class="output-value" id="out-pattern">--</span></div>
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.signal">Signal:</span><span
+                                                        class="output-value" id="out-trigger-signal">--</span></div>
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.score">Score:</span><span
+                                                        class="output-value" id="out-trigger-score">--</span></div>
+                                            </div>
+                                            <div class="agent-summary" id="sum-trigger-detector">--</div>
                                         </div>
-                                        <div class="agent-output">
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.state">State:</span><span
-                                                    class="output-value" id="out-regime">--</span></div>
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.adx">ADX:</span><span
-                                                    class="output-value" id="out-adx">--</span></div>
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.conf">Conf:</span><span
-                                                    class="output-value" id="out-regime-conf">--</span></div>
+                                        <div class="agent-box" id="flow-position-analyzer">
+                                            <div class="agent-header">
+                                                <span class="agent-emoji">📍</span>
+                                                <span class="agent-title"
+                                                    data-i18n="agent.card.position_analyzer">Position Analyzer</span>
+                                                <span class="agent-badge idle">Idle</span>
+                                            </div>
+                                            <div class="agent-output">
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.zone">Zone:</span><span
+                                                        class="output-value" id="out-zone">--</span></div>
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.sr">S/R:</span><span class="output-value"
+                                                        id="out-sr">--</span></div>
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.range">Range:</span><span
+                                                        class="output-value" id="out-range">--</span></div>
+                                            </div>
+                                            <div class="agent-summary" id="sum-position-analyzer">--</div>
                                         </div>
-                                        <div class="agent-summary" id="sum-regime">--</div>
-                                    </div>
-                                    <div class="agent-box" id="flow-trigger-detector">
-                                        <div class="agent-header">
-                                            <span class="agent-emoji">⚡</span>
-                                            <span class="agent-title" data-i18n="agent.card.trigger_detector">Trigger Detector</span>
-                                            <span class="agent-badge idle">Idle</span>
+                                        <div class="agent-box" id="flow-predict">
+                                            <div class="agent-header">
+                                                <span class="agent-emoji">🎯</span>
+                                                <span class="agent-title" data-i18n="agent.card.predict">Predict
+                                                    Agent</span>
+                                                <span class="agent-badge idle">Idle</span>
+                                            </div>
+                                            <div class="agent-output">
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.pup">P(Up):</span><span
+                                                        class="output-value bullish" id="out-pup">--%</span></div>
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.pdown">P(Down):</span><span
+                                                        class="output-value bearish" id="out-pdown">--%</span></div>
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.signal">Signal:</span><span
+                                                        class="output-value" id="out-signal">--</span></div>
+                                            </div>
+                                            <div class="agent-summary" id="sum-predict">--</div>
                                         </div>
-                                        <div class="agent-output">
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.pattern">Pattern:</span><span
-                                                    class="output-value" id="out-pattern">--</span></div>
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.signal">Signal:</span><span
-                                                    class="output-value" id="out-trigger-signal">--</span></div>
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.score">Score:</span><span
-                                                    class="output-value" id="out-trigger-score">--</span></div>
-                                        </div>
-                                        <div class="agent-summary" id="sum-trigger-detector">--</div>
-                                    </div>
-                                    <div class="agent-box" id="flow-position-analyzer">
-                                        <div class="agent-header">
-                                            <span class="agent-emoji">📍</span>
-                                            <span class="agent-title" data-i18n="agent.card.position_analyzer">Position Analyzer</span>
-                                            <span class="agent-badge idle">Idle</span>
-                                        </div>
-                                        <div class="agent-output">
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.zone">Zone:</span><span
-                                                    class="output-value" id="out-zone">--</span></div>
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.sr">S/R:</span><span
-                                                    class="output-value" id="out-sr">--</span></div>
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.range">Range:</span><span
-                                                    class="output-value" id="out-range">--</span></div>
-                                        </div>
-                                        <div class="agent-summary" id="sum-position-analyzer">--</div>
-                                    </div>
-                                    <div class="agent-box" id="flow-predict">
-                                        <div class="agent-header">
-                                            <span class="agent-emoji">🎯</span>
-                                            <span class="agent-title" data-i18n="agent.card.predict">Predict Agent</span>
-                                            <span class="agent-badge idle">Idle</span>
-                                        </div>
-                                        <div class="agent-output">
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.pup">P(Up):</span><span
-                                                    class="output-value bullish" id="out-pup">--%</span></div>
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.pdown">P(Down):</span><span
-                                                    class="output-value bearish" id="out-pdown">--%</span></div>
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.signal">Signal:</span><span
-                                                    class="output-value" id="out-signal">--</span></div>
-                                        </div>
-                                        <div class="agent-summary" id="sum-predict">--</div>
-                                    </div>
                                     </div>
                                 </div>
                                 <div class="flow-connector vertical merge">
@@ -334,56 +366,69 @@
                             <!-- Layer 2.5: LLM Strategy Layer -->
                             <div class="flow-layer" data-layer="strategy">
                                 <div class="flow-layer-row">
-                                    <div class="layer-label" data-i18n="framework.layer.strategy">🧠 Semantic Strategy Layer</div>
+                                    <div class="layer-label" data-i18n="framework.layer.strategy">🧠 Semantic Strategy
+                                        Layer</div>
                                     <div class="layer-agents">
-                                    <div class="agent-box" id="flow-trend-agent">
-                                        <div class="agent-header">
-                                            <span class="agent-emoji">📈</span>
-                                            <span class="agent-title" id="title-trend-agent" data-i18n="agent.card.trend">Trend Agent</span>
-                                            <span class="agent-badge idle">Idle</span>
+                                        <div class="agent-box" id="flow-trend-agent">
+                                            <div class="agent-header">
+                                                <span class="agent-emoji">📈</span>
+                                                <span class="agent-title" id="title-trend-agent"
+                                                    data-i18n="agent.card.trend">Trend Agent</span>
+                                                <span class="agent-badge idle">Idle</span>
+                                            </div>
+                                            <div class="agent-output">
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.trend1h">1h Trend:</span><span
+                                                        class="output-value" id="out-trend-1h">--</span></div>
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.bias">Bias:</span><span
+                                                        class="output-value" id="out-trend-bias">--</span></div>
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.conf">Conf:</span><span
+                                                        class="output-value" id="out-trend-conf">--</span></div>
+                                            </div>
+                                            <div class="agent-summary" id="sum-trend-agent">--</div>
                                         </div>
-                                        <div class="agent-output">
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.trend1h">1h Trend:</span><span
-                                                    class="output-value" id="out-trend-1h">--</span></div>
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.bias">Bias:</span><span
-                                                    class="output-value" id="out-trend-bias">--</span></div>
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.conf">Conf:</span><span
-                                                    class="output-value" id="out-trend-conf">--</span></div>
+                                        <div class="agent-box" id="flow-trigger-agent">
+                                            <div class="agent-header">
+                                                <span class="agent-emoji">🔥</span>
+                                                <span class="agent-title" id="title-trigger-agent"
+                                                    data-i18n="agent.card.trigger">Trigger Agent</span>
+                                                <span class="agent-badge idle">Idle</span>
+                                            </div>
+                                            <div class="agent-output">
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.fire5m">5m Fire:</span><span
+                                                        class="output-value" id="out-fire">--</span></div>
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.entry">Entry:</span><span
+                                                        class="output-value" id="out-entry-type">--</span></div>
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.conf">Conf:</span><span
+                                                        class="output-value" id="out-fire-conf">--</span></div>
+                                            </div>
+                                            <div class="agent-summary" id="sum-trigger-agent">--</div>
                                         </div>
-                                        <div class="agent-summary" id="sum-trend-agent">--</div>
-                                    </div>
-                                    <div class="agent-box" id="flow-trigger-agent">
-                                        <div class="agent-header">
-                                            <span class="agent-emoji">🔥</span>
-                                            <span class="agent-title" id="title-trigger-agent" data-i18n="agent.card.trigger">Trigger Agent</span>
-                                            <span class="agent-badge idle">Idle</span>
+                                        <div class="agent-box" id="flow-ai-filter">
+                                            <div class="agent-header">
+                                                <span class="agent-emoji">🚫</span>
+                                                <span class="agent-title" data-i18n="agent.card.ai_filter">AI
+                                                    Filter</span>
+                                                <span class="agent-badge idle">Idle</span>
+                                            </div>
+                                            <div class="agent-output">
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.status">Status:</span><span
+                                                        class="output-value" id="out-ai-status">--</span></div>
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.veto">Veto:</span><span
+                                                        class="output-value" id="out-ai-veto">--</span></div>
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.reason">Reason:</span><span
+                                                        class="output-value" id="out-ai-reason">--</span></div>
+                                            </div>
+                                            <div class="agent-summary" id="sum-ai-filter">--</div>
                                         </div>
-                                        <div class="agent-output">
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.fire5m">5m Fire:</span><span
-                                                    class="output-value" id="out-fire">--</span></div>
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.entry">Entry:</span><span
-                                                    class="output-value" id="out-entry-type">--</span></div>
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.conf">Conf:</span><span
-                                                    class="output-value" id="out-fire-conf">--</span></div>
-                                        </div>
-                                        <div class="agent-summary" id="sum-trigger-agent">--</div>
-                                    </div>
-                                    <div class="agent-box" id="flow-ai-filter">
-                                        <div class="agent-header">
-                                            <span class="agent-emoji">🚫</span>
-                                            <span class="agent-title" data-i18n="agent.card.ai_filter">AI Filter</span>
-                                            <span class="agent-badge idle">Idle</span>
-                                        </div>
-                                        <div class="agent-output">
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.status">Status:</span><span
-                                                    class="output-value" id="out-ai-status">--</span></div>
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.veto">Veto:</span><span
-                                                    class="output-value" id="out-ai-veto">--</span></div>
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.reason">Reason:</span><span
-                                                    class="output-value" id="out-ai-reason">--</span></div>
-                                        </div>
-                                        <div class="agent-summary" id="sum-ai-filter">--</div>
-                                    </div>
                                     </div>
                                 </div>
                                 <div class="flow-connector vertical">
@@ -395,30 +440,32 @@
                             <!-- Layer 3: Decision Layer -->
                             <div class="flow-layer" data-layer="decision">
                                 <div class="flow-layer-row">
-                                    <div class="layer-label" data-i18n="framework.layer.decision">⚖️ Decision Layer</div>
-                                    <div class="layer-agents">
-                                    <div class="agent-box decision-core" id="flow-decision">
-                                        <div class="agent-header">
-                                            <span class="agent-emoji">⚖️</span>
-                                            <span class="agent-title" data-i18n="agent.card.decision">Decision Core</span>
-                                            <span class="agent-badge idle">Idle</span>
-                                        </div>
-                                        <div class="agent-output decision-output">
-                                            <div class="decision-result" id="out-decision">
-                                                <span class="decision-action">WAIT</span>
-                                                <span class="decision-conf">0%</span>
-                                            </div>
-                                            <div class="decision-votes">
-                                                <div class="vote-item"><span data-i18n="agent.label.bull">🐂 Bull:</span><span
-                                                        id="out-bull">--</span>
-                                                </div>
-                                                <div class="vote-item"><span data-i18n="agent.label.bear">🐻 Bear:</span><span
-                                                        id="out-bear">--</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="agent-summary" id="sum-decision">--</div>
+                                    <div class="layer-label" data-i18n="framework.layer.decision">⚖️ Decision Layer
                                     </div>
+                                    <div class="layer-agents">
+                                        <div class="agent-box decision-core" id="flow-decision">
+                                            <div class="agent-header">
+                                                <span class="agent-emoji">⚖️</span>
+                                                <span class="agent-title" data-i18n="agent.card.decision">Decision
+                                                    Core</span>
+                                                <span class="agent-badge idle">Idle</span>
+                                            </div>
+                                            <div class="agent-output decision-output">
+                                                <div class="decision-result" id="out-decision">
+                                                    <span class="decision-action">WAIT</span>
+                                                    <span class="decision-conf">0%</span>
+                                                </div>
+                                                <div class="decision-votes">
+                                                    <div class="vote-item"><span data-i18n="agent.label.bull">🐂
+                                                            Bull:</span><span id="out-bull">--</span>
+                                                    </div>
+                                                    <div class="vote-item"><span data-i18n="agent.label.bear">🐻
+                                                            Bear:</span><span id="out-bear">--</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="agent-summary" id="sum-decision">--</div>
+                                        </div>
                                     </div>
                                 </div>
                                 <div class="flow-connector vertical">
@@ -430,56 +477,66 @@
                             <!-- Layer 4: Execution Layer -->
                             <div class="flow-layer" data-layer="execution">
                                 <div class="flow-layer-row">
-                                    <div class="layer-label" data-i18n="framework.layer.execution">🛡️ Execution Layer</div>
+                                    <div class="layer-label" data-i18n="framework.layer.execution">🛡️ Execution Layer
+                                    </div>
                                     <div class="layer-agents">
-                                    <div class="agent-box" id="flow-risk">
-                                        <div class="agent-header">
-                                            <span class="agent-emoji">🛡️</span>
-                                            <span class="agent-title" data-i18n="agent.card.risk">Risk Audit</span>
-                                            <span class="agent-badge idle">Idle</span>
-                                        </div>
-                                        <div class="agent-output">
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.risk">Risk:</span><span
-                                                    class="output-value" id="out-risk">--</span></div>
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.size">Size:</span><span
-                                                    class="output-value" id="out-size">--</span></div>
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.sl">SL:</span><span
-                                                    class="output-value" id="out-sl">--</span></div>
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.tp">TP:</span><span
-                                                    class="output-value" id="out-tp">--</span></div>
-                                        </div>
-                                        <div class="agent-summary" id="sum-risk">--</div>
-                                    </div>
-                                    <div class="agent-box final-output" id="flow-output">
-                                        <div class="agent-header">
-                                            <span class="agent-emoji">📤</span>
-                                            <span class="agent-title" data-i18n="agent.card.final_output">Final Output</span>
-                                        </div>
-                                        <div class="final-result" id="out-final">
-                                            <div class="final-action">--</div>
-                                            <div class="final-details">
-                                                <span id="final-symbol">--</span>
-                                                <span id="final-size">--</span>
+                                        <div class="agent-box" id="flow-risk">
+                                            <div class="agent-header">
+                                                <span class="agent-emoji">🛡️</span>
+                                                <span class="agent-title" data-i18n="agent.card.risk">Risk Audit</span>
+                                                <span class="agent-badge idle">Idle</span>
                                             </div>
+                                            <div class="agent-output">
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.risk">Risk:</span><span
+                                                        class="output-value" id="out-risk">--</span></div>
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.size">Size:</span><span
+                                                        class="output-value" id="out-size">--</span></div>
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.sl">SL:</span><span class="output-value"
+                                                        id="out-sl">--</span></div>
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.tp">TP:</span><span class="output-value"
+                                                        id="out-tp">--</span></div>
+                                            </div>
+                                            <div class="agent-summary" id="sum-risk">--</div>
                                         </div>
-                                        <div class="agent-summary" id="sum-output">--</div>
-                                    </div>
-                                    <div class="agent-box" id="flow-reflection">
-                                        <div class="agent-header">
-                                            <span class="agent-emoji">🪞</span>
-                                            <span class="agent-title" id="title-reflection-agent" data-i18n="agent.card.reflection">Reflection Agent</span>
-                                            <span class="agent-badge idle">Idle</span>
+                                        <div class="agent-box final-output" id="flow-output">
+                                            <div class="agent-header">
+                                                <span class="agent-emoji">📤</span>
+                                                <span class="agent-title" data-i18n="agent.card.final_output">Final
+                                                    Output</span>
+                                            </div>
+                                            <div class="final-result" id="out-final">
+                                                <div class="final-action">--</div>
+                                                <div class="final-details">
+                                                    <span id="final-symbol">--</span>
+                                                    <span id="final-size">--</span>
+                                                </div>
+                                            </div>
+                                            <div class="agent-summary" id="sum-output">--</div>
                                         </div>
-                                        <div class="agent-output">
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.trades">Trades:</span><span
-                                                    class="output-value" id="out-trades-count">--</span></div>
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.winrate">Win Rate:</span><span
-                                                    class="output-value" id="out-win-rate">--</span></div>
-                                            <div class="output-row"><span class="output-label" data-i18n="agent.label.insight">Insight:</span><span
-                                                    class="output-value" id="out-insight">--</span></div>
+                                        <div class="agent-box" id="flow-reflection">
+                                            <div class="agent-header">
+                                                <span class="agent-emoji">🪞</span>
+                                                <span class="agent-title" id="title-reflection-agent"
+                                                    data-i18n="agent.card.reflection">Reflection Agent</span>
+                                                <span class="agent-badge idle">Idle</span>
+                                            </div>
+                                            <div class="agent-output">
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.trades">Trades:</span><span
+                                                        class="output-value" id="out-trades-count">--</span></div>
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.winrate">Win Rate:</span><span
+                                                        class="output-value" id="out-win-rate">--</span></div>
+                                                <div class="output-row"><span class="output-label"
+                                                        data-i18n="agent.label.insight">Insight:</span><span
+                                                        class="output-value" id="out-insight">--</span></div>
+                                            </div>
+                                            <div class="agent-summary" id="sum-reflection">--</div>
                                         </div>
-                                        <div class="agent-summary" id="sum-reflection">--</div>
-                                    </div>
                                     </div>
                                 </div>
                             </div>
@@ -492,18 +549,25 @@
                                 <div class="legend-subtitle" data-i18n="framework.legend.subtitle">Agent + Signal</div>
                             </div>
                             <div class="legend-section">
-                                <div class="legend-section-title" data-i18n="framework.legend.section.agent">Agent State</div>
+                                <div class="legend-section-title" data-i18n="framework.legend.section.agent">Agent State
+                                </div>
                                 <div class="legend-grid">
-                                    <div class="legend-item"><span class="legend-dot idle"></span><span data-i18n="framework.legend.idle">Idle</span></div>
-                                    <div class="legend-item"><span class="legend-dot running"></span><span data-i18n="framework.legend.running">Running</span></div>
-                                    <div class="legend-item"><span class="legend-dot completed"></span><span data-i18n="framework.legend.completed">Completed</span></div>
+                                    <div class="legend-item"><span class="legend-dot idle"></span><span
+                                            data-i18n="framework.legend.idle">Idle</span></div>
+                                    <div class="legend-item"><span class="legend-dot running"></span><span
+                                            data-i18n="framework.legend.running">Running</span></div>
+                                    <div class="legend-item"><span class="legend-dot completed"></span><span
+                                            data-i18n="framework.legend.completed">Completed</span></div>
                                 </div>
                             </div>
                             <div class="legend-section">
-                                <div class="legend-section-title" data-i18n="framework.legend.section.signal">Signal</div>
+                                <div class="legend-section-title" data-i18n="framework.legend.section.signal">Signal
+                                </div>
                                 <div class="legend-grid">
-                                    <div class="legend-item"><span class="legend-dot long"></span><span data-i18n="framework.legend.long">LONG</span></div>
-                                    <div class="legend-item"><span class="legend-dot short"></span><span data-i18n="framework.legend.short">SHORT</span></div>
+                                    <div class="legend-item"><span class="legend-dot long"></span><span
+                                            data-i18n="framework.legend.long">LONG</span></div>
+                                    <div class="legend-item"><span class="legend-dot short"></span><span
+                                            data-i18n="framework.legend.short">SHORT</span></div>
                                 </div>
                             </div>
                             <button onclick="window.resetAgentPositions()" class="reset-positions-btn"
@@ -551,6 +615,46 @@
                             </tbody>
                         </table>
                     </div>
+                </div>
+            </section>
+
+            <!-- Symbol Performance Ranking -->
+            <section class="glass-panel" style="margin-top: 20px;">
+                <div class="section-header">
+                    <h3 style="display: flex; align-items: center; gap: 8px;">
+                        <span>🏆</span>
+                        <span data-i18n="section.symbol_ranking">Symbol Performance Ranking</span>
+                        <span id="symbol-ranking-badge"
+                            style="font-size: 0.7em; color: #718096; font-weight: normal;">(Current Session)</span>
+                    </h3>
+                </div>
+                <div style="overflow-x: auto;">
+                    <table id="symbol-ranking-table" style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
+                        <thead>
+                            <tr style="background: rgba(255,255,255,0.05); text-align: left;">
+                                <th style="padding: 12px 16px; color: #90cdf4;">#</th>
+                                <th style="padding: 12px 16px; color: #90cdf4;" data-i18n="table.symbol">Symbol</th>
+                                <th style="padding: 12px 16px; color: #90cdf4; text-align: right;"
+                                    data-i18n="table.pnl">PnL ($)</th>
+                                <th style="padding: 12px 16px; color: #90cdf4; text-align: right;"
+                                    data-i18n="table.return_rate">Return (%)</th>
+                                <th style="padding: 12px 16px; color: #90cdf4; text-align: center;"
+                                    data-i18n="table.trades">Trades</th>
+                                <th style="padding: 12px 16px; color: #90cdf4; text-align: center;"
+                                    data-i18n="table.win_rate">Win Rate</th>
+                            </tr>
+                        </thead>
+                        <tbody id="symbol-ranking-body">
+                            <tr>
+                                <td colspan="6" style="padding: 20px; text-align: center; color: #718096;">Loading...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div id="symbol-ranking-summary"
+                    style="margin-top: 12px; padding: 12px; background: rgba(0,0,0,0.2); border-radius: 6px; font-size: 0.85em; color: #a0aec0;">
+                    <!-- Summary will be populated by JS -->
                 </div>
             </section>
 
@@ -809,29 +913,27 @@
                             style="background: rgba(66, 153, 225, 0.08); padding: 12px; border-radius: 6px; margin-bottom: 10px; border: 1px solid rgba(66, 153, 225, 0.25);">
                             <div style="color: #63b3ed; font-size: 0.8em; margin-bottom: 8px; font-weight: bold;">🧩
                                 Local Semantic Analysis <span
-                                    style="background:#2b6cb0;color:#fff;padding:1px 6px;border-radius:3px;font-size:0.7em;margin-left:5px;">No API</span>
+                                    style="background:#2b6cb0;color:#fff;padding:1px 6px;border-radius:3px;font-size:0.7em;margin-left:5px;">No
+                                    API</span>
                             </div>
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                                 <label class="agent-checkbox"
                                     style="cursor:pointer; display:flex; align-items:center; padding:6px 8px; background:rgba(255,255,255,0.05); border-radius:4px;">
                                     <input type="checkbox" name="agent-toggle" value="trend_agent_local" checked
                                         style="margin-right:8px;">
-                                    <span>TrendAgent <span
-                                            style="color:#718096;font-size:0.8em;">(1h规则)</span></span>
+                                    <span>TrendAgent <span style="color:#718096;font-size:0.8em;">(1h规则)</span></span>
                                 </label>
                                 <label class="agent-checkbox"
                                     style="cursor:pointer; display:flex; align-items:center; padding:6px 8px; background:rgba(255,255,255,0.05); border-radius:4px;">
                                     <input type="checkbox" name="agent-toggle" value="setup_agent_local" checked
                                         style="margin-right:8px;">
-                                    <span>SetupAgent <span
-                                            style="color:#718096;font-size:0.8em;">(15m规则)</span></span>
+                                    <span>SetupAgent <span style="color:#718096;font-size:0.8em;">(15m规则)</span></span>
                                 </label>
                                 <label class="agent-checkbox"
                                     style="cursor:pointer; display:flex; align-items:center; padding:6px 8px; background:rgba(255,255,255,0.05); border-radius:4px;">
                                     <input type="checkbox" name="agent-toggle" value="trigger_agent_local" checked
                                         style="margin-right:8px;">
-                                    <span>TriggerAgent <span
-                                            style="color:#718096;font-size:0.8em;">(5m规则)</span></span>
+                                    <span>TriggerAgent <span style="color:#718096;font-size:0.8em;">(5m规则)</span></span>
                                 </label>
                             </div>
                         </div>
@@ -876,74 +978,73 @@
                         }
                     </script>
                 </div>
-                </div>
+            </div>
 
-                <!-- Tab: Strategy -->
-                <div id="tab-prompt" class="tab-pane">
-                    <div class="form-group">
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <label>System Prompt</label>
-                            <div>
-                                <button id="btn-prompt-reset" class="btn-sm"
-                                    style="background:#e53e3e;color:white;border:none;padding:2px 8px;border-radius:4px;cursor:pointer;margin-right:8px;">↺
-                                    Reset to Default</button>
-                                <button id="btn-prompt-upload" class="btn-sm"
-                                    style="background:#2d3748;color:white;border:none;padding:2px 8px;border-radius:4px;cursor:pointer;">📤
-                                    Upload File</button>
-                            </div>
-                            <input type="file" id="prompt-file" accept=".md,.txt" style="display: none;">
+            <!-- Tab: Strategy -->
+            <div id="tab-prompt" class="tab-pane">
+                <div class="form-group">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <label>System Prompt</label>
+                        <div>
+                            <button id="btn-prompt-reset" class="btn-sm"
+                                style="background:#e53e3e;color:white;border:none;padding:2px 8px;border-radius:4px;cursor:pointer;margin-right:8px;">↺
+                                Reset to Default</button>
+                            <button id="btn-prompt-upload" class="btn-sm"
+                                style="background:#2d3748;color:white;border:none;padding:2px 8px;border-radius:4px;cursor:pointer;">📤
+                                Upload File</button>
                         </div>
-                        <textarea id="cfg-prompt" rows="15" class="form-control"
-                            style="font-family:monospace; font-size:12px; margin-top:5px;"></textarea>
+                        <input type="file" id="prompt-file" accept=".md,.txt" style="display: none;">
                     </div>
-                </div>
-
-                <!-- Tab: Accounts -->
-                <div id="tab-accounts" class="tab-pane">
-                    <div class="form-group">
-                        <div
-                            style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
-                            <label style="margin:0;">📊 Trading Accounts</label>
-                            <button id="btn-refresh-accounts" class="btn-sm"
-                                style="background:#2d3748;color:white;border:none;padding:4px 12px;border-radius:4px;cursor:pointer;">🔄
-                                Refresh</button>
-                        </div>
-                        <div id="accounts-list"
-                            style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 4px; min-height: 100px; max-height: 200px; overflow-y: auto;">
-                            <p style="color: #718096; text-align: center;">Loading accounts...</p>
-                        </div>
-                    </div>
-
-                    <hr style="border-color: rgba(255,255,255,0.1); margin: 20px 0;">
-
-                    <div class="form-group">
-                        <label>➕ Add New Account</label>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                            <input type="text" id="new-account-id" class="form-control"
-                                placeholder="Account ID (e.g. sub-account-1)">
-                            <input type="text" id="new-account-name" class="form-control" placeholder="Display Name">
-                        </div>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
-                            <select id="new-account-exchange" class="form-control">
-                                <option value="binance">Binance</option>
-                            </select>
-                            <label style="display:flex; align-items:center; cursor:pointer;">
-                                <input type="checkbox" id="new-account-testnet" checked style="margin-right: 8px;">
-                                <span>Testnet Mode</span>
-                            </label>
-                        </div>
-                        <button id="btn-add-account"
-                            style="margin-top: 10px; background: #00ff9d; color: #1a202c; border: none; padding: 8px 20px; border-radius: 4px; cursor: pointer; font-weight: bold;">Add
-                            Account</button>
-                        <p style="color: #a0aec0; font-size: 0.75em; margin-top: 8px;">Note: Set API keys in .env with
-                            format: ACCOUNT_{ID}_API_KEY</p>
-                    </div>
+                    <textarea id="cfg-prompt" rows="15" class="form-control"
+                        style="font-family:monospace; font-size:12px; margin-top:5px;"></textarea>
                 </div>
             </div>
 
-            <div class="modal-footer">
-                <button id="btn-save-settings" class="btn btn-primary"
-                    style="position:relative; z-index:9999; cursor:pointer;" onclick="(async function(e) {
+            <!-- Tab: Accounts -->
+            <div id="tab-accounts" class="tab-pane">
+                <div class="form-group">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
+                        <label style="margin:0;">📊 Trading Accounts</label>
+                        <button id="btn-refresh-accounts" class="btn-sm"
+                            style="background:#2d3748;color:white;border:none;padding:4px 12px;border-radius:4px;cursor:pointer;">🔄
+                            Refresh</button>
+                    </div>
+                    <div id="accounts-list"
+                        style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 4px; min-height: 100px; max-height: 200px; overflow-y: auto;">
+                        <p style="color: #718096; text-align: center;">Loading accounts...</p>
+                    </div>
+                </div>
+
+                <hr style="border-color: rgba(255,255,255,0.1); margin: 20px 0;">
+
+                <div class="form-group">
+                    <label>➕ Add New Account</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <input type="text" id="new-account-id" class="form-control"
+                            placeholder="Account ID (e.g. sub-account-1)">
+                        <input type="text" id="new-account-name" class="form-control" placeholder="Display Name">
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
+                        <select id="new-account-exchange" class="form-control">
+                            <option value="binance">Binance</option>
+                        </select>
+                        <label style="display:flex; align-items:center; cursor:pointer;">
+                            <input type="checkbox" id="new-account-testnet" checked style="margin-right: 8px;">
+                            <span>Testnet Mode</span>
+                        </label>
+                    </div>
+                    <button id="btn-add-account"
+                        style="margin-top: 10px; background: #00ff9d; color: #1a202c; border: none; padding: 8px 20px; border-radius: 4px; cursor: pointer; font-weight: bold;">Add
+                        Account</button>
+                    <p style="color: #a0aec0; font-size: 0.75em; margin-top: 8px;">Note: Set API keys in .env with
+                        format: ACCOUNT_{ID}_API_KEY</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-footer">
+            <button id="btn-save-settings" class="btn btn-primary"
+                style="position:relative; z-index:9999; cursor:pointer;" onclick="(async function(e) {
                         e.preventDefault();
                         e.stopPropagation();
                         const btn = e.target;
@@ -970,16 +1071,15 @@
                                 agents: (function() {
                                     const result = {};
                                     document.querySelectorAll('input[name=\" cfg-agent\"]').forEach(function(cb) {
-                    result[cb.value]=cb.checked; }); return result; })() }; // Save Config - CRITICAL:
-                    credentials: 'include' for Railway HTTPS const res=await fetch('/api/config', { method: 'POST' ,
-                    headers: { 'Content-Type' : 'application/json' }, body: JSON.stringify(data), credentials: 'include'
-                    }); if (!res.ok) throw new Error(await res.text()); // Save Prompt - CRITICAL:
-                    credentials: 'include' for Railway HTTPS const
-                    promptContent=document.getElementById('cfg-prompt').value; const promptRes=await
-                    fetch('/api/config/prompt', { method: 'POST' , headers: { 'Content-Type' : 'application/json' },
-                    body: JSON.stringify({ content: promptContent }), credentials: 'include' }); if (!promptRes.ok)
-                    throw new Error(await promptRes.text()); alert('✅ SUCCESS: Configuration Saved!');
-                    document.getElementById('settings-modal').style.display='none' ; } catch (err) { alert('❌ ERROR: ' + err.message);
+                result[cb.value]=cb.checked; }); return result; })() }; // Save Config - CRITICAL:
+                credentials: 'include' for Railway HTTPS const res=await fetch('/api/config', { method: 'POST' ,
+                headers: { 'Content-Type' : 'application/json' }, body: JSON.stringify(data), credentials: 'include' });
+                if (!res.ok) throw new Error(await res.text()); // Save Prompt - CRITICAL: credentials: 'include' for
+                Railway HTTPS const promptContent=document.getElementById('cfg-prompt').value; const promptRes=await
+                fetch('/api/config/prompt', { method: 'POST' , headers: { 'Content-Type' : 'application/json' }, body:
+                JSON.stringify({ content: promptContent }), credentials: 'include' }); if (!promptRes.ok) throw new
+                Error(await promptRes.text()); alert('✅ SUCCESS: Configuration Saved!');
+                document.getElementById('settings-modal').style.display='none' ; } catch (err) { alert('❌ ERROR: ' + err.message);
                     } finally {
                     btn.textContent = originalText;
                     btn.disabled = false;
@@ -1123,7 +1223,7 @@
                     <script>
                         (function () {
                             // Agent node click to expand
-                            document.querySelectorAll('.agent-node.interactive').forEach(node => {
+                            document.querySelectorAll(' .agent-node.interactive').forEach(node => {
                                 node.addEventListener('click', function (e) {
                                     e.stopPropagation();
                                     const wasExpanded = this.classList.contains('expanded');
@@ -1212,43 +1312,22 @@
                                             if (resultEl) resultEl.textContent = agent.result;
 
                                             // Activate arrow
-                                            if (i < arrows.length) {
-                                                arrows[i].classList.add('active');
-                                            }
-
-                                            i++;
-                                            setTimeout(activateNext, 300);
-                                        }, 600);
-                                    } else {
-                                        i++;
-                                        activateNext();
-                                    }
-                                }
-
-                                activateNext();
-                            }
-
-                            // Add entry to activity feed
-                            function addActivityFeedEntry(message) {
-                                const feed = document.getElementById('agent-activity-feed');
-                                if (!feed) return;
-
-                                // Remove placeholder if exists
-                                const placeholder = feed.querySelector('.placeholder');
-                                if (placeholder) placeholder.remove();
-
-                                // Create new entry
-                                const entry = document.createElement('div');
-                                entry.className = 'activity-item success';
-
-                                const now = new Date();
-                                const time = now.toTimeString().slice(0, 8);
-
-                                entry.innerHTML = `
-                    <span class="activity-time">${time}</span>
+                                            if (i < arrows.length) { arrows[i].classList.add('active'); } i++; setTimeout(activateNext, 300);
+                                        },
+                                            600);
+                                    } else { i++; activateNext(); }
+                                } activateNext();
+                            } // Add entry to activity feed function
+                            addActivityFeedEntry(message) {
+                                const feed = document.getElementById('agent-activity-feed'); if
+                                    (!feed) return; // Remove placeholder if exists const
+                                placeholder = feed.querySelector('.placeholder'); if (placeholder) placeholder.remove(); // Create new
+                    entry const entry = document.createElement('div'); entry.className = 'activity-item success'; const
+                                    now = new Date(); const time = now.toTimeString().slice(0, 8); entry.innerHTML = ` <span
+                    class="activity-time">${time}</span>
                     <span class="activity-agent">Pipeline</span>
                     <span class="activity-message">${message}</span>
-                `;
+                    `;
 
                                 feed.insertBefore(entry, feed.firstChild);
 

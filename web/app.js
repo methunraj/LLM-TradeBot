@@ -1160,6 +1160,88 @@ function updateRealtimeBalance({ account, system, virtualAccount, chartData, pos
     return snapshot;
 }
 
+// 🏆 Symbol Performance Ranking - Fetch and Render
+async function fetchAndRenderSymbolRanking() {
+    try {
+        const response = await apiFetch('/api/symbol_stats');
+        if (!response.ok) return;
+
+        const result = await response.json();
+        if (result.status !== 'success') return;
+
+        const data = result.data || [];
+        const tbody = document.getElementById('symbol-ranking-body');
+        const summary = document.getElementById('symbol-ranking-summary');
+
+        if (!tbody) return;
+
+        if (data.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" style="padding: 20px; text-align: center; color: #718096;">
+                ${getI18n('ranking.no_trades', 'No completed trades in current session')}
+            </td></tr>`;
+            if (summary) summary.innerHTML = '';
+            return;
+        }
+
+        // Render table rows
+        let totalPnl = 0;
+        let totalTrades = 0;
+        let totalWins = 0;
+
+        tbody.innerHTML = data.map((item, index) => {
+            totalPnl += item.total_pnl;
+            totalTrades += item.trade_count;
+            totalWins += item.win_count;
+
+            const pnlColor = item.total_pnl > 0 ? '#48bb78' : (item.total_pnl < 0 ? '#f56565' : '#a0aec0');
+            const returnColor = item.return_rate > 0 ? '#48bb78' : (item.return_rate < 0 ? '#f56565' : '#a0aec0');
+            const winRateColor = item.win_rate >= 50 ? '#48bb78' : '#f56565';
+            const pnlSign = item.total_pnl > 0 ? '+' : '';
+            const returnSign = item.return_rate > 0 ? '+' : '';
+
+            return `
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <td style="padding: 10px 16px; color: #718096;">${index + 1}</td>
+                    <td style="padding: 10px 16px; font-weight: 600; color: #edf2f7;">
+                        <span style="background: rgba(99,179,237,0.2); padding: 2px 8px; border-radius: 4px;">${item.symbol}</span>
+                    </td>
+                    <td style="padding: 10px 16px; text-align: right; color: ${pnlColor}; font-weight: 600;">
+                        ${pnlSign}$${item.total_pnl.toFixed(2)}
+                    </td>
+                    <td style="padding: 10px 16px; text-align: right; color: ${returnColor};">
+                        ${returnSign}${item.return_rate.toFixed(2)}%
+                    </td>
+                    <td style="padding: 10px 16px; text-align: center; color: #a0aec0;">
+                        ${item.trade_count} <span style="color: #48bb78;">(${item.win_count}W)</span>/<span style="color: #f56565;">(${item.loss_count}L)</span>
+                    </td>
+                    <td style="padding: 10px 16px; text-align: center;">
+                        <span style="color: ${winRateColor}; font-weight: 600;">${item.win_rate.toFixed(1)}%</span>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+        // Render summary
+        if (summary) {
+            const overallWinRate = totalTrades > 0 ? (totalWins / totalTrades * 100).toFixed(1) : 0;
+            const pnlIcon = totalPnl > 0 ? '📈' : (totalPnl < 0 ? '📉' : '➖');
+            const pnlColor = totalPnl > 0 ? '#48bb78' : (totalPnl < 0 ? '#f56565' : '#a0aec0');
+
+            summary.innerHTML = `
+                <span style="margin-right: 20px;">${pnlIcon} <strong>${getI18n('ranking.total_pnl', 'Total PnL')}:</strong> 
+                    <span style="color: ${pnlColor}; font-weight: 600;">$${totalPnl.toFixed(2)}</span>
+                </span>
+                <span style="margin-right: 20px;">📊 <strong>${getI18n('ranking.total_trades', 'Trades')}:</strong> ${totalTrades}</span>
+                <span>🎯 <strong>${getI18n('ranking.overall_win_rate', 'Win Rate')}:</strong> ${overallWinRate}%</span>
+            `;
+        }
+
+    } catch (err) {
+        console.error('Failed to fetch symbol ranking:', err);
+    }
+}
+
+
 function updateAccountTradeStats(trades) {
     const tradesEl = document.getElementById('account-trades-count');
     const winRateEl = document.getElementById('account-win-rate');
@@ -2923,6 +3005,10 @@ document.addEventListener('DOMContentLoaded', function () {
     // 5. Start Polling
     setInterval(updateDashboard, 2000);
     updateDashboard();
+
+    // 6. Symbol Ranking Update (less frequent - every 10 seconds)
+    fetchAndRenderSymbolRanking();
+    setInterval(fetchAndRenderSymbolRanking, 10000);
 
     console.log('✅ App Initialization Complete');
 });
