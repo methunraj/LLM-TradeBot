@@ -25,6 +25,10 @@ class StrategyComposer:
         self.regime_detector = RegimeDetector()
         self.trigger_detector = TriggerDetector()
         
+        # ATR Calculator for dynamic TP/SL
+        from src.strategy.atr_calculator import ATRCalculator
+        self.atr_calculator = ATRCalculator(period=14)
+        
         # Semantic Agents (Lazy initialization or init here)
         if self.use_llm:
             from src.agents.trend_agent import TrendAgentLLM
@@ -214,7 +218,7 @@ class StrategyComposer:
                              # Sentiment Adjustments
                              sent_score = sentiment.get('total_sentiment_score', 0)
                              if sent_score > 80:
-                                 result['tp_multiplier'] = 0.5
+                                 result['tp_multiplier'] = 0.8  # Optimized from 0.5
                              elif sent_score < -80:
                                  result['tp_multiplier'] = 1.5
                                  result['sl_multiplier'] = 0.8
@@ -224,8 +228,34 @@ class StrategyComposer:
                                  result['tp_multiplier'] *= 0.7
                              elif trend_1h == 'short' and funding_rate < -0.05:
                                  result['tp_multiplier'] *= 0.7
-                                 
-        # --- SEMANTIC AGENTS ---
+                              
+                              # ATR-based Dynamic Adjustment
+                              atr_analysis = self.atr_calculator.get_analysis(df_1h)
+                              atr_multiplier = atr_analysis['multiplier']
+                              result['atr_multiplier'] = atr_multiplier
+                              result['atr_pct'] = atr_analysis['atr_pct']
+                              result['volatility'] = atr_analysis['volatility']
+                              
+                              # Apply ATR multiplier
+                              result['tp_multiplier'] *= atr_multiplier
+                              result['sl_multiplier'] *= atr_multiplier
+                              
+                              # Minimum Return Filter
+                              expected_tp_pct = 2.5 * result['tp_multiplier']
+                              expected_sl_pct = 1.0 * result['sl_multiplier']
+                              
+                              # Check minimum TP (1.5%)
+                              if expected_tp_pct < 1.5:
+                                  result['layer4_pass'] = False
+                                  result['final_action'] = 'wait'
+                                  result['blocking_reason'] = f"Expected TP {expected_tp_pct:.1f}% < minimum 1.5%"
+                              
+                              # Check minimum R:R (2:1)
+                              elif expected_sl_pct > 0 and (expected_tp_pct / expected_sl_pct) < 2.0:
+                                  result['layer4_pass'] = False
+                                  result['final_action'] = 'wait'
+                                  result['blocking_reason'] = f"Risk:Reward {expected_tp_pct/expected_sl_pct:.1f}:1 < 2:1"
+# --- SEMANTIC AGENTS ---
         try:
             # Prepare data objects
             trend_data = {
