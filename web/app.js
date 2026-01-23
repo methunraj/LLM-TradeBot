@@ -249,17 +249,18 @@ function initChart() {
             },
             scales: {
                 x: {
+                    type: 'category',  // 🔧 Category type prevents auto-scaling drift
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    min: 1,  // 🔧 X-axis always starts from cycle 1
                     ticks: {
                         color: '#94a3b8',
                         maxRotation: 0,
                         minRotation: 0,
                         autoSkip: true,
-                        maxTicksLimit: 10,  // Limit to prevent crowding
+                        maxTicksLimit: 8,  // Limit to prevent crowding
                         callback: function (value, index, ticks) {
-                            // 🔧 Display cycle number directly
-                            return value;
+                            // 🔧 Display time label (extract HH:MM from timestamp)
+                            const label = this.getLabelForValue(value);
+                            return extractTimeLabel(label);
                         }
                     }
                 },
@@ -1255,9 +1256,8 @@ function renderChart(history, initialAmount = null) {
     // Use all history data - including cycle 0 (startup)
     const dataToShow = history;
 
-    // 🔧 Use cycle index (1..N) instead of timestamps for X-axis
-    // This ensures X-axis always starts from 1 and doesn't drift
-    const times = dataToShow.map((h, index) => index + 1);  // Cycle 1, 2, 3, ...
+    // 🔧 Use timestamps for X-axis display, but with fixed range to prevent drift
+    const times = dataToShow.map(h => h.time);
     const rawValues = dataToShow.map(h => h.value);
 
     // Determine Initial Amount (Baseline)
@@ -1307,11 +1307,6 @@ function renderChart(history, initialAmount = null) {
         equityChart.data.datasets[1].data = baselineData;
     }
     // ------------------------------------------
-
-    // --- 🔧 X-Axis: Fixed minimum at 1, prevent drift ---
-    equityChart.options.scales.x.min = 1;
-    // Max is the last cycle index or at least 10 for empty chart
-    equityChart.options.scales.x.max = Math.max(times.length, 10);
 
     // --- Axis Centering Logic ---
     if (values.length > 0) {
