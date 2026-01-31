@@ -426,11 +426,14 @@ class MultiAgentTradingBot:
             log.info(f"🎰 SymbolSelectorAgent ({reason}) running before analysis...")
             global_state.add_log(f"[🎰 SELECTOR] Symbol selection started ({reason})")
             selector = get_selector()
+            account_equity = self._get_account_equity_estimate()
+            if hasattr(selector, 'account_equity') and account_equity:
+                selector.account_equity = account_equity
             if self.use_auto3:
-                top_symbols = asyncio.run(selector.select_top3(force_refresh=False))
+                top_symbols = asyncio.run(selector.select_top3(force_refresh=False, account_equity=account_equity))
             else:
                 top_symbols = asyncio.run(
-                    selector.select_auto1_recent_momentum()
+                    selector.select_auto1_recent_momentum(account_equity=account_equity)
                 ) or []
 
             if top_symbols:
@@ -925,7 +928,10 @@ class MultiAgentTradingBot:
         Gets AI500 Top 5 by volume, backtests each, and selects top 2
         """
         selector = get_selector()
-        top2 = await selector.select_top3(force_refresh=False)
+        account_equity = self._get_account_equity_estimate()
+        if hasattr(selector, 'account_equity') and account_equity:
+            selector.account_equity = account_equity
+        top2 = await selector.select_top3(force_refresh=False, account_equity=account_equity)
         
         log.info(f"🔝 AUTO3 resolved to: {', '.join(top2)}")
         return top2
@@ -2987,6 +2993,29 @@ class MultiAgentTradingBot:
             return self.client.get_account_balance()
         except Exception as e:
             log.error(f"Failed to get balance: {e}")
+            return 0.0
+
+    def _get_account_equity_estimate(self) -> float:
+        """Best-effort account equity for selector filtering."""
+        if self.test_mode:
+            return float(global_state.virtual_balance or 0.0)
+
+        acc = global_state.account_overview or {}
+        for key in ('total_equity', 'wallet_balance', 'available_balance'):
+            val = acc.get(key)
+            try:
+                if val is not None and float(val) > 0:
+                    return float(val)
+            except (TypeError, ValueError):
+                continue
+
+        try:
+            acc_info = self.client.get_futures_account()
+            wallet = float(acc_info.get('total_wallet_balance', 0) or 0)
+            unrealized = float(acc_info.get('total_unrealized_profit', 0) or 0)
+            equity = wallet + unrealized
+            return equity if equity > 0 else float(wallet)
+        except Exception:
             return 0.0
 
     def _get_cycle_logger(self):

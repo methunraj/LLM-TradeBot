@@ -31,6 +31,10 @@ trading:
   primary_symbol: "BTCUSDT"  # 主要交易对（向后兼容）
   timeframes: ["1m", "5m", "15m", "1h"]
   leverage: 5
+  symbol_blacklist: []  # 可选：禁用高风险/低流动性币种
+  selector_min_quote_volume: 5000000  # 24h USDT成交额下限
+  selector_min_price: 0.05  # 过滤超低价币种
+  selector_min_quote_volume_per_usdt: 3000  # 动态成交额下限(每1 USDT权益)
   
 # 风控配置
 risk:

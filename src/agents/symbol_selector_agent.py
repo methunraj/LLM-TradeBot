@@ -27,6 +27,7 @@ import threading
 import time
 
 from src.utils.logger import log
+from src.config import config
 from src.backtest.engine import BacktestEngine, BacktestConfig
 
 
@@ -140,7 +141,10 @@ class SymbolSelectorAgent:
     AUTO1_INTERVAL = "1m"
     AUTO1_VOLUME_RATIO_THRESHOLD = 1.2
     AUTO1_MIN_ADX = 20  # 最小 ADX 要求（>20 = 有趋势，<20 = 震荡）
-    
+    DEFAULT_MIN_QUOTE_VOL = 5_000_000  # 24h USDT quote volume
+    DEFAULT_MIN_PRICE = 0.05  # Minimum last price to avoid ultra-low price coins
+    DEFAULT_MIN_QUOTE_VOL_PER_USDT = 3000  # Dynamic volume floor per 1 USDT equity
+
     def __init__(
         self,
         candidate_symbols: Optional[List[str]] = None,
@@ -169,7 +173,16 @@ class SymbolSelectorAgent:
         self._refresh_thread: Optional[threading.Thread] = None
         self._stop_refresh = threading.Event()
         self.last_auto1: Dict[str, Dict] = {}
-        
+        self.symbol_blacklist = set(
+            s.upper() for s in (config.get('trading.symbol_blacklist', []) or [])
+        )
+        self.min_quote_volume = float(config.get('trading.selector_min_quote_volume', self.DEFAULT_MIN_QUOTE_VOL))
+        self.min_price = float(config.get('trading.selector_min_price', self.DEFAULT_MIN_PRICE))
+        self.min_quote_volume_per_usdt = float(
+            config.get('trading.selector_min_quote_volume_per_usdt', self.DEFAULT_MIN_QUOTE_VOL_PER_USDT)
+        )
+        self.account_equity = None
+
         log.info(
             f"🔝 SymbolSelectorAgent initialized: AUTO3 backtest ({refresh_interval_hours}h refresh) + AUTO1 momentum"
         )
@@ -190,13 +203,30 @@ class SymbolSelectorAgent:
             return max(1, value * 60 * 24)
         return 1
 
+    def _get_effective_min_quote_volume(self, account_equity: Optional[float] = None) -> float:
+        """Compute dynamic quote-volume floor based on account equity."""
+        equity = account_equity
+        if equity is None:
+            equity = self.account_equity
+        try:
+            equity_val = float(equity) if equity is not None else 0.0
+        except (TypeError, ValueError):
+            equity_val = 0.0
+
+        dynamic_floor = 0.0
+        if equity_val > 0 and self.min_quote_volume_per_usdt > 0:
+            dynamic_floor = equity_val * self.min_quote_volume_per_usdt
+
+        return max(self.min_quote_volume, dynamic_floor)
+
     async def select_auto1_recent_momentum(
         self,
         candidates: Optional[List[str]] = None,
         window_minutes: int = AUTO1_WINDOW_MINUTES,
         interval: str = AUTO1_INTERVAL,
         threshold_pct: float = AUTO1_THRESHOLD_PCT,
-        volume_ratio_threshold: float = AUTO1_VOLUME_RATIO_THRESHOLD
+        volume_ratio_threshold: float = AUTO1_VOLUME_RATIO_THRESHOLD,
+        account_equity: Optional[float] = None
     ) -> List[str]:
         """
         Select symbols by recent momentum (AUTO1).
@@ -211,7 +241,13 @@ class SymbolSelectorAgent:
             log.error(f"❌ AUTO1 failed: BinanceClient unavailable: {e}")
             return [self.FALLBACK_SYMBOLS[0]]
 
-        symbols = candidates or await self._get_expanded_candidates()
+        effective_min_quote_volume = self._get_effective_min_quote_volume(account_equity)
+        if account_equity is not None:
+            self.account_equity = float(account_equity)
+
+        symbols = candidates or await self._get_expanded_candidates(account_equity=account_equity)
+        if self.symbol_blacklist:
+            symbols = [s for s in symbols if s.upper() not in self.symbol_blacklist]
         if not symbols:
             return [self.FALLBACK_SYMBOLS[0]]
 
@@ -219,11 +255,25 @@ class SymbolSelectorAgent:
         window_count = max(2, int(window_minutes / interval_minutes))
         limit = max(4, window_count * 2)
         client = BinanceClient()
+        ticker_map = {}
+        if effective_min_quote_volume > 0 or self.min_price > 0:
+            try:
+                tickers = client.get_all_tickers()
+                ticker_map = {t.get('symbol'): t for t in tickers if t.get('symbol')}
+            except Exception:
+                ticker_map = {}
 
         results = []
         skipped_low_adx = []  # 记录因 ADX 低而跳过的币种
         for symbol in symbols:
             try:
+                if ticker_map:
+                    t = ticker_map.get(symbol)
+                    if t:
+                        quote_vol = float(t.get('quoteVolume', 0) or 0)
+                        last_price = float(t.get('lastPrice', 0) or 0)
+                        if quote_vol < effective_min_quote_volume or last_price < self.min_price:
+                            continue
                 klines = client.get_klines(symbol, interval, limit=limit)
                 if len(klines) < window_count + 1:
                     continue
@@ -341,7 +391,7 @@ class SymbolSelectorAgent:
 
         return selected
     
-    async def select_top3(self, force_refresh: bool = False) -> List[str]:
+    async def select_top3(self, force_refresh: bool = False, account_equity: Optional[float] = None) -> List[str]:
         """
         Select top 3 symbols using two-stage filtering
         
@@ -354,6 +404,8 @@ class SymbolSelectorAgent:
         Returns:
             List of 3 symbol names
         """
+        if account_equity is not None:
+            self.account_equity = float(account_equity)
         # Check cache validity
         if not force_refresh and self._is_cache_valid():
             cached = self._load_cache()
@@ -375,7 +427,7 @@ class SymbolSelectorAgent:
             log.info("=" * 60)
             
             # Get AI500 Top 10
-            candidates = await self._get_expanded_candidates()
+            candidates = await self._get_expanded_candidates(account_equity=account_equity)
             log.info(f"📊 Candidates ({len(candidates)}): {candidates}")
             
             # Run 1h backtests (step=12, faster)
@@ -432,21 +484,35 @@ class SymbolSelectorAgent:
             log.warning(f"⚠️ Falling back to default symbols: {self.FALLBACK_SYMBOLS}")
             return self.FALLBACK_SYMBOLS
     
-    async def _get_expanded_candidates(self) -> List[str]:
+    async def _get_expanded_candidates(self, account_equity: Optional[float] = None) -> List[str]:
         """Get AI500 Top 10 by 24h volume"""
         try:
             from src.api.binance_client import BinanceClient
             
             client = BinanceClient()
             tickers = client.get_all_tickers()
+            ticker_map = {t.get('symbol'): t for t in tickers if t.get('symbol')}
+            effective_min_quote_volume = self._get_effective_min_quote_volume(account_equity)
+            if account_equity is not None:
+                self.account_equity = float(account_equity)
             
             # Filter AI500 candidates and sort by volume
             ai_stats = []
+            skipped_blacklist = []
+            skipped_liquidity = []
             for t in tickers:
                 if t['symbol'] in self.ai500_candidates:
+                    symbol = t['symbol']
+                    if symbol in self.symbol_blacklist:
+                        skipped_blacklist.append(symbol)
+                        continue
                     try:
                         quote_vol = float(t.get('quoteVolume', 0))
-                        ai_stats.append((t['symbol'], quote_vol))
+                        last_price = float(t.get('lastPrice', 0))
+                        if quote_vol < effective_min_quote_volume or last_price < self.min_price:
+                            skipped_liquidity.append(f"{symbol}(vol={quote_vol:.0f},price={last_price:.4f})")
+                            continue
+                        ai_stats.append((symbol, quote_vol))
                     except (ValueError, TypeError):
                         pass
             
@@ -454,7 +520,11 @@ class SymbolSelectorAgent:
             ai_stats.sort(key=lambda x: x[1], reverse=True)
             ai500_top10 = [x[0] for x in ai_stats[:10]]
             
-            log.info(f"📊 AI500 Top 10: {ai500_top10}")
+            if skipped_blacklist:
+                log.warning(f\"🚫 AI500 blacklist excluded: {', '.join(skipped_blacklist)}\")
+            if skipped_liquidity:
+                log.warning(f\"⚠️ AI500 liquidity filter excluded: {', '.join(skipped_liquidity[:6])}{'...' if len(skipped_liquidity) > 6 else ''}\")
+            log.info(f\"📊 AI500 Top 10 (filtered): {ai500_top10}\")
             
             return ai500_top10
             
