@@ -95,7 +95,8 @@ from src.agents import (
     PositionInfo,
     SignalWeight,
     ReflectionAgent,
-    ReflectionAgentLLM
+    ReflectionAgentLLM,
+    MultiPeriodParserAgent
 )
 print("[DEBUG] Importing StrategyEngine...")
 from src.strategy.llm_engine import StrategyEngine
@@ -273,7 +274,8 @@ class MultiAgentTradingBot:
         # Core Agents (always enabled)
         self.data_sync_agent = DataSyncAgent(self.client)
         self.quant_analyst = QuantAnalystAgent()
-        # self.decision_core = DecisionCoreAgent() # Deprecated in DeepSeek Mode
+        self.decision_core = DecisionCoreAgent()
+        self.multi_period_agent = MultiPeriodParserAgent()
         self.risk_audit = RiskAuditAgent(
             max_leverage=10.0,
             max_position_pct=0.3,
@@ -670,6 +672,15 @@ class MultiAgentTradingBot:
                     log.info("✅ ReflectionAgent (no LLM) enabled (runtime)")
         else:
             self.reflection_agent = None
+
+    def _is_llm_enabled(self) -> bool:
+        """Return True if LLM-driven agents are enabled by runtime config."""
+        return bool(
+            self.agent_config.trend_agent_llm
+            or self.agent_config.setup_agent_llm
+            or self.agent_config.trigger_agent_llm
+            or self.agent_config.reflection_agent_llm
+        )
 
     def _attach_agent_ui_fields(self, decision_dict: Dict) -> None:
         """Attach optional agent fields used by the dashboard."""
@@ -1918,7 +1929,22 @@ class MultiAgentTradingBot:
                     }
             else:
                 global_state.semantic_analyses = {}
-            
+
+            # Step 2.6: Multi-Period Parser Agent (feeds Decision)
+            try:
+                multi_period_result = self.multi_period_agent.analyze(
+                    quant_analysis=quant_analysis,
+                    four_layer_result=four_layer_result,
+                    semantic_analyses=getattr(global_state, 'semantic_analyses', {}) or {}
+                )
+                global_state.multi_period_result = multi_period_result
+                summary = multi_period_result.get('summary')
+                if summary:
+                    global_state.add_agent_message("multi_period_agent", summary, level="info")
+            except Exception as e:
+                log.error(f"❌ Multi-Period Parser Agent failed: {e}")
+                global_state.multi_period_result = {}
+
             # Step 3: Decision (Fast trend first, then LLM fallback)
             market_data = {
                 'df_5m': processed_dfs['5m'],

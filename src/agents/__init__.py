@@ -26,6 +26,7 @@ from .risk_audit_agent import RiskAuditAgent, RiskCheckResult, PositionInfo, Ris
 # Optional Agents
 from .predict_agent import PredictAgent, PredictResult
 from .reflection_agent import ReflectionAgent, ReflectionAgentLLM, ReflectionResult
+from .multi_period_agent import MultiPeriodParserAgent
 
 __all__ = [
     # Framework
@@ -50,5 +51,5 @@ __all__ = [
     'ReflectionAgent',
     'ReflectionAgentLLM',
     'ReflectionResult',
+    'MultiPeriodParserAgent',
 ]
-

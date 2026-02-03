@@ -83,6 +83,9 @@ class SharedState:
 
     # Indicator snapshot (for UI)
     indicator_snapshot: Dict[str, Any] = field(default_factory=dict)
+
+    # Multi-Period Parser Agent Output
+    multi_period_result: Dict[str, Any] = field(default_factory=dict)
     
     # [NEW] Multi-Agent Chatroom Messages
     agent_messages: List[Dict] = field(default_factory=list)
