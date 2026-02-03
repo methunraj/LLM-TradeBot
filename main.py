@@ -346,14 +346,18 @@ class MultiAgentTradingBot:
         print(f"  - Kline Limit: {self.kline_limit}")
         print(f"  - Test Mode: {'✅ Yes' if self.test_mode else '❌ No'}")
         
-        # ✅ Load initial trade history (Only in Live Mode)
-        if not self.test_mode:
-            recent_trades = self.saver.get_recent_trades(limit=20)
-            global_state.trade_history = recent_trades
-            print(f"  📜 Loaded {len(recent_trades)} historical trades")
-        else:
-            global_state.trade_history = []
-            print("  🧪 Test mode: No history loaded, showing only current session")
+        # ✅ Load initial trade history
+        recent_trades = self.saver.get_recent_trades(limit=20)
+        global_state.trade_history = recent_trades
+        print(f"  📜 Loaded {len(recent_trades)} historical trades")
+        
+        # 🆕 Initialize Chatroom with a boot message
+        global_state.add_agent_message(
+            "decision_core", 
+            "**System initialized.** All agents are online and ready for parallel execution. Standing by for market data...", 
+            level="success"
+        )
+        
         self._sync_open_positions_to_trade_history()
 
     def _reload_symbols(self):
@@ -1106,6 +1110,9 @@ class MultiAgentTradingBot:
             # 每个币种的子日志
             global_state.add_log(f"[📊 SYSTEM] {self.current_symbol} analysis started")
             
+            # [NEW] Clear chatroom messages for new symbol cycle
+            global_state.agent_messages = [msg for msg in global_state.agent_messages if msg.get('symbol') != self.current_symbol]
+            
             # ✅ Generate snapshot_id for this cycle (legacy compatibility)
             snapshot_id = f"snap_{int(time.time())}"
 
@@ -1359,10 +1366,71 @@ class MultiAgentTradingBot:
                 snapshots[self.current_symbol] = indicator_snapshot
                 global_state.indicator_snapshot = snapshots
 
-            # Step 2: Strategist
+            # Step 2: Analysts in Parallel (Chatroom Mode)
             if not (hasattr(self, '_headless_mode') and self._headless_mode):
-                print("[Step 2/4] 👨‍🔬 The Strategist (QuantAnalyst) - Analyzing data...")
-            quant_analysis = await self.quant_analyst.analyze_all_timeframes(market_snapshot)
+                print("[Step 2/4] 👥 Multi-Agent Analysis (Parallel)...")
+            global_state.add_log(f"[📊 SYSTEM] Parallel analysis started for {self.current_symbol}")
+
+            # Define Parallel Tasks
+            analysis_tasks = []
+            
+            # Task 1: Quant Analyst (Trend, Oscillator, Sentiment)
+            analysis_tasks.append(self.quant_analyst.analyze_all_timeframes(market_snapshot))
+            
+            # Task 2: Predict Agent (Prophet)
+            if self.agent_config.predict_agent and self.current_symbol in self.predict_agents:
+                df_15m_features = self.feature_engineer.build_features(processed_dfs['15m'])
+                latest_features = {}
+                if not df_15m_features.empty:
+                    latest = df_15m_features.iloc[-1].to_dict()
+                    latest_features = {k: v for k, v in latest.items() if isinstance(v, (int, float)) and not isinstance(v, bool)}
+                analysis_tasks.append(self.predict_agents[self.current_symbol].predict(latest_features))
+            else:
+                analysis_tasks.append(asyncio.sleep(0)) # Noop placeholder
+                
+            # Task 3: Reflection Agent
+            reflection_task = None
+            total_trades = len(global_state.trade_history)
+            if self.reflection_agent and self.reflection_agent.should_reflect(total_trades):
+                trades_to_analyze = global_state.trade_history[-10:]
+                reflection_task = self.reflection_agent.generate_reflection(trades_to_analyze)
+                analysis_tasks.append(reflection_task)
+            else:
+                analysis_tasks.append(asyncio.sleep(0)) # Noop placeholder
+                
+            # Execute Parallel Tasks
+            analysis_results = await asyncio.gather(*analysis_tasks)
+            
+            # Process Results
+            quant_analysis = analysis_results[0]
+            predict_result = analysis_results[1] if isinstance(analysis_results[1], object) and hasattr(analysis_results[1], 'probability_up') else None
+            reflection_result = analysis_results[2] if len(analysis_results) > 2 and analysis_results[2] else None
+            
+            # --- Post Quant Analyst Results ---
+            trend_score = quant_analysis.get('trend', {}).get('total_trend_score', 0)
+            osc_score = quant_analysis.get('oscillator', {}).get('total_osc_score', 0)
+            sent_score = quant_analysis.get('sentiment', {}).get('total_sentiment_score', 0)
+            quant_msg = f"Analysis Complete. Trend={trend_score:+.0f} | Osc={osc_score:+.0f} | Sent={sent_score:+.0f}"
+            global_state.add_agent_message("quant_analyst", quant_msg, level="success")
+            
+            # --- Post Predict Agent Results ---
+            if predict_result:
+                global_state.prophet_probability = predict_result.probability_up
+                p_up_pct = predict_result.probability_up * 100
+                direction = "↗UP" if predict_result.probability_up > 0.55 else ("↘DN" if predict_result.probability_up < 0.45 else "➖NEU")
+                predict_msg = f"Probability Up: {p_up_pct:.1f}% {direction} (Conf: {predict_result.confidence*100:.0f}%)"
+                global_state.add_agent_message("predict_agent", predict_msg, level="info")
+                self.saver.save_prediction(asdict(predict_result), self.current_symbol, snapshot_id, cycle_id=cycle_id)
+            
+            # --- Post Reflection Agent Results ---
+            if reflection_result:
+                reflection_text = reflection_result.to_prompt_text()
+                global_state.last_reflection = reflection_result.raw_response
+                global_state.last_reflection_text = reflection_text
+                global_state.reflection_count = self.reflection_agent.reflection_count
+                global_state.add_agent_message("reflection_agent", f"Reflected on {len(trades_to_analyze)} trades. Insight: {reflection_result.insight[:100]}...", level="info")
+            else:
+                reflection_text = global_state.last_reflection_text
             
             # 💉 INJECT MACD DATA (Fix for Missing Data)
             try:
@@ -1385,41 +1453,7 @@ class MultiAgentTradingBot:
             sent_score = quant_analysis.get('sentiment', {}).get('total_sentiment_score', 0)
             global_state.add_log(f"[👨‍🔬 STRATEGIST] Trend={trend_score:+.0f} | Osc={osc_score:+.0f} | Sent={sent_score:+.0f}")
             
-            # Step 2.5: Prophet (Optional - skip if PredictAgent disabled)
-            predict_result = None
-            if self.agent_config.predict_agent and self.current_symbol in self.predict_agents:
-                if not (hasattr(self, '_headless_mode') and self._headless_mode):
-                    print("[Step 2.5/5] 🔮 The Prophet (Predict Agent) - Calculating probability...")
-                df_15m_features = self.feature_engineer.build_features(processed_dfs['15m'])
-                if not df_15m_features.empty:
-                    latest = df_15m_features.iloc[-1].to_dict()
-                    predict_features = {k: v for k, v in latest.items() if isinstance(v, (int, float)) and not isinstance(v, bool)}
-                else:
-                     predict_features = {}
-                
-                predict_result = await self.predict_agents[self.current_symbol].predict(predict_features)
-                global_state.prophet_probability = predict_result.probability_up
-                
-                # LOG 3: Prophet (The Prophet)
-                p_up_pct = predict_result.probability_up * 100
-                direction = "↗UP" if predict_result.probability_up > 0.55 else ("↘DN" if predict_result.probability_up < 0.45 else "➖NEU")
-                global_state.add_log(f"[🔮 PROPHET] P(Up)={p_up_pct:.1f}% {direction}")
-                
-                # Save Prediction
-                self.saver.save_prediction(asdict(predict_result), self.current_symbol, snapshot_id, cycle_id=cycle_id)
-            else:
-                # PredictAgent disabled - use neutral defaults
-                from src.agents.predict_agent import PredictResult
-                predict_result = PredictResult(
-                    probability_up=0.5,
-                    probability_down=0.5,
-                    confidence=0.0,
-                    horizon='30m',
-                    factors={},
-                    model_type='disabled'
-                )
-                global_state.prophet_probability = 0.5
-                global_state.add_log(f"[🔮 PROPHET] Disabled - using neutral (50%)")
+            # Prophet already computed in Step 2 parallel block.
             
             # === 🎯 FOUR-LAYER STRATEGY FILTERING ===
             if not (hasattr(self, '_headless_mode') and self._headless_mode):
@@ -1968,29 +2002,30 @@ class MultiAgentTradingBot:
                     'current_price': current_price
                 }
 
-                # 🧠 Check if reflection is needed (every 10 trades)
-                reflection_text = None
-                total_trades = len(global_state.trade_history)
-                if self.reflection_agent and self.reflection_agent.should_reflect(total_trades):
-                    log.info(f"🧠 Triggering reflection after {total_trades} trades...")
-                    trades_to_analyze = global_state.trade_history[-10:]
-                    reflection_result = await self.reflection_agent.generate_reflection(trades_to_analyze)
-                    if reflection_result:
-                        reflection_text = reflection_result.to_prompt_text()
-                        global_state.last_reflection = reflection_result.raw_response
-                        global_state.last_reflection_text = reflection_text
-                        global_state.reflection_count = self.reflection_agent.reflection_count
-                        global_state.add_log(f"🧠 Reflection #{self.reflection_agent.reflection_count} generated")
-                else:
-                    # Use cached reflection if available
-                    reflection_text = global_state.last_reflection_text
+                # 🐂🐻 Parallel Perspectives (Chatroom Mode)
+                log.info("🐂🐻 Gathering Bull/Bear perspectives in PARALLEL...")
+                bull_task = loop.run_in_executor(None, self.strategy_engine.get_bull_perspective, market_context_text)
+                bear_task = loop.run_in_executor(None, self.strategy_engine.get_bear_perspective, market_context_text)
+                
+                bull_p, bear_p = await asyncio.gather(bull_task, bear_task)
+                
+                # Post to Chatroom
+                bull_summary = bull_p.get('bullish_reasons', 'No reasons provided')[:150] + "..."
+                bear_summary = bear_p.get('bearish_reasons', 'No reasons provided')[:150] + "..."
+                global_state.add_agent_message("bull_agent", f"Stance: {bull_p.get('stance')} | Reason: {bull_summary}", level="success")
+                global_state.add_agent_message("bear_agent", f"Stance: {bear_p.get('stance')} | Reason: {bear_summary}", level="warning")
 
-                # Call DeepSeek with optional reflection
+                # Call DeepSeek with pre-computed perspectives
                 llm_decision = self.strategy_engine.make_decision(
                     market_context_text=market_context_text,
                     market_context_data=market_context_data,
-                    reflection=reflection_text
+                    reflection=reflection_text,
+                    bull_perspective=bull_p,
+                    bear_perspective=bear_p
                 )
+                
+                # Post Decision to Chatroom
+                global_state.add_agent_message("decision_core", f"Action: {llm_decision.get('action').upper()} | Conf: {llm_decision.get('confidence')}% | Reason: {llm_decision.get('reasoning')[:100]}...", level="info")
             
             # ... Rest of logic stays similar ...
             
@@ -2022,7 +2057,7 @@ class MultiAgentTradingBot:
                 # Sentiment
                 'sentiment': q_sent.get('total_sentiment_score', 0),
                 # Prophet
-                'prophet': predict_result.probability_up,
+                'prophet': predict_result.probability_up if predict_result else 0.5,
                 # 🐂🐻 Bullish/Bearish Perspective Analysis
                 'bull_confidence': llm_decision.get('bull_perspective', {}).get('bull_confidence', 50),
                 'bear_confidence': llm_decision.get('bear_perspective', {}).get('bear_confidence', 50),
@@ -2158,7 +2193,7 @@ class MultiAgentTradingBot:
                 # Add implicit safe risk for Wait/Hold
                 decision_dict['risk_level'] = 'safe'
                 decision_dict['guardian_passed'] = True
-                decision_dict['prophet_probability'] = predict_result.probability_up  # 🔮 Prophet
+                decision_dict['prophet_probability'] = predict_result.probability_up if predict_result else 0.5  # 🔮 Prophet
                 
                 # ✅ Add Semantic Analysis for Dashboard
                 decision_dict['vote_analysis'] = SemanticConverter.convert_analysis_map(decision_dict.get('vote_details', {}))
@@ -2358,7 +2393,7 @@ class MultiAgentTradingBot:
             decision_dict['risk_level'] = audit_result.risk_level.value
             decision_dict['guardian_passed'] = audit_result.passed
             decision_dict['guardian_reason'] = audit_result.blocked_reason
-            decision_dict['prophet_probability'] = predict_result.probability_up  # 🔮 Prophet
+            decision_dict['prophet_probability'] = predict_result.probability_up if predict_result else 0.5  # 🔮 Prophet
             
             # ✅ Add Semantic Analysis for Dashboard
             decision_dict['vote_analysis'] = SemanticConverter.convert_analysis_map(decision_dict.get('vote_details', {}))
@@ -3180,8 +3215,8 @@ class MultiAgentTradingBot:
         sentiment = quant_analysis.get('sentiment', {})
         
         # Prophet 预测 (语义化转换)
-        prob_pct = predict_result.probability_up * 100
-        prophet_signal = predict_result.signal
+        prob_pct = (predict_result.probability_up if predict_result else 0.5) * 100
+        prophet_signal = predict_result.signal if predict_result else "neutral"
         
         # 语义转换逻辑 (Prophet)
         if prob_pct >= 80:

@@ -1618,6 +1618,7 @@ function updateAgentFramework(system, decision, agents) {
     };
     const mode = resolveMode(system);
     const lang = window.currentLang === 'zh' ? 'zh' : 'en';
+
     const statusLabels = {
         en: {
             Idle: 'Idle',
@@ -1694,12 +1695,24 @@ function updateAgentFramework(system, decision, agents) {
         en: {
             trend: { llm: 'Trend Agent (LLM)', local: 'Trend Agent', fallback: 'Trend Agent' },
             trigger: { llm: 'Trigger Agent (LLM)', local: 'Trigger Agent', fallback: 'Trigger Agent' },
-            reflection: { llm: 'Reflection Agent (LLM)', local: 'Reflection Agent', fallback: 'Reflection Agent' }
+            reflection: { llm: 'Reflection Agent (LLM)', local: 'Reflection Agent', fallback: 'Reflection Agent' },
+            quant_analyst: 'Quant Analyst',
+            predict_agent: 'Predict Agent',
+            bull_agent: 'Bull Perspective',
+            bear_agent: 'Bear Perspective',
+            reflection_agent: 'Reflection Agent',
+            decision_core: 'Decision Core'
         },
         zh: {
             trend: { llm: '趋势代理(LLM)', local: '趋势代理', fallback: '趋势代理' },
             trigger: { llm: '触发代理(LLM)', local: '触发代理', fallback: '触发代理' },
-            reflection: { llm: '复盘代理(LLM)', local: '复盘代理', fallback: '复盘代理' }
+            reflection: { llm: '复盘代理(LLM)', local: '复盘代理', fallback: '复盘代理' },
+            quant_analyst: '量化分析师',
+            predict_agent: '预测代理',
+            bull_agent: '多头观点',
+            bear_agent: '空头观点',
+            reflection_agent: '复盘代理',
+            decision_core: '决策核心'
         }
     };
 
@@ -2745,6 +2758,56 @@ function updateAgentFramework(system, decision, agents) {
         setOutput('out-win-rate', '--');
         setOutput('out-insight', '--');
         setSummary('sum-reflection', 'Reflection idle.');
+    }
+
+    // 🆕 [NEW] Render Multi-Agent Chatroom
+    const renderChatroom = (messages) => {
+        const chatContainer = document.getElementById('chatroom-messages');
+        if (!chatContainer) return;
+
+        if (!messages || messages.length === 0) {
+            if (!chatContainer.querySelector('.chatroom-empty')) {
+                chatContainer.innerHTML = `
+                    <div class="chatroom-empty">
+                        <div class="icon">💬</div>
+                        <p>${lang === 'zh' ? '等待代理开始分析...' : 'Waiting for agents to start...'}</p>
+                    </div>
+                `;
+            }
+            return;
+        }
+
+        // Check if update is needed (simple optimization)
+        const currentMsgCount = chatContainer.querySelectorAll('.chat-bubble').length;
+        if (currentMsgCount === messages.length) return;
+
+        chatContainer.innerHTML = '';
+        messages.forEach(msg => {
+            const bubble = document.createElement('div');
+            bubble.className = `chat-bubble ${msg.agent} chat-level-${msg.level || 'info'}`;
+
+            const agentName = titleMap[lang]?.[msg.agent] || msg.agent.replace('_', ' ').toUpperCase();
+            const timeStr = msg.timestamp ? (msg.timestamp.includes(' ') ? msg.timestamp.split(' ')[1] : msg.timestamp) : '--:--:--';
+
+            bubble.innerHTML = `
+                <div class="chat-header">
+                    <span class="chat-agent-name">${agentName}</span>
+                    <span class="chat-timestamp">${timeStr}</span>
+                </div>
+                <div class="chat-content">${msg.content}</div>
+            `;
+            chatContainer.appendChild(bubble);
+        });
+
+        // Auto-scroll to bottom
+        setTimeout(() => {
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }, 50);
+    };
+
+    // Initialize/Update Chatroom
+    if (agents && agents.agent_messages) {
+        renderChatroom(agents.agent_messages);
     }
 }
 

@@ -84,6 +84,9 @@ class SharedState:
     # Indicator snapshot (for UI)
     indicator_snapshot: Dict[str, Any] = field(default_factory=dict)
     
+    # [NEW] Multi-Agent Chatroom Messages
+    agent_messages: List[Dict] = field(default_factory=list)
+    
     def update_market(self, symbol: str, price: float, regime: str, position: str):
         self.current_price[symbol] = price
         self.market_regime[symbol] = regime
@@ -160,6 +163,26 @@ class SharedState:
             self.decision_history.pop()
         
         self.last_update = datetime.now().strftime("%H:%M:%S")
+
+    def add_agent_message(self, agent: str, content: str, role: str = "assistant", level: str = "info", symbol: Optional[str] = None):
+        """Add a message to the multi-agent chatroom"""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        message = {
+            "timestamp": timestamp,
+            "agent": agent,
+            "content": content,
+            "role": role,
+            "level": level,
+            "symbol": symbol or self.current_symbol,
+            "cycle": self.cycle_counter
+        }
+        self.agent_messages.append(message)
+        # Keep last 100 messages
+        if len(self.agent_messages) > 100:
+            self.agent_messages.pop(0)
+        
+        # Also log to system logs
+        self.add_log(f"[{agent.upper()}] {content}")
     
     def init_balance(self, balance: float, initial_balance: Optional[float] = None):
         """Initialize the starting balance for tracking."""

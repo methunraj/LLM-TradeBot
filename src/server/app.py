@@ -285,7 +285,8 @@ async def get_status(authenticated: bool = Depends(verify_auth)):
         "agents": {
             "critic_confidence": global_state.critic_confidence,
             "guardian_status": global_state.guardian_status,
-            "symbol_selector": getattr(global_state, 'symbol_selector', {})
+            "symbol_selector": getattr(global_state, 'symbol_selector', {}),
+            "agent_messages": global_state.agent_messages # [NEW] Chatroom messages
         },
         "account": account_payload,
         "virtual_account": {

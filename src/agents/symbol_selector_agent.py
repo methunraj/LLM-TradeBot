@@ -521,10 +521,10 @@ class SymbolSelectorAgent:
             ai500_top10 = [x[0] for x in ai_stats[:10]]
             
             if skipped_blacklist:
-                log.warning(f\"🚫 AI500 blacklist excluded: {', '.join(skipped_blacklist)}\")
+                log.warning(f"🚫 AI500 blacklist excluded: {', '.join(skipped_blacklist)}")
             if skipped_liquidity:
-                log.warning(f\"⚠️ AI500 liquidity filter excluded: {', '.join(skipped_liquidity[:6])}{'...' if len(skipped_liquidity) > 6 else ''}\")
-            log.info(f\"📊 AI500 Top 10 (filtered): {ai500_top10}\")
+                log.warning(f"⚠️ AI500 liquidity filter excluded: {', '.join(skipped_liquidity[:6])}{'...' if len(skipped_liquidity) > 6 else ''}")
+            log.info(f"📊 AI500 Top 10 (filtered): {ai500_top10}")
             
             return ai500_top10
             

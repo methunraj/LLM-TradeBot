@@ -181,485 +181,507 @@
                         </div>
                     </div>
 
-                    <!-- Agent Framework Layout: Selection Panel + Flow Diagram -->
-                    <div class="agent-framework-layout framework-grid">
+                    <!-- Agent Framework Layout: Selection Panel + Flow Diagram + Chatroom -->
+                    <div class="agent-framework-layout framework-grid" style="grid-template-columns: 280px 1fr 350px;">
 
-                        <!-- Right: Agent Flow Diagram -->
+                        <!-- Left: Selection Panel (Existing) -->
+                        <div class="agent-selection-container">
+                            <!-- ... existing content can be simplified or moved ... -->
+                        </div>
+
+                        <!-- Middle: Agent Flow Diagram (Existing) -->
                         <div class="agent-flow-container">
                             <svg id="flow-beams" class="flow-beams" aria-hidden="true"></svg>
-                            <!-- Layer 1: Data Layer -->
-                            <div class="flow-layer" data-layer="data">
-                                <div class="flow-layer-row">
-                                    <div class="layer-label" data-i18n="framework.layer.data">📡 Data Layer</div>
-                                    <div class="layer-agents">
-                                        <div class="agent-box" id="flow-datasync">
-                                            <div class="agent-header">
-                                                <span class="agent-emoji">🕵️</span>
-                                                <span class="agent-title" data-i18n="agent.card.datasync">DataSync
-                                                    Agent</span>
-                                                <span class="agent-badge idle">Idle</span>
-                                            </div>
-                                            <div class="agent-output">
-                                                <div class="output-row"><span class="output-label"
-                                                        id="label-tf-1">TF1:</span><span class="output-value"
-                                                        id="out-tf-1">--</span></div>
-                                                <div class="output-row"><span class="output-label"
-                                                        id="label-tf-2">TF2:</span><span class="output-value"
-                                                        id="out-tf-2">--</span></div>
-                                                <div class="output-row"><span class="output-label"
-                                                        id="label-tf-3">TF3:</span><span class="output-value"
-                                                        id="out-tf-3">--</span></div>
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.oi">OI:</span><span class="output-value"
-                                                        id="out-oi">--</span></div>
-                                            </div>
-                                            <div class="agent-summary" id="sum-datasync">--</div>
-                                        </div>
-                                        <div class="agent-box" id="flow-symbol-selector">
-                                            <div class="agent-header">
-                                                <span class="agent-emoji">🎰</span>
-                                                <span class="agent-title" data-i18n="agent.card.symbol_selector">Symbol
-                                                    Selector</span>
-                                                <span class="agent-badge idle">Idle</span>
-                                            </div>
-                                            <div class="agent-output">
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.mode">Mode:</span><span
-                                                        class="output-value" id="out-selector-mode">AUTO1</span></div>
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.symbol">Symbol:</span><span
-                                                        class="output-value" id="out-selector-symbol">--</span></div>
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.bias">Bias:</span><span
-                                                        class="output-value" id="out-selector-bias">--</span></div>
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.score">Score:</span><span
-                                                        class="output-value" id="out-selector-score">--</span></div>
-                                            </div>
-                                            <div class="agent-summary" id="sum-symbol-selector">--</div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="flow-connector vertical">
-                                    <div class="flow-line"></div>
-                                    <div class="flow-particles" id="particles-data"></div>
-                                </div>
-                            </div>
-
-                            <!-- Layer 2: Analysis Layer -->
-                            <div class="flow-layer" data-layer="analysis">
-                                <div class="flow-layer-row">
-                                    <div class="layer-label" data-i18n="framework.layer.analysis">📊 Analysis Layer
-                                    </div>
-                                    <div class="layer-agents">
-                                        <div class="agent-box" id="flow-quant">
-                                            <div class="agent-header">
-                                                <span class="agent-emoji">👨‍🔬</span>
-                                                <span class="agent-title" data-i18n="agent.card.quant">Quant
-                                                    Analyst</span>
-                                                <span class="agent-badge idle">Idle</span>
-                                            </div>
-                                            <div class="agent-output">
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.ema">EMA:</span><span
-                                                        class="output-value" id="out-ema">--</span></div>
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.rsi">RSI:</span><span
-                                                        class="output-value" id="out-rsi">--</span></div>
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.macd">MACD:</span><span
-                                                        class="output-value" id="out-macd">--</span></div>
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.bb">BB:</span><span class="output-value"
-                                                        id="out-bb">--</span></div>
-                                            </div>
-                                            <div class="agent-summary" id="sum-quant">--</div>
-                                        </div>
-                                        <div class="agent-box" id="flow-regime">
-                                            <div class="agent-header">
-                                                <span class="agent-emoji">🔮</span>
-                                                <span class="agent-title" data-i18n="agent.card.regime">Regime
-                                                    Detector</span>
-                                                <span class="agent-badge idle">Idle</span>
-                                            </div>
-                                            <div class="agent-output">
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.state">State:</span><span
-                                                        class="output-value" id="out-regime">--</span></div>
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.adx">ADX:</span><span
-                                                        class="output-value" id="out-adx">--</span></div>
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.conf">Conf:</span><span
-                                                        class="output-value" id="out-regime-conf">--</span></div>
-                                            </div>
-                                            <div class="agent-summary" id="sum-regime">--</div>
-                                        </div>
-                                        <div class="agent-box" id="flow-trigger-detector">
-                                            <div class="agent-header">
-                                                <span class="agent-emoji">⚡</span>
-                                                <span class="agent-title"
-                                                    data-i18n="agent.card.trigger_detector">Trigger Detector</span>
-                                                <span class="agent-badge idle">Idle</span>
-                                            </div>
-                                            <div class="agent-output">
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.pattern">Pattern:</span><span
-                                                        class="output-value" id="out-pattern">--</span></div>
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.signal">Signal:</span><span
-                                                        class="output-value" id="out-trigger-signal">--</span></div>
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.score">Score:</span><span
-                                                        class="output-value" id="out-trigger-score">--</span></div>
-                                            </div>
-                                            <div class="agent-summary" id="sum-trigger-detector">--</div>
-                                        </div>
-                                        <div class="agent-box" id="flow-position-analyzer">
-                                            <div class="agent-header">
-                                                <span class="agent-emoji">📍</span>
-                                                <span class="agent-title"
-                                                    data-i18n="agent.card.position_analyzer">Position Analyzer</span>
-                                                <span class="agent-badge idle">Idle</span>
-                                            </div>
-                                            <div class="agent-output">
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.zone">Zone:</span><span
-                                                        class="output-value" id="out-zone">--</span></div>
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.sr">S/R:</span><span class="output-value"
-                                                        id="out-sr">--</span></div>
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.range">Range:</span><span
-                                                        class="output-value" id="out-range">--</span></div>
-                                            </div>
-                                            <div class="agent-summary" id="sum-position-analyzer">--</div>
-                                        </div>
-                                        <div class="agent-box" id="flow-predict">
-                                            <div class="agent-header">
-                                                <span class="agent-emoji">🎯</span>
-                                                <span class="agent-title" data-i18n="agent.card.predict">Predict
-                                                    Agent</span>
-                                                <span class="agent-badge idle">Idle</span>
-                                            </div>
-                                            <div class="agent-output">
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.pup">P(Up):</span><span
-                                                        class="output-value bullish" id="out-pup">--%</span></div>
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.pdown">P(Down):</span><span
-                                                        class="output-value bearish" id="out-pdown">--%</span></div>
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.signal">Signal:</span><span
-                                                        class="output-value" id="out-signal">--</span></div>
-                                            </div>
-                                            <div class="agent-summary" id="sum-predict">--</div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="flow-connector vertical merge">
-                                    <div class="flow-line"></div>
-                                    <div class="flow-particles" id="particles-analysis"></div>
-                                </div>
-                            </div>
-
-                            <!-- Layer 2.5: LLM Strategy Layer -->
-                            <div class="flow-layer" data-layer="strategy">
-                                <div class="flow-layer-row">
-                                    <div class="layer-label" data-i18n="framework.layer.strategy">🧠 Semantic Strategy
-                                        Layer</div>
-                                    <div class="layer-agents">
-                                        <div class="agent-box" id="flow-trend-agent">
-                                            <div class="agent-header">
-                                                <span class="agent-emoji">📈</span>
-                                                <span class="agent-title" id="title-trend-agent"
-                                                    data-i18n="agent.card.trend">Trend Agent</span>
-                                                <span class="agent-badge idle">Idle</span>
-                                            </div>
-                                            <div class="agent-output">
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.trend1h">1h Trend:</span><span
-                                                        class="output-value" id="out-trend-1h">--</span></div>
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.bias">Bias:</span><span
-                                                        class="output-value" id="out-trend-bias">--</span></div>
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.conf">Conf:</span><span
-                                                        class="output-value" id="out-trend-conf">--</span></div>
-                                            </div>
-                                            <div class="agent-summary" id="sum-trend-agent">--</div>
-                                        </div>
-                                        <div class="agent-box" id="flow-trigger-agent">
-                                            <div class="agent-header">
-                                                <span class="agent-emoji">🔥</span>
-                                                <span class="agent-title" id="title-trigger-agent"
-                                                    data-i18n="agent.card.trigger">Trigger Agent</span>
-                                                <span class="agent-badge idle">Idle</span>
-                                            </div>
-                                            <div class="agent-output">
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.fire5m">5m Fire:</span><span
-                                                        class="output-value" id="out-fire">--</span></div>
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.entry">Entry:</span><span
-                                                        class="output-value" id="out-entry-type">--</span></div>
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.conf">Conf:</span><span
-                                                        class="output-value" id="out-fire-conf">--</span></div>
-                                            </div>
-                                            <div class="agent-summary" id="sum-trigger-agent">--</div>
-                                        </div>
-                                        <div class="agent-box" id="flow-ai-filter">
-                                            <div class="agent-header">
-                                                <span class="agent-emoji">🚫</span>
-                                                <span class="agent-title" data-i18n="agent.card.ai_filter">AI
-                                                    Filter</span>
-                                                <span class="agent-badge idle">Idle</span>
-                                            </div>
-                                            <div class="agent-output">
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.status">Status:</span><span
-                                                        class="output-value" id="out-ai-status">--</span></div>
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.veto">Veto:</span><span
-                                                        class="output-value" id="out-ai-veto">--</span></div>
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.reason">Reason:</span><span
-                                                        class="output-value" id="out-ai-reason">--</span></div>
-                                            </div>
-                                            <div class="agent-summary" id="sum-ai-filter">--</div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="flow-connector vertical">
-                                    <div class="flow-line"></div>
-                                    <div class="flow-particles" id="particles-strategy"></div>
-                                </div>
-                            </div>
-
-                            <!-- Layer 3: Decision Layer -->
-                            <div class="flow-layer" data-layer="decision">
-                                <div class="flow-layer-row">
-                                    <div class="layer-label" data-i18n="framework.layer.decision">⚖️ Decision Layer
-                                    </div>
-                                    <div class="layer-agents">
-                                        <div class="agent-box decision-core" id="flow-decision">
-                                            <div class="agent-header">
-                                                <span class="agent-emoji">⚖️</span>
-                                                <span class="agent-title" data-i18n="agent.card.decision">Decision
-                                                    Core</span>
-                                                <span class="agent-badge idle">Idle</span>
-                                            </div>
-                                            <div class="agent-output decision-output">
-                                                <div class="decision-result" id="out-decision">
-                                                    <span class="decision-action">WAIT</span>
-                                                    <span class="decision-conf">0%</span>
-                                                </div>
-                                                <div class="decision-votes">
-                                                    <div class="vote-item"><span data-i18n="agent.label.bull">🐂
-                                                            Bull:</span><span id="out-bull">--</span>
-                                                    </div>
-                                                    <div class="vote-item"><span data-i18n="agent.label.bear">🐻
-                                                            Bear:</span><span id="out-bear">--</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <div class="agent-summary" id="sum-decision">--</div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="flow-connector vertical">
-                                    <div class="flow-line"></div>
-                                    <div class="flow-particles" id="particles-decision"></div>
-                                </div>
-                            </div>
-
-                            <!-- Layer 4: Execution Layer -->
-                            <div class="flow-layer" data-layer="execution">
-                                <div class="flow-layer-row">
-                                    <div class="layer-label" data-i18n="framework.layer.execution">🛡️ Execution Layer
-                                    </div>
-                                    <div class="layer-agents">
-                                        <div class="agent-box" id="flow-risk">
-                                            <div class="agent-header">
-                                                <span class="agent-emoji">🛡️</span>
-                                                <span class="agent-title" data-i18n="agent.card.risk">Risk Audit</span>
-                                                <span class="agent-badge idle">Idle</span>
-                                            </div>
-                                            <div class="agent-output">
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.risk">Risk:</span><span
-                                                        class="output-value" id="out-risk">--</span></div>
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.size">Size:</span><span
-                                                        class="output-value" id="out-size">--</span></div>
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.sl">SL:</span><span class="output-value"
-                                                        id="out-sl">--</span></div>
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.tp">TP:</span><span class="output-value"
-                                                        id="out-tp">--</span></div>
-                                            </div>
-                                            <div class="agent-summary" id="sum-risk">--</div>
-                                        </div>
-                                        <div class="agent-box final-output" id="flow-output">
-                                            <div class="agent-header">
-                                                <span class="agent-emoji">📤</span>
-                                                <span class="agent-title" data-i18n="agent.card.final_output">Final
-                                                    Output</span>
-                                            </div>
-                                            <div class="final-result" id="out-final">
-                                                <div class="final-action">--</div>
-                                                <div class="final-details">
-                                                    <span id="final-symbol">--</span>
-                                                    <span id="final-size">--</span>
-                                                </div>
-                                            </div>
-                                            <div class="agent-summary" id="sum-output">--</div>
-                                        </div>
-                                        <div class="agent-box" id="flow-reflection">
-                                            <div class="agent-header">
-                                                <span class="agent-emoji">🪞</span>
-                                                <span class="agent-title" id="title-reflection-agent"
-                                                    data-i18n="agent.card.reflection">Reflection Agent</span>
-                                                <span class="agent-badge idle">Idle</span>
-                                            </div>
-                                            <div class="agent-output">
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.trades">Trades:</span><span
-                                                        class="output-value" id="out-trades-count">--</span></div>
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.winrate">Win Rate:</span><span
-                                                        class="output-value" id="out-win-rate">--</span></div>
-                                                <div class="output-row"><span class="output-label"
-                                                        data-i18n="agent.label.insight">Insight:</span><span
-                                                        class="output-value" id="out-insight">--</span></div>
-                                            </div>
-                                            <div class="agent-summary" id="sum-reflection">--</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                            <!-- ... existing layers ... -->
                         </div>
 
-                        <!-- Data Flow Legend -->
-                        <div class="flow-legend">
-                            <div class="legend-header">
-                                <div class="legend-title" data-i18n="framework.legend.title">Status</div>
-                                <div class="legend-subtitle" data-i18n="framework.legend.subtitle">Agent + Signal</div>
-                            </div>
-                            <div class="legend-section">
-                                <div class="legend-section-title" data-i18n="framework.legend.section.agent">Agent State
-                                </div>
-                                <div class="legend-grid">
-                                    <div class="legend-item"><span class="legend-dot idle"></span><span
-                                            data-i18n="framework.legend.idle">Idle</span></div>
-                                    <div class="legend-item"><span class="legend-dot running"></span><span
-                                            data-i18n="framework.legend.running">Running</span></div>
-                                    <div class="legend-item"><span class="legend-dot completed"></span><span
-                                            data-i18n="framework.legend.completed">Completed</span></div>
+                        <!-- Right: [NEW] Multi-Agent Chatroom -->
+                        <div class="chatroom-panel">
+                            <h3 style="margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
+                                💬 <span data-i18n="framework.chatroom">Agent Chatroom</span>
+                            </h3>
+                            <div class="chatroom-container">
+                                <div id="chatroom-messages" class="chatroom-messages">
+                                    <div class="chatroom-empty">
+                                        <div class="icon">💬</div>
+                                        <p data-i18n="framework.chatroom.empty">Waiting for agents to start...</p>
+                                    </div>
                                 </div>
                             </div>
-                            <div class="legend-section">
-                                <div class="legend-section-title" data-i18n="framework.legend.section.signal">Signal
-                                </div>
-                                <div class="legend-grid">
-                                    <div class="legend-item"><span class="legend-dot long"></span><span
-                                            data-i18n="framework.legend.long">LONG</span></div>
-                                    <div class="legend-item"><span class="legend-dot short"></span><span
-                                            data-i18n="framework.legend.short">SHORT</span></div>
-                                </div>
-                            </div>
-                            <button onclick="window.resetAgentPositions()" class="reset-positions-btn"
-                                title="Reset agent positions to default">🔄 Reset Layout</button>
                         </div>
                     </div> <!-- End agent-framework-layout -->
-                </div> <!-- End agent-framework-card -->
-            </section>
+                    <div class="flow-layer" data-layer="data">
+                        <div class="flow-layer-row">
+                            <div class="layer-label" data-i18n="framework.layer.data">📡 Data Layer</div>
+                            <div class="layer-agents">
+                                <div class="agent-box" id="flow-datasync">
+                                    <div class="agent-header">
+                                        <span class="agent-emoji">🕵️</span>
+                                        <span class="agent-title" data-i18n="agent.card.datasync">DataSync
+                                            Agent</span>
+                                        <span class="agent-badge idle">Idle</span>
+                                    </div>
+                                    <div class="agent-output">
+                                        <div class="output-row"><span class="output-label"
+                                                id="label-tf-1">TF1:</span><span class="output-value"
+                                                id="out-tf-1">--</span></div>
+                                        <div class="output-row"><span class="output-label"
+                                                id="label-tf-2">TF2:</span><span class="output-value"
+                                                id="out-tf-2">--</span></div>
+                                        <div class="output-row"><span class="output-label"
+                                                id="label-tf-3">TF3:</span><span class="output-value"
+                                                id="out-tf-3">--</span></div>
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.oi">OI:</span><span class="output-value"
+                                                id="out-oi">--</span></div>
+                                    </div>
+                                    <div class="agent-summary" id="sum-datasync">--</div>
+                                </div>
+                                <div class="agent-box" id="flow-symbol-selector">
+                                    <div class="agent-header">
+                                        <span class="agent-emoji">🎰</span>
+                                        <span class="agent-title" data-i18n="agent.card.symbol_selector">Symbol
+                                            Selector</span>
+                                        <span class="agent-badge idle">Idle</span>
+                                    </div>
+                                    <div class="agent-output">
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.mode">Mode:</span><span class="output-value"
+                                                id="out-selector-mode">AUTO1</span></div>
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.symbol">Symbol:</span><span class="output-value"
+                                                id="out-selector-symbol">--</span></div>
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.bias">Bias:</span><span class="output-value"
+                                                id="out-selector-bias">--</span></div>
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.score">Score:</span><span class="output-value"
+                                                id="out-selector-score">--</span></div>
+                                    </div>
+                                    <div class="agent-summary" id="sum-symbol-selector">--</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flow-connector vertical">
+                            <div class="flow-line"></div>
+                            <div class="flow-particles" id="particles-data"></div>
+                        </div>
+                    </div>
 
-            <!-- Row 2.5: Trade History (Full Width) -->
-            <section class="row-trades">
-                <div class="glass-panel card trade-table-card">
-                    <h2 data-i18n="section.trades">📜 Trade History</h2>
-                    <div class="table-container">
-                        <table id="trade-table">
-                            <!-- 列宽定义 - 10列 -->
-                            <colgroup>
-                                <col style="width: 80px;"> <!-- Time -->
-                                <col style="width: 90px;"> <!-- Open -->
-                                <col style="width: 90px;"> <!-- Close -->
-                                <col style="width: 100px;"> <!-- Symbol -->
-                                <col style="width: 90px;"> <!-- Direction -->
-                                <col style="width: 110px;"> <!-- Entry Price -->
-                                <col style="width: 110px;"> <!-- Pos Value -->
-                                <col style="width: 110px;"> <!-- Exit Price -->
-                                <col style="width: 100px;"> <!-- PnL -->
-                                <col style="width: 90px;"> <!-- PnL % -->
-                            </colgroup>
-                            <thead>
-                                <tr>
-                                    <th title="交易记录时间" data-i18n="trade.time">Time</th>
-                                    <th title="开仓周期" data-i18n="trade.open">Open</th>
-                                    <th title="平仓周期" data-i18n="trade.close">Close</th>
-                                    <th title="交易对" data-i18n="trade.symbol">Symbol</th>
-                                    <th title="开仓方向" data-i18n="trade.direction">Direction</th>
-                                    <th title="开仓价格" data-i18n="trade.entry">Entry Price</th>
-                                    <th title="持仓金额 (含杠杆)" data-i18n="trade.posvalue">Pos Value</th>
-                                    <th title="平仓价格" data-i18n="trade.exit">Exit Price</th>
-                                    <th title="盈亏金额" data-i18n="trade.pnl">PnL</th>
-                                    <th title="盈亏比例" data-i18n="trade.pnlpct">PnL %</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <!-- JS Populated -->
-                            </tbody>
-                        </table>
+                    <!-- Layer 2: Analysis Layer -->
+                    <div class="flow-layer" data-layer="analysis">
+                        <div class="flow-layer-row">
+                            <div class="layer-label" data-i18n="framework.layer.analysis">📊 Analysis Layer
+                            </div>
+                            <div class="layer-agents">
+                                <div class="agent-box" id="flow-quant">
+                                    <div class="agent-header">
+                                        <span class="agent-emoji">👨‍🔬</span>
+                                        <span class="agent-title" data-i18n="agent.card.quant">Quant
+                                            Analyst</span>
+                                        <span class="agent-badge idle">Idle</span>
+                                    </div>
+                                    <div class="agent-output">
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.ema">EMA:</span><span class="output-value"
+                                                id="out-ema">--</span></div>
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.rsi">RSI:</span><span class="output-value"
+                                                id="out-rsi">--</span></div>
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.macd">MACD:</span><span class="output-value"
+                                                id="out-macd">--</span></div>
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.bb">BB:</span><span class="output-value"
+                                                id="out-bb">--</span></div>
+                                    </div>
+                                    <div class="agent-summary" id="sum-quant">--</div>
+                                </div>
+                                <div class="agent-box" id="flow-regime">
+                                    <div class="agent-header">
+                                        <span class="agent-emoji">🔮</span>
+                                        <span class="agent-title" data-i18n="agent.card.regime">Regime
+                                            Detector</span>
+                                        <span class="agent-badge idle">Idle</span>
+                                    </div>
+                                    <div class="agent-output">
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.state">State:</span><span class="output-value"
+                                                id="out-regime">--</span></div>
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.adx">ADX:</span><span class="output-value"
+                                                id="out-adx">--</span></div>
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.conf">Conf:</span><span class="output-value"
+                                                id="out-regime-conf">--</span></div>
+                                    </div>
+                                    <div class="agent-summary" id="sum-regime">--</div>
+                                </div>
+                                <div class="agent-box" id="flow-trigger-detector">
+                                    <div class="agent-header">
+                                        <span class="agent-emoji">⚡</span>
+                                        <span class="agent-title" data-i18n="agent.card.trigger_detector">Trigger
+                                            Detector</span>
+                                        <span class="agent-badge idle">Idle</span>
+                                    </div>
+                                    <div class="agent-output">
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.pattern">Pattern:</span><span
+                                                class="output-value" id="out-pattern">--</span></div>
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.signal">Signal:</span><span class="output-value"
+                                                id="out-trigger-signal">--</span></div>
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.score">Score:</span><span class="output-value"
+                                                id="out-trigger-score">--</span></div>
+                                    </div>
+                                    <div class="agent-summary" id="sum-trigger-detector">--</div>
+                                </div>
+                                <div class="agent-box" id="flow-position-analyzer">
+                                    <div class="agent-header">
+                                        <span class="agent-emoji">📍</span>
+                                        <span class="agent-title" data-i18n="agent.card.position_analyzer">Position
+                                            Analyzer</span>
+                                        <span class="agent-badge idle">Idle</span>
+                                    </div>
+                                    <div class="agent-output">
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.zone">Zone:</span><span class="output-value"
+                                                id="out-zone">--</span></div>
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.sr">S/R:</span><span class="output-value"
+                                                id="out-sr">--</span></div>
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.range">Range:</span><span class="output-value"
+                                                id="out-range">--</span></div>
+                                    </div>
+                                    <div class="agent-summary" id="sum-position-analyzer">--</div>
+                                </div>
+                                <div class="agent-box" id="flow-predict">
+                                    <div class="agent-header">
+                                        <span class="agent-emoji">🎯</span>
+                                        <span class="agent-title" data-i18n="agent.card.predict">Predict
+                                            Agent</span>
+                                        <span class="agent-badge idle">Idle</span>
+                                    </div>
+                                    <div class="agent-output">
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.pup">P(Up):</span><span
+                                                class="output-value bullish" id="out-pup">--%</span></div>
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.pdown">P(Down):</span><span
+                                                class="output-value bearish" id="out-pdown">--%</span></div>
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.signal">Signal:</span><span class="output-value"
+                                                id="out-signal">--</span></div>
+                                    </div>
+                                    <div class="agent-summary" id="sum-predict">--</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flow-connector vertical merge">
+                            <div class="flow-line"></div>
+                            <div class="flow-particles" id="particles-analysis"></div>
+                        </div>
+                    </div>
+
+                    <!-- Layer 2.5: LLM Strategy Layer -->
+                    <div class="flow-layer" data-layer="strategy">
+                        <div class="flow-layer-row">
+                            <div class="layer-label" data-i18n="framework.layer.strategy">🧠 Semantic Strategy
+                                Layer</div>
+                            <div class="layer-agents">
+                                <div class="agent-box" id="flow-trend-agent">
+                                    <div class="agent-header">
+                                        <span class="agent-emoji">📈</span>
+                                        <span class="agent-title" id="title-trend-agent"
+                                            data-i18n="agent.card.trend">Trend Agent</span>
+                                        <span class="agent-badge idle">Idle</span>
+                                    </div>
+                                    <div class="agent-output">
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.trend1h">1h Trend:</span><span
+                                                class="output-value" id="out-trend-1h">--</span></div>
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.bias">Bias:</span><span class="output-value"
+                                                id="out-trend-bias">--</span></div>
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.conf">Conf:</span><span class="output-value"
+                                                id="out-trend-conf">--</span></div>
+                                    </div>
+                                    <div class="agent-summary" id="sum-trend-agent">--</div>
+                                </div>
+                                <div class="agent-box" id="flow-trigger-agent">
+                                    <div class="agent-header">
+                                        <span class="agent-emoji">🔥</span>
+                                        <span class="agent-title" id="title-trigger-agent"
+                                            data-i18n="agent.card.trigger">Trigger Agent</span>
+                                        <span class="agent-badge idle">Idle</span>
+                                    </div>
+                                    <div class="agent-output">
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.fire5m">5m Fire:</span><span class="output-value"
+                                                id="out-fire">--</span></div>
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.entry">Entry:</span><span class="output-value"
+                                                id="out-entry-type">--</span></div>
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.conf">Conf:</span><span class="output-value"
+                                                id="out-fire-conf">--</span></div>
+                                    </div>
+                                    <div class="agent-summary" id="sum-trigger-agent">--</div>
+                                </div>
+                                <div class="agent-box" id="flow-ai-filter">
+                                    <div class="agent-header">
+                                        <span class="agent-emoji">🚫</span>
+                                        <span class="agent-title" data-i18n="agent.card.ai_filter">AI
+                                            Filter</span>
+                                        <span class="agent-badge idle">Idle</span>
+                                    </div>
+                                    <div class="agent-output">
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.status">Status:</span><span class="output-value"
+                                                id="out-ai-status">--</span></div>
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.veto">Veto:</span><span class="output-value"
+                                                id="out-ai-veto">--</span></div>
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.reason">Reason:</span><span class="output-value"
+                                                id="out-ai-reason">--</span></div>
+                                    </div>
+                                    <div class="agent-summary" id="sum-ai-filter">--</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flow-connector vertical">
+                            <div class="flow-line"></div>
+                            <div class="flow-particles" id="particles-strategy"></div>
+                        </div>
+                    </div>
+
+                    <!-- Layer 3: Decision Layer -->
+                    <div class="flow-layer" data-layer="decision">
+                        <div class="flow-layer-row">
+                            <div class="layer-label" data-i18n="framework.layer.decision">⚖️ Decision Layer
+                            </div>
+                            <div class="layer-agents">
+                                <div class="agent-box decision-core" id="flow-decision">
+                                    <div class="agent-header">
+                                        <span class="agent-emoji">⚖️</span>
+                                        <span class="agent-title" data-i18n="agent.card.decision">Decision
+                                            Core</span>
+                                        <span class="agent-badge idle">Idle</span>
+                                    </div>
+                                    <div class="agent-output decision-output">
+                                        <div class="decision-result" id="out-decision">
+                                            <span class="decision-action">WAIT</span>
+                                            <span class="decision-conf">0%</span>
+                                        </div>
+                                        <div class="decision-votes">
+                                            <div class="vote-item"><span data-i18n="agent.label.bull">🐂
+                                                    Bull:</span><span id="out-bull">--</span>
+                                            </div>
+                                            <div class="vote-item"><span data-i18n="agent.label.bear">🐻
+                                                    Bear:</span><span id="out-bear">--</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="agent-summary" id="sum-decision">--</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flow-connector vertical">
+                            <div class="flow-line"></div>
+                            <div class="flow-particles" id="particles-decision"></div>
+                        </div>
+                    </div>
+
+                    <!-- Layer 4: Execution Layer -->
+                    <div class="flow-layer" data-layer="execution">
+                        <div class="flow-layer-row">
+                            <div class="layer-label" data-i18n="framework.layer.execution">🛡️ Execution Layer
+                            </div>
+                            <div class="layer-agents">
+                                <div class="agent-box" id="flow-risk">
+                                    <div class="agent-header">
+                                        <span class="agent-emoji">🛡️</span>
+                                        <span class="agent-title" data-i18n="agent.card.risk">Risk Audit</span>
+                                        <span class="agent-badge idle">Idle</span>
+                                    </div>
+                                    <div class="agent-output">
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.risk">Risk:</span><span class="output-value"
+                                                id="out-risk">--</span></div>
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.size">Size:</span><span class="output-value"
+                                                id="out-size">--</span></div>
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.sl">SL:</span><span class="output-value"
+                                                id="out-sl">--</span></div>
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.tp">TP:</span><span class="output-value"
+                                                id="out-tp">--</span></div>
+                                    </div>
+                                    <div class="agent-summary" id="sum-risk">--</div>
+                                </div>
+                                <div class="agent-box final-output" id="flow-output">
+                                    <div class="agent-header">
+                                        <span class="agent-emoji">📤</span>
+                                        <span class="agent-title" data-i18n="agent.card.final_output">Final
+                                            Output</span>
+                                    </div>
+                                    <div class="final-result" id="out-final">
+                                        <div class="final-action">--</div>
+                                        <div class="final-details">
+                                            <span id="final-symbol">--</span>
+                                            <span id="final-size">--</span>
+                                        </div>
+                                    </div>
+                                    <div class="agent-summary" id="sum-output">--</div>
+                                </div>
+                                <div class="agent-box" id="flow-reflection">
+                                    <div class="agent-header">
+                                        <span class="agent-emoji">🪞</span>
+                                        <span class="agent-title" id="title-reflection-agent"
+                                            data-i18n="agent.card.reflection">Reflection Agent</span>
+                                        <span class="agent-badge idle">Idle</span>
+                                    </div>
+                                    <div class="agent-output">
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.trades">Trades:</span><span class="output-value"
+                                                id="out-trades-count">--</span></div>
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.winrate">Win Rate:</span><span
+                                                class="output-value" id="out-win-rate">--</span></div>
+                                        <div class="output-row"><span class="output-label"
+                                                data-i18n="agent.label.insight">Insight:</span><span
+                                                class="output-value" id="out-insight">--</span></div>
+                                    </div>
+                                    <div class="agent-summary" id="sum-reflection">--</div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </section>
 
-            <!-- Symbol Performance Ranking -->
-            <section class="glass-panel" style="margin-top: 20px;">
-                <div class="section-header">
-                    <h3 style="display: flex; align-items: center; gap: 8px;">
-                        <span>🏆</span>
-                        <span data-i18n="section.symbol_ranking">Symbol Performance Ranking</span>
-                        <span id="symbol-ranking-badge"
-                            style="font-size: 0.7em; color: #718096; font-weight: normal;">(Current Session)</span>
-                    </h3>
+                <!-- Data Flow Legend -->
+                <div class="flow-legend">
+                    <div class="legend-header">
+                        <div class="legend-title" data-i18n="framework.legend.title">Status</div>
+                        <div class="legend-subtitle" data-i18n="framework.legend.subtitle">Agent + Signal</div>
+                    </div>
+                    <div class="legend-section">
+                        <div class="legend-section-title" data-i18n="framework.legend.section.agent">Agent State
+                        </div>
+                        <div class="legend-grid">
+                            <div class="legend-item"><span class="legend-dot idle"></span><span
+                                    data-i18n="framework.legend.idle">Idle</span></div>
+                            <div class="legend-item"><span class="legend-dot running"></span><span
+                                    data-i18n="framework.legend.running">Running</span></div>
+                            <div class="legend-item"><span class="legend-dot completed"></span><span
+                                    data-i18n="framework.legend.completed">Completed</span></div>
+                        </div>
+                    </div>
+                    <div class="legend-section">
+                        <div class="legend-section-title" data-i18n="framework.legend.section.signal">Signal
+                        </div>
+                        <div class="legend-grid">
+                            <div class="legend-item"><span class="legend-dot long"></span><span
+                                    data-i18n="framework.legend.long">LONG</span></div>
+                            <div class="legend-item"><span class="legend-dot short"></span><span
+                                    data-i18n="framework.legend.short">SHORT</span></div>
+                        </div>
+                    </div>
+                    <button onclick="window.resetAgentPositions()" class="reset-positions-btn"
+                        title="Reset agent positions to default">🔄 Reset Layout</button>
                 </div>
-                <div style="overflow-x: auto;">
-                    <table id="symbol-ranking-table" style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
-                        <thead>
-                            <tr style="background: rgba(255,255,255,0.05); text-align: left;">
-                                <th style="padding: 12px 16px; color: #90cdf4;">#</th>
-                                <th style="padding: 12px 16px; color: #90cdf4;" data-i18n="table.symbol">Symbol</th>
-                                <th style="padding: 12px 16px; color: #90cdf4; text-align: right;"
-                                    data-i18n="table.pnl">PnL ($)</th>
-                                <th style="padding: 12px 16px; color: #90cdf4; text-align: right;"
-                                    data-i18n="table.return_rate">Return (%)</th>
-                                <th style="padding: 12px 16px; color: #90cdf4; text-align: center;"
-                                    data-i18n="table.trades">Trades</th>
-                                <th style="padding: 12px 16px; color: #90cdf4; text-align: center;"
-                                    data-i18n="table.win_rate">Win Rate</th>
-                            </tr>
-                        </thead>
-                        <tbody id="symbol-ranking-body">
-                            <tr>
-                                <td colspan="6" style="padding: 20px; text-align: center; color: #718096;">Loading...
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-                <div id="symbol-ranking-summary"
-                    style="margin-top: 12px; padding: 12px; background: rgba(0,0,0,0.2); border-radius: 6px; font-size: 0.85em; color: #a0aec0;">
-                    <!-- Summary will be populated by JS -->
-                </div>
-            </section>
+    </div> <!-- End agent-framework-layout -->
+    </div> <!-- End agent-framework-card -->
+    </section>
 
-        </main>
-        </main>
+    <!-- Row 2.5: Trade History (Full Width) -->
+    <section class="row-trades">
+        <div class="glass-panel card trade-table-card">
+            <h2 data-i18n="section.trades">📜 Trade History</h2>
+            <div class="table-container">
+                <table id="trade-table">
+                    <!-- 列宽定义 - 10列 -->
+                    <colgroup>
+                        <col style="width: 80px;"> <!-- Time -->
+                        <col style="width: 90px;"> <!-- Open -->
+                        <col style="width: 90px;"> <!-- Close -->
+                        <col style="width: 100px;"> <!-- Symbol -->
+                        <col style="width: 90px;"> <!-- Direction -->
+                        <col style="width: 110px;"> <!-- Entry Price -->
+                        <col style="width: 110px;"> <!-- Pos Value -->
+                        <col style="width: 110px;"> <!-- Exit Price -->
+                        <col style="width: 100px;"> <!-- PnL -->
+                        <col style="width: 90px;"> <!-- PnL % -->
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th title="交易记录时间" data-i18n="trade.time">Time</th>
+                            <th title="开仓周期" data-i18n="trade.open">Open</th>
+                            <th title="平仓周期" data-i18n="trade.close">Close</th>
+                            <th title="交易对" data-i18n="trade.symbol">Symbol</th>
+                            <th title="开仓方向" data-i18n="trade.direction">Direction</th>
+                            <th title="开仓价格" data-i18n="trade.entry">Entry Price</th>
+                            <th title="持仓金额 (含杠杆)" data-i18n="trade.posvalue">Pos Value</th>
+                            <th title="平仓价格" data-i18n="trade.exit">Exit Price</th>
+                            <th title="盈亏金额" data-i18n="trade.pnl">PnL</th>
+                            <th title="盈亏比例" data-i18n="trade.pnlpct">PnL %</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- JS Populated -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- Symbol Performance Ranking -->
+    <section class="glass-panel" style="margin-top: 20px;">
+        <div class="section-header">
+            <h3 style="display: flex; align-items: center; gap: 8px;">
+                <span>🏆</span>
+                <span data-i18n="section.symbol_ranking">Symbol Performance Ranking</span>
+                <span id="symbol-ranking-badge" style="font-size: 0.7em; color: #718096; font-weight: normal;">(Current
+                    Session)</span>
+            </h3>
+        </div>
+        <div style="overflow-x: auto;">
+            <table id="symbol-ranking-table" style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
+                <thead>
+                    <tr style="background: rgba(255,255,255,0.05); text-align: left;">
+                        <th style="padding: 12px 16px; color: #90cdf4;">#</th>
+                        <th style="padding: 12px 16px; color: #90cdf4;" data-i18n="table.symbol">Symbol</th>
+                        <th style="padding: 12px 16px; color: #90cdf4; text-align: right;" data-i18n="table.pnl">PnL ($)
+                        </th>
+                        <th style="padding: 12px 16px; color: #90cdf4; text-align: right;"
+                            data-i18n="table.return_rate">Return (%)</th>
+                        <th style="padding: 12px 16px; color: #90cdf4; text-align: center;" data-i18n="table.trades">
+                            Trades</th>
+                        <th style="padding: 12px 16px; color: #90cdf4; text-align: center;" data-i18n="table.win_rate">
+                            Win Rate</th>
+                    </tr>
+                </thead>
+                <tbody id="symbol-ranking-body">
+                    <tr>
+                        <td colspan="6" style="padding: 20px; text-align: center; color: #718096;">Loading...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div id="symbol-ranking-summary"
+            style="margin-top: 12px; padding: 12px; background: rgba(0,0,0,0.2); border-radius: 6px; font-size: 0.85em; color: #a0aec0;">
+            <!-- Summary will be populated by JS -->
+        </div>
+    </section>
+
+    </main>
+    </main>
     </div>
     <!-- Settings Modal -->
     <div id="settings-modal" class="modal-overlay" style="display: none;">
@@ -1070,23 +1092,43 @@
                                 },
                                 agents: (function() {
                                     const result = {};
-                                    document.querySelectorAll('input[name=\" cfg-agent\"]').forEach(function(cb) {
-                result[cb.value]=cb.checked; }); return result; })() }; // Save Config - CRITICAL:
-                credentials: 'include' for Railway HTTPS const res=await fetch('/api/config', { method: 'POST' ,
-                headers: { 'Content-Type' : 'application/json' }, body: JSON.stringify(data), credentials: 'include' });
-                if (!res.ok) throw new Error(await res.text()); // Save Prompt - CRITICAL: credentials: 'include' for
-                Railway HTTPS const promptContent=document.getElementById('cfg-prompt').value; const promptRes=await
-                fetch('/api/config/prompt', { method: 'POST' , headers: { 'Content-Type' : 'application/json' }, body:
-                JSON.stringify({ content: promptContent }), credentials: 'include' }); if (!promptRes.ok) throw new
-                Error(await promptRes.text()); alert('✅ SUCCESS: Configuration Saved!');
-                document.getElementById('settings-modal').style.display='none' ; } catch (err) { alert('❌ ERROR: ' + err.message);
-                    } finally {
-                    btn.textContent = originalText;
-                    btn.disabled = false;
-                    }
+                                    document.querySelectorAll('input[name=\'cfg-agent\']').forEach(function(cb) {
+                                        result[cb.value] = cb.checked;
+                                    });
+                                    return result;
+                                })()
+                            };
+
+                            // Save Config - CRITICAL: credentials: 'include' for Railway HTTPS
+                            const res = await fetch('/api/config', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(data),
+                                credentials: 'include'
+                            });
+                            if (!res.ok) throw new Error(await res.text());
+
+                            // Save Prompt - CRITICAL: credentials: 'include' for Railway HTTPS
+                            const promptContent = document.getElementById('cfg-prompt').value;
+                            const promptRes = await fetch('/api/config/prompt', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ content: promptContent }),
+                                credentials: 'include'
+                            });
+                            if (!promptRes.ok) throw new Error(await promptRes.text());
+
+                            alert('✅ SUCCESS: Configuration Saved!');
+                            document.getElementById('settings-modal').style.display = 'none';
+                        } catch (err) {
+                            alert('❌ ERROR: ' + err.message);
+                        } finally {
+                            btn.textContent = originalText;
+                            btn.disabled = false;
+                        }
                     })(event)">Save Changes</button>
-            </div>
         </div>
+    </div>
     </div>
 
     <style>
@@ -1219,399 +1261,415 @@
         // Inline script removed (logic handled in app.js).
     </script>
 
-                    <!-- Agent Pipeline Interactive Script -->
-                    <script>
-                        (function () {
-                            // Agent node click to expand
-                            document.querySelectorAll(' .agent-node.interactive').forEach(node => {
-                                node.addEventListener('click', function (e) {
-                                    e.stopPropagation();
-                                    const wasExpanded = this.classList.contains('expanded');
-                                    // Close all expanded
-                                    document.querySelectorAll('.agent-node.expanded').forEach(n => {
-                                        n.classList.remove('expanded');
-                                    });
-                                    // Toggle this one
-                                    if (!wasExpanded) {
-                                        this.classList.add('expanded');
-                                    }
-                                });
-                            });
+    <!-- Agent Pipeline Interactive Script -->
+    <script>
+        (function () {
+            // Agent node click to expand
+            document.querySelectorAll(' .agent-node.interactive').forEach(node => {
+                node.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    const wasExpanded = this.classList.contains('expanded');
+                    // Close all expanded
+                    document.querySelectorAll('.agent-node.expanded').forEach(n => {
+                        n.classList.remove('expanded');
+                    });
+                    // Toggle this one
+                    if (!wasExpanded) {
+                        this.classList.add('expanded');
+                    }
+                });
+            });
 
-                            // Close expanded on outside click
-                            document.addEventListener('click', function () {
-                                document.querySelectorAll('.agent-node.expanded').forEach(n => {
-                                    n.classList.remove('expanded');
-                                });
-                            });
+            // Close expanded on outside click
+            document.addEventListener('click', function () {
+                document.querySelectorAll('.agent-node.expanded').forEach(n => {
+                    n.classList.remove('expanded');
+                });
+            });
 
-                            // Demo Run Button
-                            const demoBtn = document.getElementById('btn-demo-run');
-                            if (demoBtn) {
-                                demoBtn.addEventListener('click', function () {
-                                    runPipelineDemo();
-                                });
+            // Demo Run Button
+            const demoBtn = document.getElementById('btn-demo-run');
+            if (demoBtn) {
+                demoBtn.addEventListener('click', function () {
+                    runPipelineDemo();
+                });
+            }
+
+            // Pipeline Demo Animation
+            function runPipelineDemo() {
+                const agents = [
+                    { id: 'agent-data-sync', status: '✅ Fetched 3 TFs', result: '1m/5m/15m OK' },
+                    { id: 'agent-quant', status: '✅ Analyzed', result: 'EMA↑ RSI=42' },
+                    { id: 'agent-predict', status: '✅ Predicted', result: 'P(Up): 68%' },
+                    { id: 'agent-filter', status: '✅ Passed', result: 'Layers: ✓✓✓✓' },
+                    { id: 'agent-decision', status: '✅ LONG', result: 'Action: LONG' },
+                    { id: 'agent-risk', status: '✅ Approved', result: 'Risk: LOW' }
+                ];
+                const arrows = document.querySelectorAll('.pipeline-arrow.animated');
+                const btn = document.getElementById('btn-demo-run');
+
+                // Disable button during demo
+                btn.disabled = true;
+                btn.textContent = '⏳ Running...';
+
+                // Reset all agents
+                document.querySelectorAll('.agent-node').forEach(node => {
+                    node.classList.remove('running', 'completed', 'error');
+                    const statusEl = node.querySelector('.agent-status');
+                    if (statusEl) statusEl.textContent = '⏸️ Idle';
+                });
+                arrows.forEach(a => a.classList.remove('active'));
+
+                // Run through each agent
+                let i = 0;
+                function activateNext() {
+                    if (i >= agents.length) {
+                        // Demo complete
+                        btn.disabled = false;
+                        btn.textContent = '▶️ Demo Run';
+                        addActivityFeedEntry('Demo complete - LONG signal generated');
+                        return;
+                    }
+
+                    const agent = agents[i];
+                    const node = document.getElementById(agent.id);
+
+                    if (node) {
+                        // Start running
+                        node.classList.add('running');
+                        const statusEl = node.querySelector('.agent-status');
+                        if (statusEl) statusEl.textContent = '⏳ Running...';
+                        const resultEl = node.querySelector('.detail-result');
+
+                        // Add activity entry
+                        const agentName = node.querySelector('.agent-name').textContent;
+                        addActivityFeedEntry(`${agentName}: Processing...`);
+
+                        setTimeout(() => {
+                            // Complete
+                            node.classList.remove('running');
+                            node.classList.add('completed');
+                            if (statusEl) statusEl.textContent = agent.status;
+                            if (resultEl) resultEl.textContent = agent.result;
+
+                            // Activate arrow
+                            if (i < arrows.length) {
+                                arrows[i].classList.add('active');
                             }
+                            i++;
+                            setTimeout(activateNext, 300);
+                        }, 600);
+                    } else {
+                        i++;
+                        activateNext();
+                    }
+                }
+                activateNext();
+            }
 
-                            // Pipeline Demo Animation
-                            function runPipelineDemo() {
-                                const agents = [
-                                    { id: 'agent-data-sync', status: '✅ Fetched 3 TFs', result: '1m/5m/15m OK' },
-                                    { id: 'agent-quant', status: '✅ Analyzed', result: 'EMA↑ RSI=42' },
-                                    { id: 'agent-predict', status: '✅ Predicted', result: 'P(Up): 68%' },
-                                    { id: 'agent-filter', status: '✅ Passed', result: 'Layers: ✓✓✓✓' },
-                                    { id: 'agent-decision', status: '✅ LONG', result: 'Action: LONG' },
-                                    { id: 'agent-risk', status: '✅ Approved', result: 'Risk: LOW' }
-                                ];
-                                const arrows = document.querySelectorAll('.pipeline-arrow.animated');
-                                const btn = document.getElementById('btn-demo-run');
+            // Add entry to activity feed function
+            function addActivityFeedEntry(message) {
+                const feed = document.getElementById('agent-activity-feed');
+                if (!feed) return;
 
-                                // Disable button during demo
-                                btn.disabled = true;
-                                btn.textContent = '⏳ Running...';
+                // Remove placeholder if exists
+                const placeholder = feed.querySelector('.placeholder');
+                if (placeholder) placeholder.remove();
 
-                                // Reset all agents
-                                document.querySelectorAll('.agent-node').forEach(node => {
-                                    node.classList.remove('running', 'completed', 'error');
-                                    const statusEl = node.querySelector('.agent-status');
-                                    if (statusEl) statusEl.textContent = '⏸️ Idle';
-                                });
-                                arrows.forEach(a => a.classList.remove('active'));
-
-                                // Run through each agent
-                                let i = 0;
-                                function activateNext() {
-                                    if (i >= agents.length) {
-                                        // Demo complete
-                                        btn.disabled = false;
-                                        btn.textContent = '▶️ Demo Run';
-                                        // Add activity feed entry
-                                        addActivityFeedEntry('Demo complete - LONG signal generated');
-                                        return;
-                                    }
-
-                                    const agent = agents[i];
-                                    const node = document.getElementById(agent.id);
-
-                                    if (node) {
-                                        // Start running
-                                        node.classList.add('running');
-                                        const statusEl = node.querySelector('.agent-status');
-                                        if (statusEl) statusEl.textContent = '⏳ Running...';
-                                        const resultEl = node.querySelector('.detail-result');
-
-                                        // Add activity entry
-                                        const agentName = node.querySelector('.agent-name').textContent;
-                                        addActivityFeedEntry(`${agentName}: Processing...`);
-
-                                        setTimeout(() => {
-                                            // Complete
-                                            node.classList.remove('running');
-                                            node.classList.add('completed');
-                                            if (statusEl) statusEl.textContent = agent.status;
-                                            if (resultEl) resultEl.textContent = agent.result;
-
-                                            // Activate arrow
-                                            if (i < arrows.length) { arrows[i].classList.add('active'); } i++; setTimeout(activateNext, 300);
-                                        },
-                                            600);
-                                    } else { i++; activateNext(); }
-                                } activateNext();
-                            } // Add entry to activity feed function
-                            addActivityFeedEntry(message) {
-                                const feed = document.getElementById('agent-activity-feed'); if
-                                    (!feed) return; // Remove placeholder if exists const
-                                placeholder = feed.querySelector('.placeholder'); if (placeholder) placeholder.remove(); // Create new
-                    entry const entry = document.createElement('div'); entry.className = 'activity-item success'; const
-                                    now = new Date(); const time = now.toTimeString().slice(0, 8); entry.innerHTML = ` <span
-                    class="activity-time">${time}</span>
+                // Create new entry
+                const entry = document.createElement('div');
+                entry.className = 'activity-item success';
+                const now = new Date();
+                const time = now.toTimeString().slice(0, 8);
+                entry.innerHTML = `
+                    <span class="activity-time">${time}</span>
                     <span class="activity-agent">Pipeline</span>
                     <span class="activity-message">${message}</span>
-                    `;
+                `;
 
-                                feed.insertBefore(entry, feed.firstChild);
+                feed.insertBefore(entry, feed.firstChild);
 
-                                // Update count
-                                const countEl = document.getElementById('activity-count');
-                                if (countEl) {
-                                    countEl.textContent = feed.querySelectorAll('.activity-item:not(.placeholder)').length;
-                                }
+                // Update count
+                const countEl = document.getElementById('activity-count');
+                if (countEl) {
+                    countEl.textContent = feed.querySelectorAll('.activity-item:not(.placeholder)').length;
+                }
 
-                                // Limit entries
-                                const entries = feed.querySelectorAll('.activity-item');
-                                if (entries.length > 20) {
-                                    entries[entries.length - 1].remove();
-                                }
-                            }
-                        })();
-                    </script>
+                // Limit entries
+                const entries = feed.querySelectorAll('.activity-item');
+                if (entries.length > 20) {
+                    entries[entries.length - 1].remove();
+                }
+            }
+        })();
+    </script>
 
-                    <!-- Demo Flow Animation Script -->
-                    <script>
-                        (function () {
-                            const demoFlowBtn = document.getElementById('btn-demo-flow');
-                            if (demoFlowBtn) {
-                                demoFlowBtn.addEventListener('click', runDemoFlow);
-                            }
+    <!-- Demo Flow Animation Script -->
+    <script>
+        (function () {
+            const demoFlowBtn = document.getElementById('btn-demo-flow');
+            if (demoFlowBtn) {
+                demoFlowBtn.addEventListener('click', runDemoFlow);
+            }
 
-                            function runDemoFlow() {
-                                const btn = document.getElementById('btn-demo-flow');
-                                btn.disabled = true;
-                                btn.textContent = '⏳ Running...';
+            function runDemoFlow() {
+                const btn = document.getElementById('btn-demo-flow');
+                btn.disabled = true;
+                btn.textContent = '⏳ Running...';
 
-                                // Reset all agents
-                                document.querySelectorAll('.agent-box').forEach(box => {
-                                    box.classList.remove('running', 'completed');
-                                    const badge = box.querySelector('.agent-badge');
-                                    if (badge) {
-                                        badge.className = 'agent-badge idle';
-                                        badge.textContent = 'Idle';
-                                    }
-                                });
+                // Reset all agents
+                document.querySelectorAll('.agent-box').forEach(box => {
+                    box.classList.remove('running', 'completed');
+                    const badge = box.querySelector('.agent-badge');
+                    if (badge) {
+                        badge.className = 'agent-badge idle';
+                        badge.textContent = 'Idle';
+                    }
+                });
 
-                                // Reset outputs
-                                document.querySelectorAll('.output-value').forEach(el => el.textContent = '--');
-                                const decisionAction = document.querySelector('.decision-action');
-                                const finalAction = document.querySelector('.final-action');
-                                if (decisionAction) { decisionAction.textContent = 'WAIT'; decisionAction.className = 'decision-action'; }
-                                if (finalAction) { finalAction.textContent = '--'; finalAction.className = 'final-action'; }
+                // Reset outputs
+                document.querySelectorAll('.output-value').forEach(el => el.textContent = '--');
+                const decisionAction = document.querySelector('.decision-action');
+                const finalAction = document.querySelector('.final-action');
+                if (decisionAction) { decisionAction.textContent = 'WAIT'; decisionAction.className = 'decision-action'; }
+                if (finalAction) { finalAction.textContent = '--'; finalAction.className = 'final-action'; }
 
-                                // Animation sequence
-                                const steps = [
-                                    // Layer 1: Data
-                                    { delay: 0, action: () => activateAgent('flow-datasync', 'running') },
-                                    {
-                                        delay: 800, action: () => {
-                                            updateOutputs({
-                                                'out-tf-1': '✓ 150 bars',
-                                                'out-tf-2': '✓ 96 bars',
-                                                'out-tf-3': '✓ 240 bars',
-                                                'out-oi': '+2.3%'
-                                            });
-                                            completeAgent('flow-datasync');
-                                            activateConnector('particles-data');
-                                        }
-                                    },
+                // Animation sequence
+                const steps = [
+                    // Layer 1: Data
+                    { delay: 0, action: () => activateAgent('flow-datasync', 'running') },
+                    {
+                        delay: 800, action: () => {
+                            updateOutputs({
+                                'out-tf-1': '✓ 150 bars',
+                                'out-tf-2': '✓ 96 bars',
+                                'out-tf-3': '✓ 240 bars',
+                                'out-oi': '+2.3%'
+                            });
+                            completeAgent('flow-datasync');
+                            activateConnector('particles-data');
+                        }
+                    },
 
-                                    // Layer 2: Analysis (parallel agents)
-                                    {
-                                        delay: 1200, action: () => {
-                                            activateAgent('flow-quant', 'running');
-                                            activateAgent('flow-regime', 'running');
-                                            activateAgent('flow-predict', 'running');
-                                        }
-                                    },
-                                    {
-                                        delay: 2000, action: () => {
-                                            updateOutputs({
-                                                'out-ema': '↑ Bull',
-                                                'out-rsi': '42',
-                                                'out-macd': '+0.02',
-                                                'out-bb': 'Mid'
-                                            });
-                                            completeAgent('flow-quant');
-                                        }
-                                    },
-                                    {
-                                        delay: 2400, action: () => {
-                                            updateOutputs({
-                                                'out-regime': '🟢 Trend',
-                                                'out-adx': '28',
-                                                'out-regime-conf': '72%'
-                                            });
-                                            completeAgent('flow-regime');
-                                        }
-                                    },
-                                    {
-                                        delay: 2800, action: () => {
-                                            const pup = document.getElementById('out-pup');
-                                            const pdown = document.getElementById('out-pdown');
-                                            if (pup) { pup.textContent = '68%'; pup.classList.add('bullish'); }
-                                            if (pdown) { pdown.textContent = '32%'; pdown.classList.add('bearish'); }
-                                            document.getElementById('out-signal').textContent = 'LONG';
-                                            completeAgent('flow-predict');
-                                            activateConnector('particles-analysis');
-                                        }
-                                    },
+                    // Layer 2: Analysis (parallel agents)
+                    {
+                        delay: 1200, action: () => {
+                            activateAgent('flow-quant', 'running');
+                            activateAgent('flow-regime', 'running');
+                            activateAgent('flow-predict', 'running');
+                        }
+                    },
+                    {
+                        delay: 2000, action: () => {
+                            updateOutputs({
+                                'out-ema': '↑ Bull',
+                                'out-rsi': '42',
+                                'out-macd': '+0.02',
+                                'out-bb': 'Mid'
+                            });
+                            completeAgent('flow-quant');
+                        }
+                    },
+                    {
+                        delay: 2400, action: () => {
+                            updateOutputs({
+                                'out-regime': '🟢 Trend',
+                                'out-adx': '28',
+                                'out-regime-conf': '72%'
+                            });
+                            completeAgent('flow-regime');
+                        }
+                    },
+                    {
+                        delay: 2800, action: () => {
+                            const pup = document.getElementById('out-pup');
+                            const pdown = document.getElementById('out-pdown');
+                            if (pup) { pup.textContent = '68%'; pup.classList.add('bullish'); }
+                            if (pdown) { pdown.textContent = '32%'; pdown.classList.add('bearish'); }
+                            document.getElementById('out-signal').textContent = 'LONG';
+                            completeAgent('flow-predict');
+                            activateConnector('particles-analysis');
+                        }
+                    },
 
-                                    // Layer 3: Decision
-                                    { delay: 3300, action: () => activateAgent('flow-decision', 'running') },
-                                    {
-                                        delay: 4000, action: () => {
-                                            const decAction = document.querySelector('.decision-action');
-                                            const decConf = document.querySelector('.decision-conf');
-                                            if (decAction) { decAction.textContent = 'LONG'; decAction.classList.add('long'); }
-                                            if (decConf) decConf.textContent = '74%';
-                                            document.getElementById('out-bull').textContent = '3.2';
-                                            document.getElementById('out-bear').textContent = '1.1';
-                                            completeAgent('flow-decision');
-                                            activateConnector('particles-decision');
-                                        }
-                                    },
+                    // Layer 3: Decision
+                    { delay: 3300, action: () => activateAgent('flow-decision', 'running') },
+                    {
+                        delay: 4000, action: () => {
+                            const decAction = document.querySelector('.decision-action');
+                            const decConf = document.querySelector('.decision-conf');
+                            if (decAction) { decAction.textContent = 'LONG'; decAction.classList.add('long'); }
+                            if (decConf) decConf.textContent = '74%';
+                            document.getElementById('out-bull').textContent = '3.2';
+                            document.getElementById('out-bear').textContent = '1.1';
+                            completeAgent('flow-decision');
+                            activateConnector('particles-decision');
+                        }
+                    },
 
-                                    // Layer 4: Risk & Output
-                                    { delay: 4500, action: () => activateAgent('flow-risk', 'running') },
-                                    {
-                                        delay: 5200, action: () => {
-                                            updateOutputs({
-                                                'out-risk': '🟢 LOW',
-                                                'out-size': '0.15 BTC',
-                                                'out-sl': '-2.5%',
-                                                'out-tp': '+5.0%'
-                                            });
-                                            completeAgent('flow-risk');
+                    // Layer 4: Risk & Output
+                    { delay: 4500, action: () => activateAgent('flow-risk', 'running') },
+                    {
+                        delay: 5200, action: () => {
+                            updateOutputs({
+                                'out-risk': '🟢 LOW',
+                                'out-size': '0.15 BTC',
+                                'out-sl': '-2.5%',
+                                'out-tp': '+5.0%'
+                            });
+                            completeAgent('flow-risk');
 
-                                            // Final output
-                                            const finalAct = document.querySelector('.final-action');
-                                            if (finalAct) { finalAct.textContent = '📈 LONG'; finalAct.classList.add('long'); }
-                                            document.getElementById('final-symbol').textContent = 'BTCUSDT';
-                                            document.getElementById('final-size').textContent = '0.15 BTC';
-                                            document.getElementById('flow-output').classList.add('completed');
-                                        }
-                                    },
+                            // Final output
+                            const finalAct = document.querySelector('.final-action');
+                            if (finalAct) { finalAct.textContent = '📈 LONG'; finalAct.classList.add('long'); }
+                            document.getElementById('final-symbol').textContent = 'BTCUSDT';
+                            document.getElementById('final-size').textContent = '0.15 BTC';
+                            document.getElementById('flow-output').classList.add('completed');
+                        }
+                    },
 
-                                    // Done
-                                    {
-                                        delay: 5800, action: () => {
-                                            btn.disabled = false;
-                                            btn.textContent = '▶️ Demo Flow';
-                                            addFlowActivityEntry('✅ Cycle complete: LONG BTCUSDT @ 0.15 BTC');
-                                        }
-                                    }
-                                ];
+                    // Done
+                    {
+                        delay: 5800, action: () => {
+                            btn.disabled = false;
+                            btn.textContent = '▶️ Demo Flow';
+                            addFlowActivityEntry('✅ Cycle complete: LONG BTCUSDT @ 0.15 BTC');
+                        }
+                    }
+                ];
 
-                                steps.forEach(step => {
-                                    setTimeout(step.action, step.delay);
-                                });
-                            }
+                steps.forEach(step => {
+                    setTimeout(step.action, step.delay);
+                });
+            }
 
-                            function activateAgent(id, state) {
-                                const box = document.getElementById(id);
-                                if (!box) return;
-                                box.classList.add(state);
-                                const badge = box.querySelector('.agent-badge');
-                                if (badge) {
-                                    badge.className = 'agent-badge ' + state;
-                                    badge.textContent = state === 'running' ? 'Running' : 'Done';
-                                }
-                                addFlowActivityEntry(`${box.querySelector('.agent-title')?.textContent}: Processing...`);
-                            }
+            function activateAgent(id, state) {
+                const box = document.getElementById(id);
+                if (!box) return;
+                box.classList.add(state);
+                const badge = box.querySelector('.agent-badge');
+                if (badge) {
+                    badge.className = 'agent-badge ' + state;
+                    badge.textContent = state === 'running' ? 'Running' : 'Done';
+                }
+                addFlowActivityEntry(`${box.querySelector('.agent-title')?.textContent}: Processing...`);
+            }
 
-                            function completeAgent(id) {
-                                const box = document.getElementById(id);
-                                if (!box) return;
-                                box.classList.remove('running');
-                                box.classList.add('completed');
-                                const badge = box.querySelector('.agent-badge');
-                                if (badge) {
-                                    badge.className = 'agent-badge completed';
-                                    badge.textContent = 'Done';
-                                }
-                            }
+            function completeAgent(id) {
+                const box = document.getElementById(id);
+                if (!box) return;
+                box.classList.remove('running');
+                box.classList.add('completed');
+                const badge = box.querySelector('.agent-badge');
+                if (badge) {
+                    badge.className = 'agent-badge completed';
+                    badge.textContent = 'Done';
+                }
+            }
 
-                            function activateConnector(id) {
-                                const particles = document.getElementById(id);
-                                if (!particles) return;
-                                particles.parentElement.classList.add('active');
-                                setTimeout(() => particles.parentElement.classList.remove('active'), 800);
-                            }
+            function activateConnector(id) {
+                const particles = document.getElementById(id);
+                if (!particles) return;
+                particles.parentElement.classList.add('active');
+                setTimeout(() => particles.parentElement.classList.remove('active'), 800);
+            }
 
-                            function updateOutputs(outputs) {
-                                Object.entries(outputs).forEach(([id, value]) => {
-                                    const el = document.getElementById(id);
-                                    if (el) el.textContent = value;
-                                });
-                            }
+            function updateOutputs(outputs) {
+                Object.entries(outputs).forEach(([id, value]) => {
+                    const el = document.getElementById(id);
+                    if (el) el.textContent = value;
+                });
+            }
 
-                            function addFlowActivityEntry(message) {
-                                const feed = document.getElementById('agent-activity-feed');
-                                if (!feed) return;
+            function addFlowActivityEntry(message) {
+                const feed = document.getElementById('agent-activity-feed');
+                if (!feed) return;
 
-                                const placeholder = feed.querySelector('.placeholder');
-                                if (placeholder) placeholder.remove();
+                const placeholder = feed.querySelector('.placeholder');
+                if (placeholder) placeholder.remove();
 
-                                const entry = document.createElement('div');
-                                entry.className = 'activity-item success';
-                                const time = new Date().toTimeString().slice(0, 8);
+                const entry = document.createElement('div');
+                entry.className = 'activity-item success';
+                const time = new Date().toTimeString().slice(0, 8);
 
-                                entry.innerHTML = `
+                entry.innerHTML = `
                     <span class="activity-time">${time}</span>
                     <span class="activity-agent">Framework</span>
                     <span class="activity-message">${message}</span>
                 `;
 
-                                feed.insertBefore(entry, feed.firstChild);
+                feed.insertBefore(entry, feed.firstChild);
 
-                                const countEl = document.getElementById('activity-count');
-                                if (countEl) {
-                                    countEl.textContent = feed.querySelectorAll('.activity-item:not(.placeholder)').length;
-                                }
+                const countEl = document.getElementById('activity-count');
+                if (countEl) {
+                    countEl.textContent = feed.querySelectorAll('.activity-item:not(.placeholder)').length;
+                }
 
-                                const entries = feed.querySelectorAll('.activity-item');
-                                if (entries.length > 15) {
-                                    entries[entries.length - 1].remove();
-                                }
-                            }
-                        })();
-                    </script>
+                const entries = feed.querySelectorAll('.activity-item');
+                if (entries.length > 15) {
+                    entries[entries.length - 1].remove();
+                }
+            }
+        })();
+    </script>
 
-                    <!-- TradingView Widget Initialization -->
-                    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-                    <script>
-                        window.loadTradingViewChart = function (symbol) {
-                            symbol = symbol || 'BTCUSDT';
-                            if (window.lastChartSymbol === symbol) {
-                                return;
-                            }
-                            // Convert to TradingView format: BINANCE:BTCUSDT
-                            const tvSymbol = 'BINANCE:' + symbol;
-                            const container = document.getElementById('tradingview-widget');
-                            if (!container) return;
+    <!-- TradingView Widget Initialization -->
+    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+    <script>
+        window.loadTradingViewChart = function (symbol) {
+            symbol = symbol || 'BTCUSDT';
+            if (window.lastChartSymbol === symbol) {
+                return;
+            }
+            // Convert to TradingView format: BINANCE:BTCUSDT
+            const tvSymbol = 'BINANCE:' + symbol;
+            const container = document.getElementById('tradingview-widget');
+            if (!container) return;
 
-                            // Clear previous widget
-                            container.innerHTML = '';
+            // Clear previous widget
+            container.innerHTML = '';
 
-                            // Create new widget
-                            new TradingView.widget({
-                                "autosize": true,
-                                "symbol": tvSymbol,
-                                "interval": "15",
-                                "timezone": "Etc/UTC",
-                                "theme": "dark",
-                                "style": "1",
-                                "locale": "en",
-                                "toolbar_bg": "#0B0E11",
-                                "enable_publishing": false,
-                                "hide_top_toolbar": false,
-                                "hide_legend": false,
-                                "save_image": false,
-                                "container_id": "tradingview-widget",
-                                "hide_side_toolbar": true,
-                                "allow_symbol_change": true,
-                                "studies": [
-                                    "MAExp@tv-basicstudies",
-                                    "RSI@tv-basicstudies"
-                                ],
-                                "backgroundColor": "rgba(11, 14, 17, 1)",
-                                "gridColor": "rgba(255, 255, 255, 0.05)"
-                            });
+            // Create new widget
+            new TradingView.widget({
+                "autosize": true,
+                "symbol": tvSymbol,
+                "interval": "15",
+                "timezone": "Etc/UTC",
+                "theme": "dark",
+                "style": "1",
+                "locale": "en",
+                "toolbar_bg": "#0B0E11",
+                "enable_publishing": false,
+                "hide_top_toolbar": false,
+                "hide_legend": false,
+                "save_image": false,
+                "container_id": "tradingview-widget",
+                "hide_side_toolbar": true,
+                "allow_symbol_change": true,
+                "studies": [
+                    "MAExp@tv-basicstudies",
+                    "RSI@tv-basicstudies"
+                ],
+                "backgroundColor": "rgba(11, 14, 17, 1)",
+                "gridColor": "rgba(255, 255, 255, 0.05)"
+            });
 
-                            window.chartInitialized = true;
-                            window.lastChartSymbol = symbol;
-                            console.log('📈 TradingView chart loaded:', tvSymbol);
-                        };
+            window.chartInitialized = true;
+            window.lastChartSymbol = symbol;
+            console.log('📈 TradingView chart loaded:', tvSymbol);
+        };
 
-                        // Auto-load chart on page load
-                        document.addEventListener('DOMContentLoaded', function () {
-                            setTimeout(function () {
-                                if (window.activeSymbols && window.activeSymbols.length > 0) {
-                                    loadTradingViewChart(window.activeSymbols[0]);
-                                } else {
-                                    loadTradingViewChart('BTCUSDT');
-                                }
-                            }, 1000);
-                        });
-                    </script>
+        // Auto-load chart on page load
+        document.addEventListener('DOMContentLoaded', function () {
+            setTimeout(function () {
+                if (window.activeSymbols && window.activeSymbols.length > 0) {
+                    loadTradingViewChart(window.activeSymbols[0]);
+                } else {
+                    loadTradingViewChart('BTCUSDT');
+                }
+            }, 1000);
+        });
+    </script>
 </body>
 
 </html>

@@ -139,7 +139,7 @@ class StrategyEngine:
             return True
         return False
     
-    def make_decision(self, market_context_text: str, market_context_data: Dict, reflection: str = None) -> Dict:
+    def make_decision(self, market_context_text: str, market_context_data: Dict, reflection: str = None, bull_perspective: Dict = None, bear_perspective: Dict = None) -> Dict:
         """
         基于市场上下文做出交易决策
         
@@ -147,6 +147,8 @@ class StrategyEngine:
             market_context_text: 格式化的市场上下文文本
             market_context_data: 原始市场数据
             reflection: 可选的交易反思文本（来自 ReflectionAgent）
+            bull_perspective: 可选的多头观点
+            bear_perspective: 可选的空头观点
             
         Returns:
             决策结果字典
@@ -160,12 +162,16 @@ class StrategyEngine:
                 log.warning("🚫 LLM Strategy Engine not ready (No API Key). Returning fallback.")
                 return self._get_fallback_decision(market_context_data)
         
-        # 🐂🐻 Get adversarial perspectives (ALWAYS - critical for strategy validation)
-        log.info("🐂🐻 Gathering Bull/Bear perspectives...")
-        bull_perspective = self.get_bull_perspective(market_context_text)
-        bear_perspective = self.get_bear_perspective(market_context_text)
+        # 🐂🐻 Get adversarial perspectives if not provided
+        if bull_perspective is None:
+            log.info("🐂 Gathering Bull perspective (on-demand)...")
+            bull_perspective = self.get_bull_perspective(market_context_text)
+            
+        if bear_perspective is None:
+            log.info("🐻 Gathering Bear perspective (on-demand)...")
+            bear_perspective = self.get_bear_perspective(market_context_text)
         
-        # 🆕 保存Bull/Bear日志
+        # 🆕 保存Bull/Bear日志 (if they were generated here or passed in)
         try:
             from src.server.state import global_state
             if hasattr(global_state, 'saver') and hasattr(global_state, 'current_cycle_id'):

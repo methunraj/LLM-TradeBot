@@ -143,6 +143,10 @@ class DataSaver:
             for root, dirs, files in os.walk(subdir_path, topdown=False):
                 # 删除文件
                 for file in files:
+                    # 🆕 始终保留交易历史汇总 CSV，用于反思代理
+                    if file == 'all_trades.csv':
+                        continue
+                        
                     file_path = os.path.join(root, file)
                     try:
                         os.remove(file_path)
@@ -651,12 +655,12 @@ class DataSaver:
         except Exception as e:
             log.error(f"保存标准化交易记录失败: {e}")
 
-    def get_recent_trades(self, limit: int = 10, days: int = 3) -> List[Dict]:
+    def get_recent_trades(self, limit: int = 10, days: int = 30) -> List[Dict]:
         """获取最近的交易记录
         
         Args:
             limit: 返回的最大记录数（默认10条）
-            days: 只返回最近N天内的记录（默认3天）
+            days: 只返回最近N天内的记录（默认30天）
         """
         try:
             file_path = os.path.join(self.dirs.get('trades'), 'all_trades.csv')
