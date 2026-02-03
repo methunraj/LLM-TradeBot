@@ -6,6 +6,7 @@ import os
 import secrets
 import json
 from typing import Optional, Dict, List, Any
+from dataclasses import asdict
 from pathlib import Path
 import yaml
 
@@ -528,39 +529,176 @@ def _normalize_agent_settings(data: Dict[str, Any]) -> Dict[str, Any]:
         }
     return {"agents": normalized}
 
+def _build_default_agent_settings() -> Dict[str, Any]:
+    defaults: Dict[str, Any] = {"agents": {}}
+
+    # Trend / Setup / Trigger prompts
+    try:
+        from src.agents.trend_agent import TrendAgentLLM
+        inst = TrendAgentLLM.__new__(TrendAgentLLM)
+        defaults["agents"]["trend_agent"] = {
+            "params": {"temperature": 0.3, "max_tokens": 300},
+            "system_prompt": inst._get_system_prompt()
+        }
+    except Exception:
+        defaults["agents"]["trend_agent"] = {"params": {"temperature": 0.3, "max_tokens": 300}, "system_prompt": ""}
+
+    try:
+        from src.agents.setup_agent import SetupAgentLLM
+        inst = SetupAgentLLM.__new__(SetupAgentLLM)
+        defaults["agents"]["setup_agent"] = {
+            "params": {"temperature": 0.3, "max_tokens": 300},
+            "system_prompt": inst._get_system_prompt()
+        }
+    except Exception:
+        defaults["agents"]["setup_agent"] = {"params": {"temperature": 0.3, "max_tokens": 300}, "system_prompt": ""}
+
+    try:
+        from src.agents.trigger_agent import TriggerAgentLLM
+        inst = TriggerAgentLLM.__new__(TriggerAgentLLM)
+        defaults["agents"]["trigger_agent"] = {
+            "params": {"temperature": 0.3, "max_tokens": 300},
+            "system_prompt": inst._get_system_prompt()
+        }
+    except Exception:
+        defaults["agents"]["trigger_agent"] = {"params": {"temperature": 0.3, "max_tokens": 300}, "system_prompt": ""}
+
+    # Reflection prompt
+    try:
+        from src.agents.reflection_agent import ReflectionAgent
+        inst = ReflectionAgent.__new__(ReflectionAgent)
+        defaults["agents"]["reflection_agent"] = {
+            "params": {"temperature": 0.7, "max_tokens": 1500},
+            "system_prompt": inst._build_system_prompt()
+        }
+    except Exception:
+        defaults["agents"]["reflection_agent"] = {"params": {"temperature": 0.7, "max_tokens": 1500}, "system_prompt": ""}
+
+    # Decision core (LLM system prompt template + weight defaults)
+    try:
+        from src.config.default_prompt_template import DEFAULT_SYSTEM_PROMPT
+    except Exception:
+        DEFAULT_SYSTEM_PROMPT = ""
+
+    try:
+        from src.agents.decision_core_agent import SignalWeight
+        defaults["agents"]["decision_core"] = {
+            "params": asdict(SignalWeight()),
+            "system_prompt": DEFAULT_SYSTEM_PROMPT
+        }
+    except Exception:
+        defaults["agents"]["decision_core"] = {"params": {}, "system_prompt": DEFAULT_SYSTEM_PROMPT}
+
+    # Risk audit parameters
+    defaults["agents"]["risk_audit"] = {
+        "params": {
+            "max_leverage": 12.0,
+            "max_position_pct": 0.35,
+            "max_total_risk_pct": 0.012,
+            "min_stop_loss_pct": 0.002,
+            "max_stop_loss_pct": 0.025
+        },
+        "system_prompt": ""
+    }
+
+    # Symbol selector parameters
+    try:
+        from src.agents.symbol_selector_agent import SymbolSelectorAgent
+        defaults["agents"]["symbol_selector"] = {
+            "params": {
+                "refresh_interval_hours": 6,
+                "lookback_hours": 24,
+                "auto1_window_minutes": SymbolSelectorAgent.AUTO1_WINDOW_MINUTES,
+                "auto1_threshold_pct": SymbolSelectorAgent.AUTO1_THRESHOLD_PCT,
+                "auto1_interval": SymbolSelectorAgent.AUTO1_INTERVAL,
+                "auto1_volume_ratio_threshold": SymbolSelectorAgent.AUTO1_VOLUME_RATIO_THRESHOLD,
+                "auto1_min_adx": SymbolSelectorAgent.AUTO1_MIN_ADX,
+                "min_quote_volume": SymbolSelectorAgent.DEFAULT_MIN_QUOTE_VOL,
+                "min_price": SymbolSelectorAgent.DEFAULT_MIN_PRICE,
+                "min_quote_volume_per_usdt": SymbolSelectorAgent.DEFAULT_MIN_QUOTE_VOL_PER_USDT
+            },
+            "system_prompt": ""
+        }
+    except Exception:
+        defaults["agents"]["symbol_selector"] = {"params": {}, "system_prompt": ""}
+
+    # Multi-period parser thresholds
+    defaults["agents"]["multi_period"] = {
+        "params": {
+            "trend_thresholds": {"1h": 25, "15m": 18, "5m": 12},
+            "alignment_rule": "1h+15m aligned"
+        },
+        "system_prompt": ""
+    }
+
+    return defaults
+
+def _merge_agent_settings(defaults: Dict[str, Any], saved: Dict[str, Any]) -> Dict[str, Any]:
+    merged = {"agents": {}}
+    default_agents = defaults.get("agents", {})
+    saved_agents = saved.get("agents", {})
+
+    for key, default_val in default_agents.items():
+        saved_val = saved_agents.get(key, {})
+        params = dict(default_val.get("params", {}))
+        params.update(saved_val.get("params", {}) or {})
+        prompt = saved_val.get("system_prompt")
+        if not prompt:
+            prompt = default_val.get("system_prompt", "")
+        merged["agents"][key] = {
+            "params": params,
+            "system_prompt": prompt or ""
+        }
+
+    for key, saved_val in saved_agents.items():
+        if key in merged["agents"]:
+            continue
+        merged["agents"][key] = {
+            "params": saved_val.get("params", {}) or {},
+            "system_prompt": saved_val.get("system_prompt", "") or ""
+        }
+
+    return merged
+
 def _load_agent_settings() -> Dict[str, Any]:
     cached = getattr(global_state, "agent_settings", None)
     if isinstance(cached, dict):
         return cached
+    defaults = _build_default_agent_settings()
     if AGENT_SETTINGS_PATH.exists():
         try:
             with open(AGENT_SETTINGS_PATH, "r", encoding="utf-8") as f:
                 data = json.load(f)
             normalized = _normalize_agent_settings(data)
-            global_state.agent_settings = normalized
+            merged = _merge_agent_settings(defaults, normalized)
+            global_state.agent_settings = merged
             global_state.agent_prompts = {
                 key: value.get("system_prompt", "")
-                for key, value in normalized.get("agents", {}).items()
+                for key, value in merged.get("agents", {}).items()
             }
-            return normalized
+            return merged
         except Exception:
             pass
-    empty = {"agents": {}}
-    global_state.agent_settings = empty
-    global_state.agent_prompts = {}
-    return empty
+    global_state.agent_settings = defaults
+    global_state.agent_prompts = {
+        key: value.get("system_prompt", "")
+        for key, value in defaults.get("agents", {}).items()
+    }
+    return defaults
 
 def _save_agent_settings(data: Dict[str, Any]) -> Dict[str, Any]:
     normalized = _normalize_agent_settings(data)
+    defaults = _build_default_agent_settings()
+    merged = _merge_agent_settings(defaults, normalized)
     AGENT_SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(AGENT_SETTINGS_PATH, "w", encoding="utf-8") as f:
-        json.dump(normalized, f, indent=2, ensure_ascii=False)
-    global_state.agent_settings = normalized
+        json.dump(merged, f, indent=2, ensure_ascii=False)
+    global_state.agent_settings = merged
     global_state.agent_prompts = {
         key: value.get("system_prompt", "")
-        for key, value in normalized.get("agents", {}).items()
+        for key, value in merged.get("agents", {}).items()
     }
-    return normalized
+    return merged
 
 @app.get("/api/config")
 async def get_config(authenticated: bool = Depends(verify_auth)):
