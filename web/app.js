@@ -4571,6 +4571,7 @@ function renderTradeHistory(trades) {
         const tabsContainer = document.getElementById('agent-config-tabs');
         const panelContainer = document.getElementById('agent-config-panel');
         const saveBtn = document.getElementById('agent-config-save');
+        const toastEl = document.getElementById('agent-config-toast');
         const llmInfoBadge = document.getElementById('llm-info-badge');
         const llmProviderText = document.getElementById('llm-provider-text');
         const llmModelText = document.getElementById('llm-model-text');
@@ -4623,6 +4624,7 @@ function renderTradeHistory(trades) {
                     stashDraft(activeAgentId);
                     const { settings, enabled } = buildSettingsPayload();
                     saveBtn.disabled = true;
+                    showAgentToast('Saving...', 'info');
                     await apiFetch('/api/agents/settings', {
                         method: 'POST',
                         body: JSON.stringify(settings)
@@ -4641,10 +4643,10 @@ function renderTradeHistory(trades) {
                         }
                     }
                     agentSettings = settings;
-                    alert('Agent settings saved.');
+                    showAgentToast('Saved', 'success');
                 } catch (err) {
                     console.error('Failed to save agent settings:', err);
-                    alert(`Failed to save agent settings: ${err.message}`);
+                    showAgentToast(`Save failed: ${err.message}`, 'error');
                 } finally {
                     saveBtn.disabled = false;
                 }
@@ -4837,6 +4839,19 @@ function renderTradeHistory(trades) {
             } catch (err) {
                 console.warn('Failed to update LLM badge:', err);
             }
+        }
+
+        function showAgentToast(message, level) {
+            if (!toastEl) return;
+            toastEl.textContent = message;
+            toastEl.classList.remove('success', 'error');
+            if (level === 'success') toastEl.classList.add('success');
+            if (level === 'error') toastEl.classList.add('error');
+            toastEl.classList.add('show');
+            clearTimeout(showAgentToast._timer);
+            showAgentToast._timer = setTimeout(() => {
+                toastEl.classList.remove('show');
+            }, 2400);
         }
 
         refreshLlmBadge();
