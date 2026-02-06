@@ -41,7 +41,7 @@ WEB_DIR = os.path.join(BASE_DIR, 'web')
 AGENT_SETTINGS_PATH = Path(BASE_DIR) / "config" / "agent_settings.json"
 
 # Authentication Configuration
-WEB_PASSWORD = os.environ.get("WEB_PASSWORD", "EthanAlgoX")  # Admin password
+WEB_PASSWORD = os.environ.get("WEB_PASSWORD")  # Admin password (optional)
 
 # Auto-detect production environment (Railway sets RAILWAY_* env vars and PORT)
 IS_RAILWAY = bool(os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("RAILWAY_PROJECT_ID"))
@@ -89,12 +89,16 @@ async def get_system_info():
 @app.post("/api/login")
 async def login(response: Response, data: LoginRequest):
     role = None
+    password = (data.password or "").strip()
     
     # Universal Login Logic (Robust for both Local and Railway)
     # 1. Admin Login: Password matches WEB_PASSWORD or hardcoded known admin passwords
-    if data.password == WEB_PASSWORD or data.password == "admin" or data.password == "EthanAlgoX":
+    if (WEB_PASSWORD and password == WEB_PASSWORD) or password == "admin" or password == "EthanAlgoX":
         role = 'admin'
     # 2. No guest/read-only mode: any non-admin password is invalid
+    elif not WEB_PASSWORD and password == "":
+        # If no WEB_PASSWORD is configured, allow empty password as admin
+        role = 'admin'
 
     if role:
         session_id = secrets.token_urlsafe(32)
