@@ -2222,10 +2222,10 @@ class MultiAgentTradingBot:
                     bull_p, bear_p = await asyncio.gather(bull_task, bear_task)
 
                     # Post to Chatroom
-                bull_summary = bull_p.get('bullish_reasons', 'No reasons provided')
-                bear_summary = bear_p.get('bearish_reasons', 'No reasons provided')
-                global_state.add_agent_message("bull_agent", f"Stance: {bull_p.get('stance')} | Reason: {bull_summary}", level="success")
-                global_state.add_agent_message("bear_agent", f"Stance: {bear_p.get('stance')} | Reason: {bear_summary}", level="warning")
+                    bull_summary = bull_p.get('bullish_reasons', 'No reasons provided')
+                    bear_summary = bear_p.get('bearish_reasons', 'No reasons provided')
+                    global_state.add_agent_message("bull_agent", f"Stance: {bull_p.get('stance')} | Reason: {bull_summary}", level="success")
+                    global_state.add_agent_message("bear_agent", f"Stance: {bear_p.get('stance')} | Reason: {bear_summary}", level="warning")
 
                     # Call DeepSeek with pre-computed perspectives
                     decision_payload = self.strategy_engine.make_decision(
