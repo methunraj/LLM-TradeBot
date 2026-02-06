@@ -173,14 +173,26 @@ class MultiAgentTradingBot:
                 else:
                     self.symbols = [symbol_str]
 
+        # Normalize legacy AUTO2 -> AUTO1
+        if 'AUTO2' in self.symbols:
+            self.symbols = ['AUTO1' if s == 'AUTO2' else s for s in self.symbols]
+
         # 🔝 AUTO3 Dynamic Resolution (takes priority)
         self.use_auto3 = 'AUTO3' in self.symbols
         if self.use_auto3:
-            self.symbols.remove('AUTO3')
+            self.symbols = [s for s in self.symbols if s not in ('AUTO3', 'AUTO1')]
             # If AUTO3 was the only symbol, add temporary placeholder (will be replaced at startup)
             if not self.symbols:
                 self.symbols = ['FETUSDT']  # Temporary, replaced by AUTO3 selection in main()
             log.info("🔝 AUTO3 mode enabled - Startup backtest will run")
+
+        # AUTO1 Dynamic Selection (runtime)
+        self.use_auto1 = (not self.use_auto3) and ('AUTO1' in self.symbols)
+        if self.use_auto1:
+            self.symbols = [s for s in self.symbols if s != 'AUTO1']
+            if not self.symbols:
+                self.symbols = ['BTCUSDT']  # Temporary placeholder before selector runs
+            log.info("🎯 AUTO1 mode enabled - Symbol selector will run at startup")
         
         # 🤖 AI500 Dynamic Resolution
         self.use_ai500 = 'AI500_TOP5' in self.symbols and not self.use_auto3
@@ -366,7 +378,10 @@ class MultiAgentTradingBot:
     def _update_llm_metadata(self):
         """Collect current LLM provider/model and agent system prompts for UI display"""
         try:
-            from src.agents import TrendAgentLLM, SetupAgentLLM, TriggerAgentLLM, ReflectionAgentLLM
+            from src.agents.trend_agent import TrendAgentLLM
+            from src.agents.setup_agent import SetupAgentLLM
+            from src.agents.trigger_agent import TriggerAgentLLM
+            from src.agents.reflection_agent import ReflectionAgentLLM
             
             # 1. Collect LLM Engine info (Decision Core)
             llm_info = {
@@ -449,6 +464,26 @@ class MultiAgentTradingBot:
                     self.symbols = [s.strip() for s in symbol_str.split(',') if s.strip()]
                 else:
                     self.symbols = [symbol_str]
+
+        # Normalize legacy AUTO2 -> AUTO1
+        if 'AUTO2' in self.symbols:
+            self.symbols = ['AUTO1' if s == 'AUTO2' else s for s in self.symbols]
+
+        # 🔝 AUTO3 Dynamic Resolution (takes priority)
+        self.use_auto3 = 'AUTO3' in self.symbols
+        if self.use_auto3:
+            self.symbols = [s for s in self.symbols if s not in ('AUTO3', 'AUTO1')]
+            if not self.symbols:
+                self.symbols = ['FETUSDT']
+            log.info("🔝 AUTO3 mode enabled - Startup backtest will run")
+
+        # AUTO1 Dynamic Selection
+        self.use_auto1 = (not self.use_auto3) and ('AUTO1' in self.symbols)
+        if self.use_auto1:
+            self.symbols = [s for s in self.symbols if s != 'AUTO1']
+            if not self.symbols:
+                self.symbols = ['BTCUSDT']
+            log.info("🎯 AUTO1 mode enabled - Symbol selector will run at startup")
 
         # 🤖 AI500 Dynamic Resolution
         if 'AI500_TOP5' in self.symbols:
