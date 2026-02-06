@@ -271,7 +271,7 @@
                     <label for="password">🔐 Access Password</label>
                     <div class="input-wrapper">
                         <span class="input-icon">🔑</span>
-                        <input type="password" id="password" required autofocus placeholder="Enter your password" value="EthanAlgoX">
+                        <input type="password" id="password" required autofocus placeholder="Enter your password">
                     </div>
                 </div>
                 <button type="submit" id="submitBtn">
@@ -291,6 +291,21 @@
     </div>
 
     <script>
+        async function loadDefaultPassword() {
+            try {
+                const res = await fetch('/api/login/default');
+                if (!res.ok) return;
+                const data = await res.json();
+                if (data && data.password) {
+                    document.getElementById('password').value = data.password;
+                }
+            } catch (e) {
+                // Ignore
+            }
+        }
+
+        loadDefaultPassword();
+
         async function handleLogin(e) {
             e.preventDefault();
 

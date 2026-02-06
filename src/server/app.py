@@ -85,6 +85,15 @@ async def get_system_info():
         "requires_auth": True
     }
 
+# Public endpoint to prefill login (admin) password
+@app.get("/api/login/default")
+async def get_default_login():
+    # Railway default should always prefill EthanAlgoX
+    if IS_RAILWAY:
+        return {"password": "EthanAlgoX"}
+    # Local: if WEB_PASSWORD is not set, fall back to EthanAlgoX
+    return {"password": WEB_PASSWORD or "EthanAlgoX"}
+
 # Authentication Endpoints
 @app.post("/api/login")
 async def login(response: Response, data: LoginRequest):
