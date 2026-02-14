@@ -229,7 +229,7 @@ class StrategyEngine:
             
             # 记录决策
             log.llm_decision(
-                action=decision.get('action', 'hold'),
+                action=decision.get('action', 'wait'),
                 confidence=decision.get('confidence', 0),
                 reasoning=decision.get('reasoning', reasoning)
             )

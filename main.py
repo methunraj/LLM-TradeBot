@@ -1210,8 +1210,8 @@ class MultiAgentTradingBot:
         执行完整的交易循环（异步版本）
         Returns:
             {
-                'status': 'success/failed/hold/blocked',
-                'action': 'long/short/hold',
+                'status': 'success/failed/wait/blocked/suggested',
+                'action': 'open_long/open_short/close_long/close_short/wait/hold',
                 'details': {...}
             }
         """
