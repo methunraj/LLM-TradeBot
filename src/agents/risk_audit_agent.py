@@ -25,6 +25,7 @@ from src.utils.action_protocol import (
     is_close_action,
     is_long_action,
     is_short_action,
+    is_passive_action,
 )
 
 
@@ -150,7 +151,7 @@ class RiskAuditAgent:
         symbol = decision.get('symbol')
         
         # 0. 如果是hold/wait，直接通过
-        if action in ['hold', 'wait']:
+        if is_passive_action(action):
             return RiskCheckResult(
                 passed=True,
                 risk_level=RiskLevel.SAFE,
@@ -658,7 +659,7 @@ class RiskAuditAgent:
         计算公式:
         所需保证金 = (数量 * 入场价) / 杠杆
         """
-        if is_close_action(action) or action in ['hold', 'wait']:
+        if is_close_action(action) or is_passive_action(action):
             return {'passed': True}
         
         required_margin = (quantity * entry_price) / leverage
@@ -715,7 +716,7 @@ class RiskAuditAgent:
         风险敞口 = |入场价 - 止损价| * 数量
         风险占比 = 风险敞口 / 账户余额
         """
-        if not stop_loss or is_close_action(action) or action in ['hold', 'wait']:
+        if not stop_loss or is_close_action(action) or is_passive_action(action):
             return {'passed': True}
 
         if account_balance <= 0:
