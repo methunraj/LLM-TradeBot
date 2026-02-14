@@ -22,6 +22,7 @@ import json
 import pandas as pd
 
 from src.utils.logger import log
+from src.utils.action_protocol import normalize_action, is_open_action
 from src.agents.position_analyzer_agent import PositionAnalyzer
 from src.agents.regime_detector_agent import RegimeDetector
 from src.agents.predict_agent import PredictResult
@@ -101,7 +102,7 @@ class OvertradingGuard:
         six_hours_ago = datetime.now().timestamp() - 6 * 3600
         recent_opens = sum(
             1 for t in self.trade_history 
-            if t.timestamp.timestamp() > six_hours_ago and 'open' in t.action.lower()
+            if t.timestamp.timestamp() > six_hours_ago and is_open_action(t.action)
         )
         if recent_opens >= self.MAX_POSITIONS_6H:
             return False, f"⛔ 6小时内已开{recent_opens}仓，已达上限{self.MAX_POSITIONS_6H}"
@@ -329,9 +330,10 @@ class DecisionCoreAgent:
         else:
             # 趋势市：使用原有趋势策略
             action, base_confidence = self._score_to_action(weighted_score, aligned, regime)
+        action = normalize_action(action)
 
         # ========== 对齐弱时收紧趋势强度 ==========
-        if action in ['long', 'short', 'open_long', 'open_short'] and regime and not aligned:
+        if is_open_action(action) and regime and not aligned:
             adx = regime.get('adx', 0)
             if adx < 25:
                 log.warning(f"🚫 对齐弱且ADX不足: ADX {adx:.1f} < 25")
@@ -340,7 +342,7 @@ class DecisionCoreAgent:
                 alignment_reason = f"对齐弱且ADX不足(ADX {adx:.1f} < 25)"
 
         # ========== 低量/弱趋势过滤 (Phase 3: 放宽量能要求) ==========
-        if action in ['long', 'short', 'open_long', 'open_short'] and regime:
+        if is_open_action(action) and regime:
             adx = regime.get('adx', 0)
             # Phase 3: 放宽低量过滤 (0.7 -> 0.5)
             if volume_ratio is not None and volume_ratio < 0.5:
@@ -364,7 +366,7 @@ class DecisionCoreAgent:
                 alignment_reason += f" | 高量确认(RVOL {volume_ratio:.2f})"
 
         # ========== 交易防护拦截 ==========
-        if action in ['long', 'short', 'open_long', 'open_short']:
+        if is_open_action(action):
             # 检查过度交易
             if not overtrade_allowed:
                 log.warning(f"🚫 过度交易防护: {overtrade_reason}")
@@ -373,16 +375,16 @@ class DecisionCoreAgent:
                 alignment_reason = overtrade_reason
         
         # ========== 市场陷阱与形态过滤 (User Experience Logic) ==========
-        if action in ['long', 'open_long', 'short', 'open_short']:
+        if is_open_action(action):
             # 1. 诱多风险 (Rapid Rise, Slow Fall)
-            if traps.get('bull_trap_risk') and action in ['long', 'open_long']:
+            if traps.get('bull_trap_risk') and action == 'open_long':
                 log.warning(f"🚫 诱多风险拦截: 急涨缓跌形态 detected")
                 action = 'hold'
                 base_confidence = 0.1
                 alignment_reason = "诱多风险(急涨缓跌)，禁止追高"
             
             # 2. 弱反弹 (Weak Rebound)
-            if traps.get('weak_rebound') and action in ['long', 'open_long']:
+            if traps.get('weak_rebound') and action == 'open_long':
                 # 弱反弹不一定完全禁止，但大幅降低信心
                 base_confidence *= 0.5
                 alignment_reason += " | 弱反弹警示(缩量反弹)"
@@ -392,35 +394,35 @@ class DecisionCoreAgent:
 
             # 3. 量价背离 (High Price, Low Volume)
             if traps.get('volume_divergence'):
-                if action in ['long', 'open_long']:
+                if action == 'open_long':
                     base_confidence *= 0.7
                     alignment_reason += " | 量价背离警示(高位缩量)"
-                elif action in ['short', 'open_short']:
+                elif action == 'open_short':
                     base_confidence = min(base_confidence * 1.2, 0.95) # 稍微增加做空信心
                     alignment_reason += " | 量价背离确认(高位缩量)"
             
             # 4. 底部吸筹 (Accumulation)
             if traps.get('accumulation'):
-                 if action in ['long', 'open_long']:
+                 if action == 'open_long':
                      base_confidence = min(base_confidence * 1.2, 0.95)
                      alignment_reason += " | 底部吸筹确认(放量不跌)"
 
             # 5. 逆向情绪 (Contrarian Emotion)
             if traps.get('panic_bottom'):
-                if action in ['long', 'open_long']:
+                if action == 'open_long':
                     base_confidence = min(base_confidence * 1.3, 0.95) # 强力加分
                     alignment_reason += " | 恐慌抛售契机(超卖+放量)"
-                elif action in ['short', 'open_short']:
+                elif action == 'open_short':
                     log.warning("🚫 恐慌抛售底部(Panic Bottom)拦截做空")
                     action = 'hold'
                     base_confidence = 0.1
                     alignment_reason = "恐慌抛售底部，禁止追空"
 
             if traps.get('fomo_top'):
-                if action in ['short', 'open_short']:
+                if action == 'open_short':
                     base_confidence = min(base_confidence * 1.3, 0.95)
                     alignment_reason += " | FOMO顶部衰竭(超买+放量)"
-                elif action in ['long', 'open_long']:
+                elif action == 'open_long':
                     log.warning("🚫 FOMO顶部(FOMO Top)拦截做多")
                     action = 'hold'
                     base_confidence = 0.1
@@ -465,7 +467,7 @@ class DecisionCoreAgent:
             # Backtest hotspot: scope high-position guard to underperforming symbols.
             apply_position_penalty = symbol in {'LINKUSDT'}
             if apply_position_penalty:
-                if action in ['open_long', 'long']:
+                if action == 'open_long':
                     if high_extreme:
                         if strong_long and osc_bias > -20:
                             final_confidence *= 0.9
@@ -479,7 +481,7 @@ class DecisionCoreAgent:
                     elif high_zone and osc_bias <= -30 and (fade_long or not aligned):
                         final_confidence *= 0.8
                         alignment_reason += f" | 高位超买降信心({position_pct:.1f}%)"
-                elif action in ['open_short', 'short']:
+                elif action == 'open_short':
                     if low_extreme:
                         if strong_short and osc_bias < 20:
                             final_confidence *= 0.9
@@ -971,15 +973,15 @@ class DecisionCoreAgent:
             return {'total_decisions': 0}
         
         total = len(self.history)
-        actions = [h.action for h in self.history]
+        actions = [normalize_action(h.action) for h in self.history]
         avg_confidence = sum(h.confidence for h in self.history) / total
         aligned_count = sum(1 for h in self.history if h.multi_period_aligned)
         
         return {
             'total_decisions': total,
             'action_distribution': {
-                'open_long': actions.count('open_long') + actions.count('long'),
-                'open_short': actions.count('open_short') + actions.count('short'),
+                'open_long': actions.count('open_long'),
+                'open_short': actions.count('open_short'),
                 'wait': actions.count('wait'),
                 'hold': actions.count('hold'),
             },
