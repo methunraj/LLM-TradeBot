@@ -58,7 +58,7 @@ import json
 import time
 import threading
 import signal
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 
 from src.api.binance_client import BinanceClient
 from src.execution.engine import ExecutionEngine
@@ -121,6 +121,16 @@ from src.server.state import global_state
 # FIXME: TradingLogger 的 SQLAlchemy 导入会阻塞启动，改为延迟导入
 # from src.monitoring.logger import TradingLogger
 print("[DEBUG] All imports complete!")
+
+
+@dataclass
+class CycleContext:
+    """Per-cycle immutable context used across trading stages."""
+    run_id: str
+    cycle_id: Optional[str]
+    snapshot_id: str
+    cycle_num: int
+    symbol: str
 
 class MultiAgentTradingBot:
     """
@@ -1983,6 +1993,1451 @@ class MultiAgentTradingBot:
 
         return decision_dict
 
+    def _validate_market_snapshot(self, market_snapshot: Any) -> List[str]:
+        """Validate mandatory market snapshot fields before analysis."""
+        data_errors: List[str] = []
+
+        if market_snapshot.stable_5m is None or (hasattr(market_snapshot.stable_5m, 'empty') and market_snapshot.stable_5m.empty):
+            data_errors.append("5m data missing or empty")
+        elif len(market_snapshot.stable_5m) < 50:
+            data_errors.append(f"5m data incomplete ({len(market_snapshot.stable_5m)}/50 bars)")
+
+        if market_snapshot.stable_15m is None or (hasattr(market_snapshot.stable_15m, 'empty') and market_snapshot.stable_15m.empty):
+            data_errors.append("15m data missing or empty")
+        elif len(market_snapshot.stable_15m) < 20:
+            data_errors.append(f"15m data incomplete ({len(market_snapshot.stable_15m)}/20 bars)")
+
+        if market_snapshot.stable_1h is None or (hasattr(market_snapshot.stable_1h, 'empty') and market_snapshot.stable_1h.empty):
+            data_errors.append("1h data missing or empty")
+        elif len(market_snapshot.stable_1h) < 10:
+            data_errors.append(f"1h data incomplete ({len(market_snapshot.stable_1h)}/10 bars)")
+
+        if not market_snapshot.live_5m or market_snapshot.live_5m.get('close', 0) <= 0:
+            data_errors.append("Live price unavailable")
+
+        return data_errors
+
+    def _extract_position_info(self, market_snapshot: Any) -> Optional[Dict[str, Any]]:
+        """Build unified position context for decision and risk stages."""
+        current_position_info = None
+        try:
+            if self.test_mode:
+                if self.current_symbol in global_state.virtual_positions:
+                    v_pos = global_state.virtual_positions[self.current_symbol]
+                    current_price_5m = market_snapshot.live_5m['close']
+                    entry_price = v_pos['entry_price']
+                    qty = v_pos['quantity']
+                    side = v_pos['side']
+                    leverage = v_pos.get('leverage', 1)
+
+                    if side == 'LONG':
+                        unrealized_pnl = (current_price_5m - entry_price) * qty
+                    else:
+                        unrealized_pnl = (entry_price - current_price_5m) * qty
+
+                    margin = (entry_price * qty) / leverage if leverage > 0 else entry_price * qty
+                    pnl_pct = (unrealized_pnl / margin) * 100 if margin > 0 else 0
+
+                    current_position_info = {
+                        'symbol': self.current_symbol,
+                        'side': side,
+                        'quantity': qty,
+                        'entry_price': entry_price,
+                        'unrealized_pnl': unrealized_pnl,
+                        'pnl_pct': pnl_pct,
+                        'leverage': leverage,
+                        'is_test': True
+                    }
+
+                    v_pos['unrealized_pnl'] = unrealized_pnl
+                    v_pos['pnl_pct'] = pnl_pct
+                    v_pos['current_price'] = current_price_5m
+                    log.info(f"💰 [Virtual Position] {side} {self.current_symbol} PnL: ${unrealized_pnl:.2f} (ROE: {pnl_pct:+.2f}%)")
+            else:
+                try:
+                    raw_pos = self.client.get_futures_position(self.current_symbol)
+                    if raw_pos and float(raw_pos.get('positionAmt', 0)) != 0:
+                        amt = float(raw_pos.get('positionAmt', 0))
+                        side = 'LONG' if amt > 0 else 'SHORT'
+                        entry_price = float(raw_pos.get('entryPrice', 0))
+                        unrealized_pnl = float(raw_pos.get('unRealizedProfit', 0))
+                        qty = abs(amt)
+                        leverage = int(raw_pos.get('leverage', 1))
+
+                        margin = (entry_price * qty) / leverage if leverage > 0 else entry_price * qty
+                        pnl_pct = (unrealized_pnl / margin) * 100 if margin > 0 else 0
+
+                        current_position_info = {
+                            'symbol': self.current_symbol,
+                            'side': side,
+                            'quantity': qty,
+                            'entry_price': entry_price,
+                            'unrealized_pnl': unrealized_pnl,
+                            'pnl_pct': pnl_pct,
+                            'leverage': leverage,
+                            'is_test': False
+                        }
+                        log.info(f"💰 [Real Position] {side} {self.current_symbol} Amt:{amt} PnL:${unrealized_pnl:.2f} (ROE: {pnl_pct:+.2f}%)")
+                except Exception as e:
+                    log.error(f"Failed to fetch real position: {e}")
+        except Exception as e:
+            log.error(f"Error processing position info: {e}")
+
+        return current_position_info
+
+    def _process_market_snapshot(
+        self,
+        *,
+        market_snapshot: Any,
+        snapshot_id: str,
+        cycle_id: str
+    ) -> Dict[str, "pd.DataFrame"]:
+        """Save raw/indicators/features and return processed dataframes."""
+        processed_dfs: Dict[str, "pd.DataFrame"] = {}
+        for tf in ['5m', '15m', '1h']:
+            raw_klines = getattr(market_snapshot, f'raw_{tf}')
+            self.saver.save_market_data(raw_klines, self.current_symbol, tf, cycle_id=cycle_id)
+
+            stable_klines = self._get_closed_klines(raw_klines)
+            df_with_indicators = self.processor.process_klines(
+                stable_klines,
+                self.current_symbol,
+                tf,
+                save_raw=False
+            )
+            self.saver.save_indicators(df_with_indicators, self.current_symbol, tf, snapshot_id, cycle_id=cycle_id)
+            features_df = self.processor.extract_feature_snapshot(df_with_indicators)
+            self.saver.save_features(features_df, self.current_symbol, tf, snapshot_id, cycle_id=cycle_id)
+            processed_dfs[tf] = df_with_indicators
+        return processed_dfs
+
+    def _build_warmup_wait_result(
+        self,
+        *,
+        data_readiness: Dict[str, Any],
+        snapshot_id: str,
+        cycle_id: str
+    ) -> Dict[str, Any]:
+        """Create wait result when indicators are still warming up."""
+        reason = data_readiness.get('blocking_reason') or "data_warmup"
+        log.warning(f"[{self.current_symbol}] {reason}")
+        global_state.add_log(f"[DATA] {reason}")
+        global_state.oracle_status = "Warmup"
+        global_state.guardian_status = "Warmup"
+        global_state.four_layer_result = {
+            'layer1_pass': False,
+            'layer2_pass': False,
+            'layer3_pass': False,
+            'layer4_pass': False,
+            'final_action': 'wait',
+            'blocking_reason': reason,
+            'data_ready': False,
+            'data_validity': data_readiness['details']
+        }
+
+        decision_dict = {
+            'action': 'wait',
+            'confidence': 0,
+            'reason': reason,
+            'vote_details': {
+                'data_validity': data_readiness['details']
+            },
+            'symbol': self.current_symbol,
+            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            'cycle_number': global_state.cycle_counter,
+            'cycle_id': global_state.current_cycle_id,
+            'risk_level': 'safe',
+            'guardian_passed': True
+        }
+        decision_dict['vote_analysis'] = SemanticConverter.convert_analysis_map(decision_dict.get('vote_details', {}))
+        decision_dict['four_layer_status'] = global_state.four_layer_result
+        self._attach_agent_ui_fields(decision_dict)
+
+        global_state.update_decision(decision_dict)
+        self.saver.save_decision(decision_dict, self.current_symbol, snapshot_id, cycle_id=cycle_id)
+
+        return {
+            'status': 'wait',
+            'action': 'wait',
+            'details': {
+                'reason': reason,
+                'confidence': 0
+            }
+        }
+
+    async def _run_oracle_stage(
+        self,
+        *,
+        run_id: str,
+        cycle_id: str,
+        snapshot_id: str
+    ) -> Dict[str, Any]:
+        """Run Step 1: fetch market data, validate, build position context, and process indicators."""
+        if not (hasattr(self, '_headless_mode') and self._headless_mode):
+            print("\n[Step 1/4] 🕵️ The Oracle (Data Agent) - Fetching data...")
+        global_state.oracle_status = "Fetching Data..."
+        global_state.add_agent_message("system", f"Fetching market data for {self.current_symbol}...", level="info")
+        self._emit_runtime_event(
+            run_id=run_id,
+            stream="lifecycle",
+            agent="oracle",
+            phase="start",
+            cycle_id=cycle_id
+        )
+
+        data_sync_timeout = self._get_agent_timeout('data_sync', 20.0)
+        try:
+            market_snapshot = await asyncio.wait_for(
+                self.data_sync_agent.fetch_all_timeframes(
+                    self.current_symbol,
+                    limit=self.kline_limit
+                ),
+                timeout=data_sync_timeout
+            )
+        except asyncio.TimeoutError:
+            error_msg = f"❌ DATA FETCH TIMEOUT: oracle>{data_sync_timeout:.1f}s"
+            log.error(error_msg)
+            global_state.add_log(f"[🚨 CRITICAL] {error_msg}")
+            global_state.oracle_status = "DATA ERROR"
+            self._emit_runtime_event(
+                run_id=run_id,
+                stream="error",
+                agent="oracle",
+                phase="timeout",
+                cycle_id=cycle_id,
+                data={"error_type": "api_timeout", "timeout_seconds": data_sync_timeout}
+            )
+            return {
+                'early_result': {
+                    'status': 'error',
+                    'action': 'blocked',
+                    'details': {
+                        'reason': error_msg,
+                        'error_type': 'api_timeout'
+                    }
+                }
+            }
+        except Exception as e:
+            error_msg = f"❌ DATA FETCH FAILED: {str(e)}"
+            log.error(error_msg)
+            global_state.add_log(f"[🚨 CRITICAL] {error_msg}")
+            global_state.oracle_status = "DATA ERROR"
+            self._emit_runtime_event(
+                run_id=run_id,
+                stream="error",
+                agent="oracle",
+                phase="error",
+                cycle_id=cycle_id,
+                data={"error_type": "api_failure", "error": str(e)}
+            )
+            return {
+                'early_result': {
+                    'status': 'error',
+                    'action': 'blocked',
+                    'details': {
+                        'reason': f'Data API call failed: {str(e)}',
+                        'error_type': 'api_failure'
+                    }
+                }
+            }
+
+        data_errors = self._validate_market_snapshot(market_snapshot)
+        if data_errors:
+            error_msg = f"❌ DATA INCOMPLETE: {'; '.join(data_errors)}"
+            log.error(error_msg)
+            global_state.add_log(f"[🚨 CRITICAL] {error_msg}")
+            global_state.oracle_status = "DATA INCOMPLETE"
+            print(f"\n{'='*60}")
+            print("🚨 TRADING BLOCKED - DATA ERROR")
+            print(f"{'='*60}")
+            for err in data_errors:
+                print(f"   ❌ {err}")
+            print(f"{'='*60}\n")
+            self._emit_runtime_event(
+                run_id=run_id,
+                stream="error",
+                agent="oracle",
+                phase="error",
+                cycle_id=cycle_id,
+                data={"error_type": "data_incomplete", "errors": data_errors}
+            )
+            return {
+                'early_result': {
+                    'status': 'error',
+                    'action': 'blocked',
+                    'details': {
+                        'reason': error_msg,
+                        'error_type': 'data_incomplete',
+                        'errors': data_errors
+                    }
+                }
+            }
+
+        global_state.oracle_status = "Data Ready"
+        current_position_info = self._extract_position_info(market_snapshot)
+        processed_dfs = self._process_market_snapshot(
+            market_snapshot=market_snapshot,
+            snapshot_id=snapshot_id,
+            cycle_id=cycle_id
+        )
+
+        market_snapshot.stable_5m = processed_dfs['5m']
+        market_snapshot.stable_15m = processed_dfs['15m']
+        market_snapshot.stable_1h = processed_dfs['1h']
+
+        current_price = market_snapshot.live_5m.get('close')
+        print(f"  ✅ Data ready: ${current_price:,.2f} ({market_snapshot.timestamp.strftime('%H:%M:%S')})")
+        global_state.add_log(f"[🕵️ ORACLE] Data ready: ${current_price:,.2f}")
+        global_state.current_price[self.current_symbol] = current_price
+
+        data_readiness = self._assess_data_readiness(processed_dfs)
+        if not data_readiness['is_ready']:
+            self._emit_runtime_event(
+                run_id=run_id,
+                stream="lifecycle",
+                agent="oracle",
+                phase="end",
+                cycle_id=cycle_id,
+                data={"status": "warmup"}
+            )
+            return {
+                'early_result': self._build_warmup_wait_result(
+                    data_readiness=data_readiness,
+                    snapshot_id=snapshot_id,
+                    cycle_id=cycle_id
+                )
+            }
+
+        indicator_snapshot = self._capture_indicator_snapshot(processed_dfs, timeframe='15m')
+        if indicator_snapshot:
+            snapshots = getattr(global_state, 'indicator_snapshot', {})
+            if not isinstance(snapshots, dict) or 'ema_status' in snapshots:
+                snapshots = {}
+            snapshots[self.current_symbol] = indicator_snapshot
+            global_state.indicator_snapshot = snapshots
+
+        self._emit_runtime_event(
+            run_id=run_id,
+            stream="lifecycle",
+            agent="oracle",
+            phase="end",
+            cycle_id=cycle_id,
+            data={"status": "ok", "price": current_price}
+        )
+        return {
+            'early_result': None,
+            'market_snapshot': market_snapshot,
+            'processed_dfs': processed_dfs,
+            'current_price': current_price,
+            'current_position_info': current_position_info
+        }
+
+    async def _run_agent_analysis_stage(
+        self,
+        *,
+        run_id: str,
+        cycle_id: str,
+        snapshot_id: str,
+        market_snapshot: Any,
+        processed_dfs: Dict[str, "pd.DataFrame"]
+    ) -> Tuple[Dict[str, Any], Any, Any, Optional[str]]:
+        """Run Step 2 parallel analysts and persist analysis context."""
+        self._emit_runtime_event(
+            run_id=run_id,
+            stream="lifecycle",
+            agent="analysis_stage",
+            phase="start",
+            cycle_id=cycle_id
+        )
+        try:
+            if not (hasattr(self, '_headless_mode') and self._headless_mode):
+                print("[Step 2/4] 👥 Multi-Agent Analysis (Parallel)...")
+            global_state.add_log(f"[📊 SYSTEM] Parallel analysis started for {self.current_symbol}")
+
+            quant_analysis, predict_result, reflection_result, reflection_text = await self._run_parallel_analysis(
+                run_id=run_id,
+                cycle_id=cycle_id,
+                snapshot_id=snapshot_id,
+                market_snapshot=market_snapshot,
+                processed_dfs=processed_dfs
+            )
+
+            try:
+                df_15m = processed_dfs['15m']
+                if 'macd_diff' in df_15m.columns:
+                    macd_val = float(df_15m['macd_diff'].iloc[-1])
+                    if 'trend' not in quant_analysis:
+                        quant_analysis['trend'] = {}
+                    if 'details' not in quant_analysis['trend']:
+                        quant_analysis['trend']['details'] = {}
+                    quant_analysis['trend']['details']['15m_macd_diff'] = macd_val
+            except Exception as e:
+                log.warning(f"Failed to inject MACD data: {e}")
+
+            self.saver.save_context(quant_analysis, self.current_symbol, 'analytics', snapshot_id, cycle_id=cycle_id)
+
+            trend_score = quant_analysis.get('trend', {}).get('total_trend_score', 0)
+            osc_score = quant_analysis.get('oscillator', {}).get('total_osc_score', 0)
+            sent_score = quant_analysis.get('sentiment', {}).get('total_sentiment_score', 0)
+            global_state.add_log(f"[👨‍🔬 STRATEGIST] Trend={trend_score:+.0f} | Osc={osc_score:+.0f} | Sent={sent_score:+.0f}")
+
+            self._emit_runtime_event(
+                run_id=run_id,
+                stream="lifecycle",
+                agent="analysis_stage",
+                phase="end",
+                cycle_id=cycle_id
+            )
+            return quant_analysis, predict_result, reflection_result, reflection_text
+        except Exception as e:
+            self._emit_runtime_event(
+                run_id=run_id,
+                stream="error",
+                agent="analysis_stage",
+                phase="error",
+                cycle_id=cycle_id,
+                data={"error": str(e)}
+            )
+            raise
+
+    def _run_four_layer_filter_stage(
+        self,
+        *,
+        run_id: str,
+        cycle_id: str,
+        quant_analysis: Dict[str, Any],
+        predict_result: Any,
+        processed_dfs: Dict[str, "pd.DataFrame"],
+        current_price: float
+    ) -> Tuple[Dict[str, Any], Dict[str, Any], str]:
+        """Run four-layer strategy filtering and return regime/four-layer outputs."""
+        self._emit_runtime_event(
+            run_id=run_id,
+            stream="lifecycle",
+            agent="four_layer_filter",
+            phase="start",
+            cycle_id=cycle_id
+        )
+        if not (hasattr(self, '_headless_mode') and self._headless_mode):
+            print("[Step 2.75/5] 🎯 Four-Layer Strategy Filter - 多层验证中...")
+
+        sentiment = quant_analysis.get('sentiment', {})
+        oi_fuel = sentiment.get('oi_fuel', {})
+
+        funding_rate = sentiment.get('details', {}).get('funding_rate', 0)
+        if funding_rate is None:
+            funding_rate = 0
+
+        df_1h = processed_dfs['1h']
+        if self.regime_detector and len(df_1h) >= 20:
+            regime_result = self.regime_detector.detect_regime(df_1h)
+        else:
+            regime_result = {'adx': 20, 'regime': 'unknown', 'confidence': 0}
+        adx_value = regime_result.get('adx', 20)
+
+        four_layer_result = {
+            'layer1_pass': False,
+            'layer2_pass': False,
+            'layer3_pass': False,
+            'layer4_pass': False,
+            'final_action': 'wait',
+            'blocking_reason': None,
+            'confidence_boost': 0,
+            'tp_multiplier': 1.0,
+            'sl_multiplier': 1.0,
+            'adx': adx_value,
+            'funding_rate': funding_rate,
+            'regime': regime_result.get('regime', 'unknown')
+        }
+
+        df_1h = processed_dfs['1h']
+        if len(df_1h) >= 20:
+            close_1h = df_1h['close'].iloc[-1]
+            ema20_1h = df_1h['ema_20'].iloc[-1] if 'ema_20' in df_1h.columns else close_1h
+            ema60_1h = df_1h['ema_60'].iloc[-1] if 'ema_60' in df_1h.columns else close_1h
+            four_layer_result['close_1h'] = close_1h
+            four_layer_result['ema20_1h'] = ema20_1h
+            four_layer_result['ema60_1h'] = ema60_1h
+        else:
+            close_1h = current_price
+            ema20_1h = current_price
+            ema60_1h = current_price
+            four_layer_result['close_1h'] = close_1h
+            four_layer_result['ema20_1h'] = ema20_1h
+            four_layer_result['ema60_1h'] = ema60_1h
+
+        oi_change = oi_fuel.get('oi_change_24h', 0)
+        if oi_change is None:
+            oi_change = 0
+        four_layer_result['oi_change'] = oi_change
+
+        data_anomalies = []
+        if abs(oi_change) > 200:
+            data_anomalies.append(f"OI_ANOMALY: {oi_change:.1f}% (>200% likely data error)")
+            log.warning(f"⚠️ DATA ANOMALY: OI Change {oi_change:.1f}% is abnormally high")
+            oi_change = max(min(oi_change, 100), -100)
+            four_layer_result['oi_change'] = oi_change
+            four_layer_result['oi_change_raw'] = oi_fuel.get('oi_change_24h', 0)
+
+        if adx_value < 5:
+            data_anomalies.append(f"ADX_ANOMALY: {adx_value:.0f} (<5 may be unreliable)")
+            log.warning(f"⚠️ DATA ANOMALY: ADX {adx_value:.0f} is abnormally low")
+
+        if abs(funding_rate) > 1.0:
+            data_anomalies.append(f"FUNDING_ANOMALY: {funding_rate:.3f}% (extreme)")
+            log.warning(f"⚠️ DATA ANOMALY: Funding Rate {funding_rate:.3f}% is extreme")
+
+        regime = regime_result.get('regime', 'unknown')
+        if adx_value < 15 and regime in ['trending_up', 'trending_down']:
+            data_anomalies.append(f"LOGIC_PARADOX: ADX={adx_value:.0f} (no trend) + Regime={regime} (trending)")
+            log.warning(f"⚠️ LOGIC PARADOX: ADX={adx_value:.0f} indicates NO trend, but Regime={regime}. Forcing to choppy.")
+            four_layer_result['regime'] = 'choppy'
+            four_layer_result['regime_override'] = True
+
+        four_layer_result['data_anomalies'] = data_anomalies if data_anomalies else None
+
+        if len(df_1h) < 60:
+            log.warning(f"⚠️ Insufficient 1h data: {len(df_1h)} bars (need 60+)")
+            four_layer_result['blocking_reason'] = 'Insufficient 1h data'
+            trend_1h = 'neutral'
+        else:
+            if ema20_1h > ema60_1h:
+                trend_1h = 'long'
+                if close_1h > ema20_1h:
+                    four_layer_result['trend_confirmation'] = 'strong'
+                else:
+                    four_layer_result['trend_confirmation'] = 'moderate'
+            elif ema20_1h < ema60_1h:
+                trend_1h = 'short'
+                if close_1h < ema20_1h:
+                    four_layer_result['trend_confirmation'] = 'strong'
+                else:
+                    four_layer_result['trend_confirmation'] = 'moderate'
+            else:
+                trend_1h = 'neutral'
+
+            log.info(f"📊 1h EMA: Close=${close_1h:.2f}, EMA20=${ema20_1h:.2f}, EMA60=${ema60_1h:.2f} => {trend_1h.upper()}")
+
+        oi_divergence_warning = None
+        oi_divergence_warn = 15.0
+        oi_divergence_block = 60.0
+
+        if trend_1h == 'neutral':
+            four_layer_result['blocking_reason'] = 'No clear 1h trend (EMA 20/60)'
+            log.info("❌ Layer 1 FAIL: No clear trend")
+        elif adx_value < 15:
+            four_layer_result['blocking_reason'] = f"Weak Trend Strength (ADX {adx_value:.0f} < 15)"
+            log.info(f"❌ Layer 1 FAIL: ADX={adx_value:.0f} < 15, trend not strong enough")
+        elif trend_1h == 'long' and oi_change < -oi_divergence_block:
+            four_layer_result['blocking_reason'] = f"OI Divergence: Trend UP but OI {oi_change:.1f}%"
+            log.warning(f"🚨 Layer 1 FAIL: OI Divergence - Price up but OI {oi_change:.1f}%")
+        elif trend_1h == 'short' and oi_change > oi_divergence_block:
+            four_layer_result['blocking_reason'] = f"OI Divergence: Trend DOWN but OI +{oi_change:.1f}%"
+            log.warning(f"🚨 Layer 1 FAIL: OI Divergence - Price down but OI +{oi_change:.1f}%")
+        elif trend_1h == 'long' and oi_change < -oi_divergence_warn:
+            oi_divergence_warning = f"OI Divergence: Trend UP but OI {oi_change:.1f}%"
+            log.warning(f"⚠️ Layer 1 WARNING: OI Divergence - Price up but OI {oi_change:.1f}%")
+        elif trend_1h == 'short' and oi_change > oi_divergence_warn:
+            oi_divergence_warning = f"OI Divergence: Trend DOWN but OI +{oi_change:.1f}%"
+            log.warning(f"⚠️ Layer 1 WARNING: OI Divergence - Price down but OI +{oi_change:.1f}%")
+        elif trend_1h == 'long' and oi_fuel.get('whale_trap_risk', False):
+            four_layer_result['blocking_reason'] = f"Whale trap detected (OI {oi_change:.1f}%)"
+            log.warning("🐋 Layer 1 FAIL: Whale exit trap")
+
+        if not four_layer_result.get('blocking_reason'):
+            four_layer_result['layer1_pass'] = True
+
+            if abs(oi_change) < 1.0:
+                four_layer_result['fuel_warning'] = f"Weak Fuel (OI {oi_change:.1f}%)"
+                four_layer_result['confidence_penalty'] = -10
+                log.warning(f"⚠️ Layer 1 WARNING: Weak fuel - OI {oi_change:.1f}% (proceed with caution)")
+                fuel_strength = 'Weak'
+            else:
+                fuel_strength = 'Strong' if abs(oi_change) > 3.0 else 'Moderate'
+            if oi_divergence_warning:
+                existing_warning = four_layer_result.get('fuel_warning')
+                if existing_warning:
+                    four_layer_result['fuel_warning'] = f"{existing_warning} | {oi_divergence_warning}"
+                else:
+                    four_layer_result['fuel_warning'] = oi_divergence_warning
+                current_penalty = four_layer_result.get('confidence_penalty', 0)
+                four_layer_result['confidence_penalty'] = min(current_penalty, -10) if current_penalty else -10
+            log.info(f"✅ Layer 1 PASS: {trend_1h.upper()} trend + {fuel_strength} Fuel (OI {oi_change:+.1f}%)")
+
+            if self.agent_config.ai_prediction_filter_agent and self.agent_config.predict_agent:
+                from src.agents.ai_prediction_filter_agent import AIPredictionFilter
+                ai_filter = AIPredictionFilter()
+                ai_check = ai_filter.check_divergence(trend_1h, predict_result)
+
+                four_layer_result['ai_check'] = ai_check
+                if adx_value < 5:
+                    ai_check['ai_invalidated'] = True
+                    ai_check['original_signal'] = ai_check.get('ai_signal', 'unknown')
+                    ai_check['ai_signal'] = 'INVALID (ADX<5)'
+                    four_layer_result['ai_prediction_note'] = (
+                        f"AI prediction invalidated: ADX={adx_value:.0f} (<5), "
+                        "directional signals are statistically meaningless"
+                    )
+                    log.warning(f"⚠️ AI prediction invalidated: ADX={adx_value:.0f} is too low for any directional signal to be reliable")
+
+                if ai_check['ai_veto']:
+                    four_layer_result['blocking_reason'] = ai_check['reason']
+                    log.warning(f"🚫 Layer 2 VETO: {ai_check['reason']}")
+                else:
+                    four_layer_result['layer2_pass'] = True
+                    four_layer_result['confidence_boost'] = ai_check['confidence_boost']
+                    log.info(f"✅ Layer 2 PASS: AI {ai_check['ai_signal']} (boost: {ai_check['confidence_boost']:+d}%)")
+            else:
+                four_layer_result['layer2_pass'] = True
+                four_layer_result['ai_check'] = {
+                    'allow_trade': True,
+                    'reason': 'AIPredictionFilter disabled',
+                    'confidence_boost': 0,
+                    'ai_veto': False,
+                    'ai_signal': 'disabled',
+                    'ai_confidence': 0
+                }
+                log.info("⏭️ Layer 2 SKIP: AIPredictionFilterAgent disabled")
+
+            if four_layer_result['layer2_pass']:
+                df_15m = processed_dfs['15m']
+                if len(df_15m) < 20:
+                    log.warning(f"⚠️ Insufficient 15m data: {len(df_15m)} bars")
+                    four_layer_result['blocking_reason'] = 'Insufficient 15m data'
+                    setup_ready = False
+                else:
+                    close_15m = df_15m['close'].iloc[-1]
+                    bb_middle = df_15m['bb_middle'].iloc[-1]
+                    bb_upper = df_15m['bb_upper'].iloc[-1]
+                    bb_lower = df_15m['bb_lower'].iloc[-1]
+                    kdj_j = df_15m['kdj_j'].iloc[-1]
+                    kdj_k = df_15m['kdj_k'].iloc[-1]
+
+                    log.info(f"📊 15m Setup: Close=${close_15m:.2f}, BB[{bb_lower:.2f}/{bb_middle:.2f}/{bb_upper:.2f}], KDJ_J={kdj_j:.1f}")
+                    four_layer_result['setup_note'] = f"KDJ_J={kdj_j:.0f}, Close={'>' if close_15m > bb_middle else '<'}BB_mid"
+                    four_layer_result['kdj_j'] = kdj_j
+                    four_layer_result['bb_position'] = 'upper' if close_15m > bb_upper else 'lower' if close_15m < bb_lower else 'middle'
+
+                    if kdj_j > 80 or close_15m > bb_upper:
+                        four_layer_result['kdj_zone'] = 'overbought'
+                    elif kdj_j < 20 or close_15m < bb_lower:
+                        four_layer_result['kdj_zone'] = 'oversold'
+                    else:
+                        four_layer_result['kdj_zone'] = 'neutral'
+
+                    if trend_1h == 'long':
+                        if close_15m > bb_upper or kdj_j > 80:
+                            setup_ready = False
+                            four_layer_result['blocking_reason'] = f"15m overbought (J={kdj_j:.0f}) - wait for pullback"
+                            log.info("⏳ Layer 3 WAIT: Overbought - waiting for pullback")
+                        elif close_15m < bb_middle or kdj_j < 50:
+                            setup_ready = True
+                            four_layer_result['setup_quality'] = 'IDEAL'
+                            log.info(f"✅ Layer 3 READY: IDEAL PULLBACK - J={kdj_j:.0f} < 50 or Close < BB_middle")
+                        else:
+                            setup_ready = True
+                            four_layer_result['setup_quality'] = 'ACCEPTABLE'
+                            log.info(f"✅ Layer 3 READY: Acceptable mid-range entry (J={kdj_j:.0f})")
+                    elif trend_1h == 'short':
+                        if close_15m < bb_lower or kdj_j < 20:
+                            setup_ready = False
+                            four_layer_result['blocking_reason'] = f"15m oversold (J={kdj_j:.0f}) - wait for rally"
+                            log.info("⏳ Layer 3 WAIT: Oversold - waiting for rally")
+                        elif close_15m > bb_middle or kdj_j > 50:
+                            setup_ready = True
+                            four_layer_result['setup_quality'] = 'IDEAL'
+                            log.info(f"✅ Layer 3 READY: IDEAL RALLY - J={kdj_j:.0f} > 60 or Close > BB_middle")
+                        else:
+                            setup_ready = True
+                            four_layer_result['setup_quality'] = 'ACCEPTABLE'
+                            log.info(f"✅ Layer 3 READY: Acceptable mid-range entry (J={kdj_j:.0f})")
+                    else:
+                        setup_ready = False
+
+                if not setup_ready:
+                    four_layer_result['blocking_reason'] = "15m setup not ready"
+                    log.info("⏳ Layer 3 WAIT: 15m setup not ready")
+                else:
+                    four_layer_result['layer3_pass'] = True
+                    log.info("✅ Layer 3 PASS: 15m setup ready")
+
+                    if self.agent_config.trigger_detector_agent:
+                        from src.agents.trigger_detector_agent import TriggerDetector
+                        trigger_detector = TriggerDetector()
+
+                        df_5m = processed_dfs['5m']
+                        trigger_result = trigger_detector.detect_trigger(df_5m, direction=trend_1h)
+                        four_layer_result['trigger_pattern'] = trigger_result.get('pattern_type') or 'None'
+                        rvol = trigger_result.get('rvol', 1.0)
+                        four_layer_result['trigger_rvol'] = rvol
+
+                        if rvol < 0.5:
+                            log.warning(f"⚠️ Low Volume Warning (RVOL {rvol:.1f}x < 0.5) - Trend validation may be unreliable")
+                            if not four_layer_result.get('data_anomalies'):
+                                four_layer_result['data_anomalies'] = []
+                            four_layer_result['data_anomalies'].append(f"Low Volume (RVOL {rvol:.1f}x)")
+
+                        if not trigger_result['triggered']:
+                            four_layer_result['blocking_reason'] = f"5min trigger not confirmed (RVOL={trigger_result.get('rvol', 1.0):.1f}x)"
+                            log.info(f"⏳ Layer 4 WAIT: No engulfing or breakout pattern (RVOL={trigger_result.get('rvol', 1.0):.1f}x)")
+                        else:
+                            log.info(f"🎯 Layer 4 TRIGGER: {trigger_result['pattern_type']} detected")
+                            sentiment_score = sentiment.get('total_sentiment_score', 0)
+
+                            if sentiment_score > 80:
+                                four_layer_result['tp_multiplier'] = 0.5
+                                four_layer_result['sl_multiplier'] = 1.0
+                                log.warning(f"🔴 Extreme Greed ({sentiment_score:.0f}): TP target halved")
+                            elif sentiment_score < -80:
+                                four_layer_result['tp_multiplier'] = 1.5
+                                four_layer_result['sl_multiplier'] = 0.8
+                                log.info(f"🟢 Extreme Fear ({sentiment_score:.0f}): Be greedy when others are fearful")
+                            else:
+                                four_layer_result['tp_multiplier'] = 1.0
+                                four_layer_result['sl_multiplier'] = 1.0
+
+                            if trend_1h == 'long' and funding_rate > 0.05:
+                                four_layer_result['tp_multiplier'] *= 0.7
+                                log.warning(f"💰 High Funding Rate ({funding_rate:.3f}%): Longs crowded, TP reduced")
+                            elif trend_1h == 'short' and funding_rate < -0.05:
+                                four_layer_result['tp_multiplier'] *= 0.7
+                                log.warning(f"💰 Negative Funding Rate ({funding_rate:.3f}%): Shorts crowded, TP reduced")
+
+                            four_layer_result['layer4_pass'] = True
+                            four_layer_result['final_action'] = trend_1h
+                            four_layer_result['trigger_pattern'] = trigger_result['pattern_type']
+                            log.info(f"✅ Layer 4 PASS: Sentiment {sentiment_score:.0f}, Trigger={trigger_result['pattern_type']}")
+                            log.info(f"🎯 ALL LAYERS PASSED: {trend_1h.upper()} with {70 + four_layer_result['confidence_boost']}% confidence")
+                    else:
+                        four_layer_result['trigger_pattern'] = 'disabled'
+                        four_layer_result['trigger_rvol'] = None
+                        four_layer_result['layer4_pass'] = True
+                        four_layer_result['final_action'] = trend_1h
+                        log.info("⏭️ Layer 4 SKIP: TriggerDetectorAgent disabled")
+
+        global_state.four_layer_result = four_layer_result
+        self._emit_runtime_event(
+            run_id=run_id,
+            stream="lifecycle",
+            agent="four_layer_filter",
+            phase="end",
+            cycle_id=cycle_id,
+            data={
+                "final_action": four_layer_result.get('final_action', 'wait'),
+                "layer4_pass": bool(four_layer_result.get('layer4_pass'))
+            }
+        )
+        return regime_result, four_layer_result, trend_1h
+
+    async def _run_post_filter_stage(
+        self,
+        *,
+        run_id: str,
+        cycle_id: str,
+        current_price: float,
+        trend_1h: str,
+        four_layer_result: Dict[str, Any],
+        quant_analysis: Dict[str, Any],
+        processed_dfs: Dict[str, "pd.DataFrame"]
+    ) -> None:
+        """Run semantic agents + multi-period parser after four-layer filtering."""
+        self._emit_runtime_event(
+            run_id=run_id,
+            stream="lifecycle",
+            agent="post_filter_stage",
+            phase="start",
+            cycle_id=cycle_id
+        )
+        try:
+            await self._run_semantic_analysis(
+                run_id=run_id,
+                cycle_id=cycle_id,
+                current_price=current_price,
+                trend_1h=trend_1h,
+                four_layer_result=four_layer_result,
+                processed_dfs=processed_dfs
+            )
+
+            try:
+                multi_period_result = self.multi_period_agent.analyze(
+                    quant_analysis=quant_analysis,
+                    four_layer_result=four_layer_result,
+                    semantic_analyses=getattr(global_state, 'semantic_analyses', {}) or {}
+                )
+                global_state.multi_period_result = multi_period_result
+                summary = multi_period_result.get('summary')
+                if summary:
+                    global_state.add_agent_message("multi_period_agent", summary, level="info")
+            except Exception as e:
+                log.error(f"❌ Multi-Period Parser Agent failed: {e}")
+                global_state.multi_period_result = {}
+
+            self._emit_runtime_event(
+                run_id=run_id,
+                stream="lifecycle",
+                agent="post_filter_stage",
+                phase="end",
+                cycle_id=cycle_id
+            )
+        except Exception as e:
+            self._emit_runtime_event(
+                run_id=run_id,
+                stream="error",
+                agent="post_filter_stage",
+                phase="error",
+                cycle_id=cycle_id,
+                data={"error": str(e)}
+            )
+            raise
+
+    def _record_decision_observability(
+        self,
+        *,
+        decision_payload: Dict[str, Any],
+        decision_source: str,
+        vote_result: Any,
+        snapshot_id: str,
+        cycle_id: str
+    ) -> None:
+        """Persist LLM logs and emit decision observability logs."""
+        if decision_source == 'llm' and os.environ.get('ENABLE_DETAILED_LLM_LOGS', 'false').lower() == 'true':
+            full_log_content = f"""
+================================================================================
+🕐 Timestamp: {datetime.now().isoformat()}
+💱 Symbol: {self.current_symbol}
+🔄 Cycle: #{cycle_id}
+================================================================================
+
+--------------------------------------------------------------------------------
+📤 INPUT (PROMPT)
+--------------------------------------------------------------------------------
+[SYSTEM PROMPT]
+{decision_payload.get('system_prompt', '(Missing System Prompt)')}
+
+[USER PROMPT]
+{decision_payload.get('user_prompt', '(Missing User Prompt)')}
+
+--------------------------------------------------------------------------------
+🧠 PROCESSING (REASONING)
+--------------------------------------------------------------------------------
+{decision_payload.get('reasoning_detail', '(No reasoning detail)')}
+
+--------------------------------------------------------------------------------
+📥 OUTPUT (DECISION)
+--------------------------------------------------------------------------------
+{decision_payload.get('raw_response', '(No raw response)')}
+"""
+            self.saver.save_llm_log(
+                content=full_log_content,
+                symbol=self.current_symbol,
+                snapshot_id=snapshot_id,
+                cycle_id=cycle_id
+            )
+
+        bull_conf = decision_payload.get('bull_perspective', {}).get('bull_confidence', 50)
+        bear_conf = decision_payload.get('bear_perspective', {}).get('bear_confidence', 50)
+        bull_stance = decision_payload.get('bull_perspective', {}).get('stance', 'UNKNOWN')
+        bear_stance = decision_payload.get('bear_perspective', {}).get('stance', 'UNKNOWN')
+        global_state.add_log(f"[🐂 Long Case] [{bull_stance}] Conf={bull_conf}%")
+        global_state.add_log(f"[🐻 Short Case] [{bear_stance}] Conf={bear_conf}%")
+
+        decision_label = "FAST Decision" if decision_source == 'fast_trend' else ("RULE Decision" if decision_source == 'decision_core' else "Final Decision")
+        global_state.add_log(f"[⚖️ {decision_label}] Action={vote_result.action.upper()} | Conf={decision_payload.get('confidence', 0)}%")
+
+        self.saver.save_decision(asdict(vote_result), self.current_symbol, snapshot_id, cycle_id=cycle_id)
+
+    def _handle_passive_decision(
+        self,
+        *,
+        vote_result: Any,
+        quant_analysis: Dict[str, Any],
+        predict_result: Any,
+        current_position_info: Optional[Dict[str, Any]]
+    ) -> Optional[Dict[str, Any]]:
+        """Handle passive decision (wait/hold). Return cycle result if handled."""
+        if not is_passive_action(vote_result.action):
+            return None
+
+        has_position = False
+        if current_position_info:
+            try:
+                qty = float(current_position_info.get('quantity', 0) or 0)
+                has_position = abs(qty) > 0
+            except (TypeError, ValueError):
+                has_position = True
+        if not has_position and self.test_mode:
+            has_position = self.current_symbol in global_state.virtual_positions
+        actual_action = 'hold' if has_position else 'wait'
+
+        action_display = '持仓观望' if actual_action == 'hold' else '观望'
+        print(f"\n✅ 决策: {action_display} ({actual_action})")
+
+        regime_txt = vote_result.regime.get('regime', 'Unknown') if vote_result.regime else 'Unknown'
+        pos_txt = f"{min(max(vote_result.position.get('position_pct', 0), 0), 100):.0f}%" if vote_result.position else 'N/A'
+        global_state.add_log(f"⚖️ DecisionCoreAgent (The Critic): Context(Regime={regime_txt}, Pos={pos_txt}) => Vote: {actual_action.upper()} ({vote_result.reason})")
+
+        decision_dict = self._build_decision_snapshot(
+            vote_result=vote_result,
+            quant_analysis=quant_analysis,
+            predict_result=predict_result,
+            risk_level='safe',
+            guardian_passed=True,
+            action_override=actual_action
+        )
+        global_state.update_decision(decision_dict)
+
+        return {
+            'status': actual_action,
+            'action': actual_action,
+            'details': {
+                'reason': vote_result.reason,
+                'confidence': vote_result.confidence
+            }
+        }
+
+    def _finalize_risk_audit_decision(
+        self,
+        *,
+        vote_result: Any,
+        quant_analysis: Dict[str, Any],
+        predict_result: Any,
+        audit_result: Any,
+        order_params: Dict[str, Any],
+        snapshot_id: str,
+        cycle_id: str,
+        current_price: float
+    ) -> Optional[Dict[str, Any]]:
+        """Persist audit outcome, apply corrections, update state, and return blocked result if needed."""
+        decision_dict = self._build_decision_snapshot(
+            vote_result=vote_result,
+            quant_analysis=quant_analysis,
+            predict_result=predict_result,
+            risk_level=audit_result.risk_level.value,
+            guardian_passed=audit_result.passed,
+            guardian_reason=audit_result.blocked_reason
+        )
+
+        self.saver.save_risk_audit(
+            audit_result={
+                'passed': audit_result.passed,
+                'risk_level': audit_result.risk_level.value,
+                'blocked_reason': audit_result.blocked_reason,
+                'corrections': audit_result.corrections,
+                'warnings': audit_result.warnings,
+                'order_params': order_params,
+                'cycle_id': cycle_id
+            },
+            symbol=self.current_symbol,
+            snapshot_id=snapshot_id,
+            cycle_id=cycle_id
+        )
+
+        print(f"  ✅ 审计结果: {'✅ 通过' if audit_result.passed else '❌ 拦截'}")
+        print(f"  ✅ 风险等级: {audit_result.risk_level.value}")
+
+        if audit_result.corrections:
+            print("  ⚠️  自动修正:")
+            for key, value in audit_result.corrections.items():
+                print(f"     {key}: {order_params[key]} -> {value}")
+                order_params[key] = value
+
+        if audit_result.warnings:
+            print("  ⚠️  警告信息:")
+            for warning in audit_result.warnings:
+                print(f"     {warning}")
+
+        decision_dict['order_params'] = order_params
+        global_state.update_decision(decision_dict)
+
+        if not audit_result.passed:
+            print(f"\n❌ 决策被风控拦截: {audit_result.blocked_reason}")
+            return {
+                'status': 'blocked',
+                'action': vote_result.action,
+                'details': {
+                    'reason': audit_result.blocked_reason,
+                    'risk_level': audit_result.risk_level.value
+                },
+                'current_price': current_price
+            }
+
+        return None
+
+    def _build_analyze_only_suggestion(
+        self,
+        *,
+        analyze_only: bool,
+        vote_result: Any,
+        order_params: Dict[str, Any],
+        current_price: float
+    ) -> Optional[Dict[str, Any]]:
+        """Return suggested result for open actions in analyze_only mode."""
+        if not (analyze_only and vote_result.action in ('open_long', 'open_short')):
+            return None
+
+        log.info(f"🔍 [Analyze Only] Strategy suggests {vote_result.action.upper()} for {self.current_symbol}, skipping execution for selector")
+        return {
+            'status': 'suggested',
+            'action': vote_result.action,
+            'confidence': vote_result.confidence,
+            'order_params': order_params,
+            'vote_result': vote_result,
+            'current_price': current_price
+        }
+
+    async def _run_decision_pipeline_stage(
+        self,
+        *,
+        run_id: str,
+        cycle_id: str,
+        snapshot_id: str,
+        processed_dfs: Dict[str, "pd.DataFrame"],
+        quant_analysis: Dict[str, Any],
+        predict_result: Any,
+        reflection_text: Optional[str],
+        current_price: float,
+        current_position_info: Optional[Dict[str, Any]],
+        regime_result: Optional[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Run decision stage + observability + passive handling."""
+        decision_payload, decision_source, fast_signal, vote_result, selected_agent_outputs = await self._run_decision_stage(
+            run_id=run_id,
+            cycle_id=cycle_id,
+            processed_dfs=processed_dfs,
+            quant_analysis=quant_analysis,
+            predict_result=predict_result,
+            reflection_text=reflection_text,
+            current_price=current_price,
+            current_position_info=current_position_info,
+            regime_result=regime_result
+        )
+
+        self._record_decision_observability(
+            decision_payload=decision_payload,
+            decision_source=decision_source,
+            vote_result=vote_result,
+            snapshot_id=snapshot_id,
+            cycle_id=cycle_id
+        )
+
+        passive_result = self._handle_passive_decision(
+            vote_result=vote_result,
+            quant_analysis=quant_analysis,
+            predict_result=predict_result,
+            current_position_info=current_position_info
+        )
+        if passive_result is not None:
+            return {'early_result': passive_result}
+
+        return {
+            'early_result': None,
+            'decision_payload': decision_payload,
+            'decision_source': decision_source,
+            'fast_signal': fast_signal,
+            'vote_result': vote_result,
+            'selected_agent_outputs': selected_agent_outputs
+        }
+
+    async def _run_action_pipeline_stage(
+        self,
+        *,
+        run_id: str,
+        cycle_id: str,
+        snapshot_id: str,
+        analyze_only: bool,
+        vote_result: Any,
+        quant_analysis: Dict[str, Any],
+        predict_result: Any,
+        processed_dfs: Dict[str, "pd.DataFrame"],
+        current_price: float,
+        current_position_info: Optional[Dict[str, Any]],
+        regime_result: Optional[Dict[str, Any]],
+        market_snapshot: Any
+    ) -> Dict[str, Any]:
+        """Run risk-audit -> analyze-only gate -> execution as one stage."""
+        if not (hasattr(self, '_headless_mode') and self._headless_mode):
+            print("[Step 4/5] 👮 The Guardian (Risk Audit) - Final review...")
+        order_params, audit_result, account_balance, current_position = await self._run_risk_audit_stage(
+            run_id=run_id,
+            cycle_id=cycle_id,
+            vote_result=vote_result,
+            quant_analysis=quant_analysis,
+            processed_dfs=processed_dfs,
+            current_price=current_price,
+            current_position_info=current_position_info,
+            regime_result=regime_result
+        )
+
+        blocked_result = self._finalize_risk_audit_decision(
+            vote_result=vote_result,
+            quant_analysis=quant_analysis,
+            predict_result=predict_result,
+            audit_result=audit_result,
+            order_params=order_params,
+            snapshot_id=snapshot_id,
+            cycle_id=cycle_id,
+            current_price=current_price
+        )
+        if blocked_result is not None:
+            return blocked_result
+
+        analyze_only_result = self._build_analyze_only_suggestion(
+            analyze_only=analyze_only,
+            vote_result=vote_result,
+            order_params=order_params,
+            current_price=current_price
+        )
+        if analyze_only_result is not None:
+            return analyze_only_result
+
+        return await self._run_execution_stage(
+            run_id=run_id,
+            cycle_id=cycle_id,
+            vote_result=vote_result,
+            order_params=order_params,
+            current_price=current_price,
+            current_position_info=current_position_info,
+            current_position=current_position,
+            account_balance=account_balance,
+            market_snapshot=market_snapshot
+        )
+
+    async def _run_execution_stage(
+        self,
+        *,
+        run_id: str,
+        cycle_id: str,
+        vote_result: Any,
+        order_params: Dict[str, Any],
+        current_price: float,
+        current_position_info: Optional[Dict[str, Any]],
+        current_position: Optional[PositionInfo],
+        account_balance: float,
+        market_snapshot: Any
+    ) -> Dict[str, Any]:
+        """Run order execution stage (test/live) with unified lifecycle events."""
+        self._emit_runtime_event(
+            run_id=run_id,
+            stream="lifecycle",
+            agent="executor",
+            phase="start",
+            cycle_id=cycle_id,
+            data={"mode": "test" if self.test_mode else "live"}
+        )
+
+        if self.test_mode:
+            return self._execute_test_mode_order(
+                run_id=run_id,
+                cycle_id=cycle_id,
+                vote_result=vote_result,
+                order_params=order_params,
+                current_price=current_price,
+                current_position_info=current_position_info
+            )
+
+        return self._execute_live_mode_order(
+            run_id=run_id,
+            cycle_id=cycle_id,
+            vote_result=vote_result,
+            order_params=order_params,
+            current_price=current_price,
+            current_position=current_position,
+            account_balance=account_balance,
+            market_snapshot=market_snapshot
+        )
+
+    def _execute_test_mode_order(
+        self,
+        *,
+        run_id: str,
+        cycle_id: str,
+        vote_result: Any,
+        order_params: Dict[str, Any],
+        current_price: float,
+        current_position_info: Optional[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Execute simulated order path for test mode."""
+        if not (hasattr(self, '_headless_mode') and self._headless_mode):
+            print("\n[Step 5/5] 🧪 TestMode - 模拟执行...")
+        print(f"  模拟订单: {order_params['action']} {order_params['quantity']} @ {current_price}")
+        global_state.add_log(f"[🚀 EXECUTOR] Test: {order_params['action'].upper()} {order_params['quantity']} @ {current_price:.2f}")
+
+        self.saver.save_execution({
+            'symbol': self.current_symbol,
+            'action': 'SIMULATED_EXECUTION',
+            'params': order_params,
+            'status': 'success',
+            'timestamp': datetime.now().isoformat(),
+            'cycle_id': cycle_id
+        }, self.current_symbol, cycle_id=cycle_id)
+
+        realized_pnl = 0.0
+        exit_test_price = 0.0
+        normalized_action = normalize_action(
+            vote_result.action,
+            position_side=(current_position_info or {}).get('side')
+        )
+
+        if is_close_action(normalized_action):
+            if self.current_symbol in global_state.virtual_positions:
+                pos = global_state.virtual_positions[self.current_symbol]
+                entry_price = pos['entry_price']
+                qty = pos['quantity']
+                side = pos['side']
+
+                if side.upper() == 'LONG':
+                    realized_pnl = (current_price - entry_price) * qty
+                else:
+                    realized_pnl = (entry_price - current_price) * qty
+
+                exit_test_price = current_price
+                global_state.virtual_balance += realized_pnl
+                del global_state.virtual_positions[self.current_symbol]
+                self._save_virtual_state()
+                log.info(f"💰 [TEST] Closed {side} {self.current_symbol}: PnL=${realized_pnl:.2f}, Bal=${global_state.virtual_balance:.2f}")
+            else:
+                log.warning(f"⚠️ [TEST] Close ignored - No position for {self.current_symbol}")
+        elif is_open_action(normalized_action):
+            side = 'LONG' if normalized_action == 'open_long' else 'SHORT'
+            position_value = order_params['quantity'] * current_price
+            global_state.virtual_positions[self.current_symbol] = {
+                'entry_price': current_price,
+                'quantity': order_params['quantity'],
+                'side': side,
+                'entry_time': datetime.now().isoformat(),
+                'stop_loss': order_params.get('stop_loss_price', 0),
+                'take_profit': order_params.get('take_profit_price', 0),
+                'leverage': order_params.get('leverage', 1),
+                'position_value': position_value
+            }
+            self._save_virtual_state()
+            log.info(f"💰 [TEST] Opened {side} {self.current_symbol} @ ${current_price:,.2f}")
+
+        is_close_trade_action = is_close_action(vote_result.action)
+        self._persist_trade_history(
+            order_params=order_params,
+            cycle_id=cycle_id,
+            entry_price=current_price,
+            exit_price=exit_test_price,
+            pnl=realized_pnl,
+            is_close_trade_action=is_close_trade_action,
+            open_status='SIMULATED',
+            entry_field='entry_price',
+            include_timestamp=True
+        )
+
+        if is_open_action(vote_result.action):
+            global_state.cycle_positions_opened += 1
+            log.info(f"Positions opened this cycle: {global_state.cycle_positions_opened}/1")
+
+        self._emit_runtime_event(
+            run_id=run_id,
+            stream="lifecycle",
+            agent="executor",
+            phase="end",
+            cycle_id=cycle_id,
+            data={"status": "success", "mode": "test", "action": vote_result.action}
+        )
+        return {
+            'status': 'success',
+            'action': vote_result.action,
+            'details': order_params,
+            'current_price': current_price
+        }
+
+    def _execute_live_mode_order(
+        self,
+        *,
+        run_id: str,
+        cycle_id: str,
+        vote_result: Any,
+        order_params: Dict[str, Any],
+        current_price: float,
+        current_position: Optional[PositionInfo],
+        account_balance: float,
+        market_snapshot: Any
+    ) -> Dict[str, Any]:
+        """Execute live order path."""
+        if not (hasattr(self, '_headless_mode') and self._headless_mode):
+            print("\n[Step 5/5] 🚀 LiveTrade - 实盘执行...")
+
+        try:
+            is_success = self._execute_order(order_params)
+            status_icon = "✅" if is_success else "❌"
+            status_txt = "SENT" if is_success else "FAILED"
+            global_state.add_log(f"[🚀 EXECUTOR] Live: {order_params['action'].upper()} {order_params['quantity']} => {status_icon} {status_txt}")
+            executed = {'status': 'filled' if is_success else 'failed', 'avgPrice': current_price, 'executedQty': order_params['quantity']}
+        except Exception as e:
+            log.error(f"Live order execution failed: {e}", exc_info=True)
+            global_state.add_log(f"[Execution] ❌ Live Order Failed: {e}")
+            self._emit_runtime_event(
+                run_id=run_id,
+                stream="error",
+                agent="executor",
+                phase="error",
+                cycle_id=cycle_id,
+                data={"status": "failed", "mode": "live", "error": str(e)}
+            )
+            return {
+                'status': 'failed',
+                'action': vote_result.action,
+                'details': {'error': str(e)}
+            }
+
+        self.saver.save_execution({
+            'symbol': self.current_symbol,
+            'action': 'REAL_EXECUTION',
+            'params': order_params,
+            'status': 'success' if executed else 'failed',
+            'timestamp': datetime.now().isoformat(),
+            'cycle_id': cycle_id
+        }, self.current_symbol, cycle_id=cycle_id)
+
+        if executed:
+            print("  ✅ 订单执行成功!")
+            log_price = order_params.get('entry_price', current_price)
+            global_state.add_log(f"✅ Order: {order_params['action'].upper()} {order_params['quantity']} @ ${log_price}")
+
+            trade_logger.log_open_position(
+                symbol=self.current_symbol,
+                side=order_params['action'].upper(),
+                decision=order_params,
+                execution_result={
+                    'success': True,
+                    'entry_price': order_params['entry_price'],
+                    'quantity': order_params['quantity'],
+                    'stop_loss': order_params['stop_loss'],
+                    'take_profit': order_params['take_profit'],
+                    'order_id': 'real_order'
+                },
+                market_state=market_snapshot.live_5m,
+                account_info={'available_balance': account_balance}
+            )
+
+            pnl = 0.0
+            exit_price = 0.0
+            entry_price = order_params['entry_price']
+            if is_close_action(order_params.get('action')) and current_position:
+                exit_price = current_price
+                entry_price = current_position.entry_price
+                direction = 1 if current_position.side == 'long' else -1
+                pnl = (exit_price - entry_price) * current_position.quantity * direction
+
+            is_close_trade_action = is_close_action(order_params.get('action'))
+            self._persist_trade_history(
+                order_params=order_params,
+                cycle_id=cycle_id,
+                entry_price=entry_price,
+                exit_price=exit_price,
+                pnl=pnl,
+                is_close_trade_action=is_close_trade_action,
+                open_status='EXECUTED',
+                entry_field='price',
+                include_timestamp=False
+            )
+
+            self._emit_runtime_event(
+                run_id=run_id,
+                stream="lifecycle",
+                agent="executor",
+                phase="end",
+                cycle_id=cycle_id,
+                data={"status": "success", "mode": "live", "action": vote_result.action}
+            )
+            return {
+                'status': 'success',
+                'action': vote_result.action,
+                'details': order_params,
+                'current_price': current_price
+            }
+
+        print("  ❌ 订单执行失败")
+        global_state.add_log(f"❌ Order Failed: {order_params['action'].upper()}")
+        self._emit_runtime_event(
+            run_id=run_id,
+            stream="error",
+            agent="executor",
+            phase="error",
+            cycle_id=cycle_id,
+            data={"status": "failed", "mode": "live", "error": "execution_failed"}
+        )
+        return {
+            'status': 'failed',
+            'action': vote_result.action,
+            'details': {'error': 'execution_failed'},
+            'current_price': current_price
+        }
+
+    def _persist_trade_history(
+        self,
+        *,
+        order_params: Dict[str, Any],
+        cycle_id: str,
+        entry_price: float,
+        exit_price: float,
+        pnl: float,
+        is_close_trade_action: bool,
+        open_status: str,
+        entry_field: str,
+        include_timestamp: bool
+    ) -> bool:
+        """Persist/merge trade record to storage + in-memory history."""
+        update_success = False
+        if is_close_trade_action:
+            update_success = self.saver.update_trade_exit(
+                symbol=self.current_symbol,
+                exit_price=exit_price,
+                pnl=pnl,
+                exit_time=datetime.now().strftime("%H:%M:%S"),
+                close_cycle=global_state.cycle_counter
+            )
+            if update_success:
+                for trade in global_state.trade_history:
+                    if trade.get('symbol') == self.current_symbol and trade.get('exit_price', 0) == 0:
+                        trade['exit_price'] = exit_price
+                        trade['pnl'] = pnl
+                        trade['close_cycle'] = global_state.cycle_counter
+                        trade['status'] = 'CLOSED'
+                        log.info(f"✅ Synced global_state.trade_history: {self.current_symbol} PnL ${pnl:.2f}")
+                        break
+                global_state.cumulative_realized_pnl += pnl
+                log.info(f"📊 Cumulative Realized PnL: ${global_state.cumulative_realized_pnl:.2f}")
+
+        if not update_success:
+            is_open_trade_action = is_open_action(order_params.get('action'))
+            original_open_cycle = 0
+            if not is_open_trade_action:
+                for trade in global_state.trade_history:
+                    if trade.get('symbol') == self.current_symbol and trade.get('exit_price', 0) == 0:
+                        original_open_cycle = trade.get('open_cycle', 0)
+                        break
+
+            trade_record = {
+                'open_cycle': global_state.cycle_counter if is_open_trade_action else original_open_cycle,
+                'close_cycle': 0 if is_open_trade_action else global_state.cycle_counter,
+                'action': order_params['action'].upper(),
+                'symbol': self.current_symbol,
+                entry_field: entry_price,
+                'quantity': order_params['quantity'],
+                'cost': entry_price * order_params['quantity'],
+                'exit_price': exit_price,
+                'pnl': pnl,
+                'confidence': order_params['confidence'],
+                'status': open_status,
+                'cycle': cycle_id
+            }
+            if include_timestamp:
+                trade_record['timestamp'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            if is_close_trade_action:
+                trade_record['status'] = 'CLOSED (Fallback)'
+
+            self.saver.save_trade(trade_record)
+            global_state.trade_history.insert(0, trade_record)
+            if len(global_state.trade_history) > 50:
+                global_state.trade_history.pop()
+
+        return update_success
+
     def _resolve_ai500_symbols(self):
         """Dynamic resolution of AI500_TOP5 tag"""
         # AI Candidates List (30+ Major AI/Data/Compute Coins)
@@ -2228,6 +3683,162 @@ class MultiAgentTradingBot:
         """Get trader instance for a specific account."""
         return await self.account_manager.get_trader(account_id)
 
+    def _begin_cycle_context(self) -> CycleContext:
+        """Initialize cycle-scoped context and emit system-start observability."""
+        if hasattr(self, '_headless_mode') and self._headless_mode:
+            self._terminal_display.print_log(f"🔍 Analyzing {self.current_symbol}...", "INFO")
+        else:
+            print(f"\n{'='*80}")
+            print(f"🔄 启动交易审计循环 | {datetime.now().strftime('%H:%M:%S')} | {self.current_symbol}")
+            print(f"{'='*80}")
+
+        global_state.is_running = True
+        global_state.current_symbol = self.current_symbol
+        run_id = f"run_{int(time.time() * 1000)}:{self.current_symbol}"
+
+        cycle_num = global_state.cycle_counter
+        cycle_id = global_state.current_cycle_id
+        run_id = f"{cycle_id}:{self.current_symbol}" if cycle_id else run_id
+        self._emit_runtime_event(
+            run_id=run_id,
+            stream="lifecycle",
+            agent="system",
+            phase="start",
+            cycle_id=cycle_id,
+            data={"cycle": cycle_num, "symbol": self.current_symbol}
+        )
+
+        global_state.add_log(f"[📊 SYSTEM] {self.current_symbol} analysis started")
+        global_state.agent_messages = [msg for msg in global_state.agent_messages if msg.get('symbol') != self.current_symbol]
+        snapshot_id = f"snap_{int(time.time())}"
+
+        return CycleContext(
+            run_id=run_id,
+            cycle_id=cycle_id,
+            snapshot_id=snapshot_id,
+            cycle_num=cycle_num,
+            symbol=self.current_symbol
+        )
+
+    async def _run_cycle_pipeline(self, *, context: CycleContext, analyze_only: bool) -> Dict[str, Any]:
+        """Run the full trading pipeline using a prepared cycle context."""
+        self._emit_runtime_event(
+            run_id=context.run_id,
+            stream="lifecycle",
+            agent="cycle_pipeline",
+            phase="start",
+            cycle_id=context.cycle_id,
+            data={"symbol": context.symbol, "cycle": context.cycle_num}
+        )
+        try:
+            oracle_result = await self._run_oracle_stage(
+                run_id=context.run_id,
+                cycle_id=context.cycle_id,
+                snapshot_id=context.snapshot_id
+            )
+            if oracle_result.get('early_result') is not None:
+                early = oracle_result['early_result']
+                self._emit_runtime_event(
+                    run_id=context.run_id,
+                    stream="lifecycle",
+                    agent="cycle_pipeline",
+                    phase="end",
+                    cycle_id=context.cycle_id,
+                    data={"status": early.get('status'), "action": early.get('action')}
+                )
+                return early
+
+            market_snapshot = oracle_result['market_snapshot']
+            processed_dfs = oracle_result['processed_dfs']
+            current_price = oracle_result['current_price']
+            current_position_info = oracle_result['current_position_info']
+
+            quant_analysis, predict_result, _reflection_result, reflection_text = await self._run_agent_analysis_stage(
+                run_id=context.run_id,
+                cycle_id=context.cycle_id,
+                snapshot_id=context.snapshot_id,
+                market_snapshot=market_snapshot,
+                processed_dfs=processed_dfs
+            )
+
+            regime_result, four_layer_result, trend_1h = self._run_four_layer_filter_stage(
+                run_id=context.run_id,
+                cycle_id=context.cycle_id,
+                quant_analysis=quant_analysis,
+                predict_result=predict_result,
+                processed_dfs=processed_dfs,
+                current_price=current_price
+            )
+
+            await self._run_post_filter_stage(
+                run_id=context.run_id,
+                cycle_id=context.cycle_id,
+                current_price=current_price,
+                trend_1h=trend_1h,
+                four_layer_result=four_layer_result,
+                quant_analysis=quant_analysis,
+                processed_dfs=processed_dfs
+            )
+
+            decision_result = await self._run_decision_pipeline_stage(
+                run_id=context.run_id,
+                cycle_id=context.cycle_id,
+                snapshot_id=context.snapshot_id,
+                processed_dfs=processed_dfs,
+                quant_analysis=quant_analysis,
+                predict_result=predict_result,
+                reflection_text=reflection_text,
+                current_price=current_price,
+                current_position_info=current_position_info,
+                regime_result=regime_result
+            )
+            if decision_result.get('early_result') is not None:
+                early = decision_result['early_result']
+                self._emit_runtime_event(
+                    run_id=context.run_id,
+                    stream="lifecycle",
+                    agent="cycle_pipeline",
+                    phase="end",
+                    cycle_id=context.cycle_id,
+                    data={"status": early.get('status'), "action": early.get('action')}
+                )
+                return early
+            vote_result = decision_result['vote_result']
+
+            result = await self._run_action_pipeline_stage(
+                run_id=context.run_id,
+                cycle_id=context.cycle_id,
+                snapshot_id=context.snapshot_id,
+                analyze_only=analyze_only,
+                vote_result=vote_result,
+                quant_analysis=quant_analysis,
+                predict_result=predict_result,
+                processed_dfs=processed_dfs,
+                current_price=current_price,
+                current_position_info=current_position_info,
+                regime_result=regime_result,
+                market_snapshot=market_snapshot
+            )
+            self._emit_runtime_event(
+                run_id=context.run_id,
+                stream="lifecycle",
+                agent="cycle_pipeline",
+                phase="end",
+                cycle_id=context.cycle_id,
+                data={"status": result.get('status'), "action": result.get('action')}
+            )
+            return result
+        except Exception as e:
+            self._emit_runtime_event(
+                run_id=context.run_id,
+                stream="error",
+                agent="cycle_pipeline",
+                phase="error",
+                cycle_id=context.cycle_id,
+                data={"error": str(e)}
+            )
+            raise
+
 
     async def run_trading_cycle(self, analyze_only: bool = False) -> Dict:
         """
@@ -2239,1249 +3850,12 @@ class MultiAgentTradingBot:
                 'details': {...}
             }
         """
-        # Headless mode: Simplified output
-        if hasattr(self, '_headless_mode') and self._headless_mode:
-            self._terminal_display.print_log(f"🔍 Analyzing {self.current_symbol}...", "INFO")
-        else:
-            print(f"\n{'='*80}")
-            print(f"🔄 启动交易审计循环 | {datetime.now().strftime('%H:%M:%S')} | {self.current_symbol}")
-            print(f"{'='*80}")
-        
-        # Update Dashboard Status
-        global_state.is_running = True
-        global_state.current_symbol = self.current_symbol
-        # Removed verbose log: Starting trading cycle
+        cycle_context: Optional[CycleContext] = None
         run_id = f"run_{int(time.time() * 1000)}:{self.current_symbol}"
-        
         try:
-            # ✅ 使用 run_continuous 中已设置的周期信息
-            cycle_num = global_state.cycle_counter
-            cycle_id = global_state.current_cycle_id
-            run_id = f"{cycle_id}:{self.current_symbol}" if cycle_id else run_id
-            loop = asyncio.get_running_loop()
-            self._emit_runtime_event(
-                run_id=run_id,
-                stream="lifecycle",
-                agent="system",
-                phase="start",
-                cycle_id=cycle_id,
-                data={"cycle": cycle_num, "symbol": self.current_symbol}
-            )
-            
-            # 每个币种的子日志
-            global_state.add_log(f"[📊 SYSTEM] {self.current_symbol} analysis started")
-            
-            # [NEW] Clear chatroom messages for new symbol cycle
-            global_state.agent_messages = [msg for msg in global_state.agent_messages if msg.get('symbol') != self.current_symbol]
-            
-            # ✅ Generate snapshot_id for this cycle (legacy compatibility)
-            snapshot_id = f"snap_{int(time.time())}"
-
-            # Step 1: 采样 - 数据先知 (The Oracle)
-            if not (hasattr(self, '_headless_mode') and self._headless_mode):
-                print("\n[Step 1/4] 🕵️ The Oracle (Data Agent) - Fetching data...")
-            global_state.oracle_status = "Fetching Data..."
-            global_state.add_agent_message("system", f"Fetching market data for {self.current_symbol}...", level="info")
-            
-            try:
-                market_snapshot = await self.data_sync_agent.fetch_all_timeframes(
-                    self.current_symbol,
-                    limit=self.kline_limit
-                )
-            except Exception as e:
-                error_msg = f"❌ DATA FETCH FAILED: {str(e)}"
-                log.error(error_msg)
-                global_state.add_log(f"[🚨 CRITICAL] {error_msg}")
-                global_state.oracle_status = "DATA ERROR"
-                
-                # Block trading - return error
-                return {
-                    'status': 'error',
-                    'action': 'blocked',
-                    'details': {
-                        'reason': f'Data API call failed: {str(e)}',
-                        'error_type': 'api_failure'
-                    }
-                }
-            
-            # 🔒 CRITICAL: Validate data completeness before proceeding
-            data_errors = []
-            
-            # Check 5m data
-            if market_snapshot.stable_5m is None or (hasattr(market_snapshot.stable_5m, 'empty') and market_snapshot.stable_5m.empty):
-                data_errors.append("5m data missing or empty")
-            elif len(market_snapshot.stable_5m) < 50:
-                data_errors.append(f"5m data incomplete ({len(market_snapshot.stable_5m)}/50 bars)")
-            
-            # Check 15m data
-            if market_snapshot.stable_15m is None or (hasattr(market_snapshot.stable_15m, 'empty') and market_snapshot.stable_15m.empty):
-                data_errors.append("15m data missing or empty")
-            elif len(market_snapshot.stable_15m) < 20:
-                data_errors.append(f"15m data incomplete ({len(market_snapshot.stable_15m)}/20 bars)")
-            
-            # Check 1h data
-            if market_snapshot.stable_1h is None or (hasattr(market_snapshot.stable_1h, 'empty') and market_snapshot.stable_1h.empty):
-                data_errors.append("1h data missing or empty")
-            elif len(market_snapshot.stable_1h) < 10:
-                data_errors.append(f"1h data incomplete ({len(market_snapshot.stable_1h)}/10 bars)")
-            
-            # Check live price
-            if not market_snapshot.live_5m or market_snapshot.live_5m.get('close', 0) <= 0:
-                data_errors.append("Live price unavailable")
-            
-            # If any data errors, block trading
-            if data_errors:
-                error_msg = f"❌ DATA INCOMPLETE: {'; '.join(data_errors)}"
-                log.error(error_msg)
-                global_state.add_log(f"[🚨 CRITICAL] {error_msg}")
-                global_state.oracle_status = "DATA INCOMPLETE"
-                
-                # Persistent error display
-                print(f"\n{'='*60}")
-                print(f"🚨 TRADING BLOCKED - DATA ERROR")
-                print(f"{'='*60}")
-                for err in data_errors:
-                    print(f"   ❌ {err}")
-                print(f"{'='*60}\n")
-                
-                return {
-                    'status': 'error',
-                    'action': 'blocked',
-                    'details': {
-                        'reason': error_msg,
-                        'error_type': 'data_incomplete',
-                        'errors': data_errors
-                    }
-                }
-            
-            global_state.oracle_status = "Data Ready"
-            
-            # 💰 fetch_position_info logic (New Feature)
-            # Create a unified position_info dict for Context
-            current_position_info = None
-            
-            try:
-                if self.test_mode:
-                    if self.current_symbol in global_state.virtual_positions:
-                        v_pos = global_state.virtual_positions[self.current_symbol]
-                        # Calc PnL
-                        current_price_5m = market_snapshot.live_5m['close']
-                        entry_price = v_pos['entry_price']
-                        qty = v_pos['quantity']
-                        side = v_pos['side']
-                        leverage = v_pos.get('leverage', 1)
-                        
-                        if side == 'LONG':
-                            unrealized_pnl = (current_price_5m - entry_price) * qty
-                        else:
-                            unrealized_pnl = (entry_price - current_price_5m) * qty
-                        
-                        # 统一使用 ROE (Return on Equity) 计算方式
-                        # ROE% = (unrealized_pnl / margin) * 100
-                        # 其中 margin = (entry_price * qty) / leverage
-                        margin = (entry_price * qty) / leverage if leverage > 0 else entry_price * qty
-                        pnl_pct = (unrealized_pnl / margin) * 100 if margin > 0 else 0
-                        
-                        # Store in position_info
-                        current_position_info = {
-                            'symbol': self.current_symbol,
-                            'side': side,
-                            'quantity': qty,
-                            'entry_price': entry_price,
-                            'unrealized_pnl': unrealized_pnl,
-                            'pnl_pct': pnl_pct,  # ROE 百分比
-                            'leverage': leverage,
-                            'is_test': True
-                        }
-                        
-                        # Also update local object for backward compatibility with display logic
-                        v_pos['unrealized_pnl'] = unrealized_pnl
-                        v_pos['pnl_pct'] = pnl_pct
-                        v_pos['current_price'] = current_price_5m
-                        log.info(f"💰 [Virtual Position] {side} {self.current_symbol} PnL: ${unrealized_pnl:.2f} (ROE: {pnl_pct:+.2f}%)")
-                        
-                else:
-                    # Live Mode
-                    try:
-                        raw_pos = self.client.get_futures_position(self.current_symbol)
-                        # raw_pos returns dict if specific symbol, or list if not?
-                        # BinanceClient.get_futures_position returns Optional[Dict]
-                        
-                        if raw_pos and float(raw_pos.get('positionAmt', 0)) != 0:
-                            amt = float(raw_pos.get('positionAmt', 0))
-                            side = 'LONG' if amt > 0 else 'SHORT'
-                            entry_price = float(raw_pos.get('entryPrice', 0))
-                            unrealized_pnl = float(raw_pos.get('unRealizedProfit', 0))
-                            qty = abs(amt)
-                            leverage = int(raw_pos.get('leverage', 1))
-                            
-                            # 统一使用 ROE (Return on Equity) 计算方式 - 与测试模式一致
-                            margin = (entry_price * qty) / leverage if leverage > 0 else entry_price * qty
-                            pnl_pct = (unrealized_pnl / margin) * 100 if margin > 0 else 0
-                            
-                            current_position_info = {
-                                'symbol': self.current_symbol,
-                                'side': side,
-                                'quantity': qty,
-                                'entry_price': entry_price,
-                                'unrealized_pnl': unrealized_pnl,
-                                'pnl_pct': pnl_pct,  # ROE 百分比
-                                'leverage': leverage,
-                                'is_test': False
-                            }
-                            log.info(f"💰 [Real Position] {side} {self.current_symbol} Amt:{amt} PnL:${unrealized_pnl:.2f} (ROE: {pnl_pct:+.2f}%)")
-                    except Exception as e:
-                        log.error(f"Failed to fetch real position: {e}")
-
-            except Exception as e:
-                 log.error(f"Error processing position info: {e}")
-
-            # ✅ Save Market Data & Process Indicators
-            processed_dfs = {}
-            for tf in ['5m', '15m', '1h']:
-                raw_klines = getattr(market_snapshot, f'raw_{tf}')
-                # 保存原始数据
-                self.saver.save_market_data(raw_klines, self.current_symbol, tf, cycle_id=cycle_id)
-                
-                # 处理并保存指标 (Process indicators)
-                # Use stable (closed) klines for indicators to avoid look-ahead from live candle
-                stable_klines = self._get_closed_klines(raw_klines)
-                df_with_indicators = self.processor.process_klines(
-                    stable_klines,
-                    self.current_symbol,
-                    tf,
-                    save_raw=False
-                )
-                self.saver.save_indicators(df_with_indicators, self.current_symbol, tf, snapshot_id, cycle_id=cycle_id)
-                features_df = self.processor.extract_feature_snapshot(df_with_indicators)
-                self.saver.save_features(features_df, self.current_symbol, tf, snapshot_id, cycle_id=cycle_id)
-                
-                # 存入字典供后续步骤复用
-                processed_dfs[tf] = df_with_indicators
-            
-            # ✅ 重要优化：更新快照中的 DataFrame
-            market_snapshot.stable_5m = processed_dfs['5m']
-            market_snapshot.stable_15m = processed_dfs['15m']
-            market_snapshot.stable_1h = processed_dfs['1h']
-            
-            current_price = market_snapshot.live_5m.get('close')
-            print(f"  ✅ Data ready: ${current_price:,.2f} ({market_snapshot.timestamp.strftime('%H:%M:%S')})")
-            
-            # LOG 1: Oracle
-            global_state.add_log(f"[🕵️ ORACLE] Data ready: ${current_price:,.2f}")
-            global_state.current_price[self.current_symbol] = current_price
-
-            # Warmup / data validity gate (avoid decisions on unstable indicators)
-            data_readiness = self._assess_data_readiness(processed_dfs)
-            if not data_readiness['is_ready']:
-                reason = data_readiness.get('blocking_reason') or "data_warmup"
-                log.warning(f"[{self.current_symbol}] {reason}")
-                global_state.add_log(f"[DATA] {reason}")
-                global_state.oracle_status = "Warmup"
-                global_state.guardian_status = "Warmup"
-                global_state.four_layer_result = {
-                    'layer1_pass': False,
-                    'layer2_pass': False,
-                    'layer3_pass': False,
-                    'layer4_pass': False,
-                    'final_action': 'wait',
-                    'blocking_reason': reason,
-                    'data_ready': False,
-                    'data_validity': data_readiness['details']
-                }
-
-                decision_dict = {
-                    'action': 'wait',
-                    'confidence': 0,
-                    'reason': reason,
-                    'vote_details': {
-                        'data_validity': data_readiness['details']
-                    },
-                    'symbol': self.current_symbol,
-                    'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    'cycle_number': global_state.cycle_counter,
-                    'cycle_id': global_state.current_cycle_id,
-                    'risk_level': 'safe',
-                    'guardian_passed': True
-                }
-                decision_dict['vote_analysis'] = SemanticConverter.convert_analysis_map(decision_dict.get('vote_details', {}))
-                decision_dict['four_layer_status'] = global_state.four_layer_result
-                self._attach_agent_ui_fields(decision_dict)
-
-                global_state.update_decision(decision_dict)
-                self.saver.save_decision(decision_dict, self.current_symbol, snapshot_id, cycle_id=cycle_id)
-
-                return {
-                    'status': 'wait',
-                    'action': 'wait',
-                    'details': {
-                        'reason': reason,
-                        'confidence': 0
-                    }
-                }
-
-            indicator_snapshot = self._capture_indicator_snapshot(processed_dfs, timeframe='15m')
-            if indicator_snapshot:
-                snapshots = getattr(global_state, 'indicator_snapshot', {})
-                if not isinstance(snapshots, dict) or 'ema_status' in snapshots:
-                    snapshots = {}
-                snapshots[self.current_symbol] = indicator_snapshot
-                global_state.indicator_snapshot = snapshots
-
-            # Step 2: Analysts in Parallel (Chatroom Mode)
-            if not (hasattr(self, '_headless_mode') and self._headless_mode):
-                print("[Step 2/4] 👥 Multi-Agent Analysis (Parallel)...")
-            global_state.add_log(f"[📊 SYSTEM] Parallel analysis started for {self.current_symbol}")
-
-            quant_analysis, predict_result, reflection_result, reflection_text = await self._run_parallel_analysis(
-                run_id=run_id,
-                cycle_id=cycle_id,
-                snapshot_id=snapshot_id,
-                market_snapshot=market_snapshot,
-                processed_dfs=processed_dfs
-            )
-            
-            # 💉 INJECT MACD DATA (Fix for Missing Data)
-            try:
-                df_15m = processed_dfs['15m']
-                # Check for macd_diff or calculate it if missing (though processor handles it)
-                if 'macd_diff' in df_15m.columns:
-                    macd_val = float(df_15m['macd_diff'].iloc[-1])
-                    if 'trend' not in quant_analysis: quant_analysis['trend'] = {}
-                    if 'details' not in quant_analysis['trend']: quant_analysis['trend']['details'] = {}
-                    quant_analysis['trend']['details']['15m_macd_diff'] = macd_val
-            except Exception as e:
-                log.warning(f"Failed to inject MACD data: {e}")
-            
-            # Save Context
-            self.saver.save_context(quant_analysis, self.current_symbol, 'analytics', snapshot_id, cycle_id=cycle_id)
-            
-            # LOG 2: QuantAnalyst (The Strategist)
-            trend_score = quant_analysis.get('trend', {}).get('total_trend_score', 0)
-            osc_score = quant_analysis.get('oscillator', {}).get('total_osc_score', 0)
-            sent_score = quant_analysis.get('sentiment', {}).get('total_sentiment_score', 0)
-            global_state.add_log(f"[👨‍🔬 STRATEGIST] Trend={trend_score:+.0f} | Osc={osc_score:+.0f} | Sent={sent_score:+.0f}")
-            
-            # Prophet already computed in Step 2 parallel block.
-            
-            # === 🎯 FOUR-LAYER STRATEGY FILTERING ===
-            if not (hasattr(self, '_headless_mode') and self._headless_mode):
-                print("[Step 2.75/5] 🎯 Four-Layer Strategy Filter - 多层验证中...")
-            
-            # Extract timeframe data
-            trend_6h = quant_analysis.get('timeframe_6h', {})
-            trend_2h = quant_analysis.get('timeframe_2h', {})
-            sentiment = quant_analysis.get('sentiment', {})
-            oi_fuel = sentiment.get('oi_fuel', {})
-            
-            # 🆕 Get Funding Rate for crowding detection
-            funding_rate = sentiment.get('details', {}).get('funding_rate', 0)
-            if funding_rate is None: funding_rate = 0
-            
-            # 🆕 Get ADX from RegimeDetector for trend strength validation
-            # RegimeDetector is optional - use safe defaults if disabled
-            df_1h = processed_dfs['1h']
-            if self.regime_detector and len(df_1h) >= 20:
-                regime_result = self.regime_detector.detect_regime(df_1h)
-            else:
-                # RegimeDetector disabled or insufficient data - use neutral defaults
-                regime_result = {'adx': 20, 'regime': 'unknown', 'confidence': 0}
-            adx_value = regime_result.get('adx', 20)
-            
-            # Initialize filter results with enhanced fields
-            four_layer_result = {
-                'layer1_pass': False,
-                'layer2_pass': False,
-                'layer3_pass': False,
-                'layer4_pass': False,
-                'final_action': 'wait',
-                'blocking_reason': None,
-                'confidence_boost': 0,
-                'tp_multiplier': 1.0,
-                'sl_multiplier': 1.0,
-                # 🆕 Enhanced indicators
-                'adx': adx_value,
-                'funding_rate': funding_rate,
-                'regime': regime_result.get('regime', 'unknown')
-            }
-            
-            # Layer 1: 1h Trend + OI Fuel (Specification: EMA 20/60 on 1h data)
-            df_1h = processed_dfs['1h']
-            
-            # 🆕 Always extract and store EMA values for display (even if blocking)
-            if len(df_1h) >= 20:
-                close_1h = df_1h['close'].iloc[-1]
-                ema20_1h = df_1h['ema_20'].iloc[-1] if 'ema_20' in df_1h.columns else close_1h
-                ema60_1h = df_1h['ema_60'].iloc[-1] if 'ema_60' in df_1h.columns else close_1h
-                
-                # Store for user prompt display
-                four_layer_result['close_1h'] = close_1h
-                four_layer_result['ema20_1h'] = ema20_1h
-                four_layer_result['ema60_1h'] = ema60_1h
-            else:
-                close_1h = current_price
-                ema20_1h = current_price
-                ema60_1h = current_price
-                four_layer_result['close_1h'] = close_1h
-                four_layer_result['ema20_1h'] = ema20_1h
-                four_layer_result['ema60_1h'] = ema60_1h
-            
-            # Extract OI change and store immediately
-            oi_change = oi_fuel.get('oi_change_24h', 0)
-            if oi_change is None: oi_change = 0
-            four_layer_result['oi_change'] = oi_change
-            
-            # 🆕 DATA SANITY CHECKS - Flag statistically impossible values
-            data_anomalies = []
-            
-            # OI Change sanity check: > 200% is likely a data error
-            if abs(oi_change) > 200:
-                data_anomalies.append(f"OI_ANOMALY: {oi_change:.1f}% (>200% likely data error)")
-                log.warning(f"⚠️ DATA ANOMALY: OI Change {oi_change:.1f}% is abnormally high")
-                # Clamp to reasonable value for downstream logic
-                oi_change = max(min(oi_change, 100), -100)
-                four_layer_result['oi_change'] = oi_change
-                four_layer_result['oi_change_raw'] = oi_fuel.get('oi_change_24h', 0)  # Keep original
-            
-            # ADX sanity check: < 5 is likely calculation error or extreme edge case
-            if adx_value < 5:
-                data_anomalies.append(f"ADX_ANOMALY: {adx_value:.0f} (<5 may be unreliable)")
-                log.warning(f"⚠️ DATA ANOMALY: ADX {adx_value:.0f} is abnormally low")
-            
-            # Funding Rate sanity check: > 1% per 8h is extreme
-            if abs(funding_rate) > 1.0:
-                data_anomalies.append(f"FUNDING_ANOMALY: {funding_rate:.3f}% (extreme)")
-                log.warning(f"⚠️ DATA ANOMALY: Funding Rate {funding_rate:.3f}% is extreme")
-            
-            # 🆕 LOGIC PARADOX DETECTION - Contradictory data patterns
-            regime = regime_result.get('regime', 'unknown')
-            # Real paradox: trending regime with very low ADX (ADX < 15 means no trend)
-            if adx_value < 15 and regime in ['trending_up', 'trending_down']:
-                data_anomalies.append(f"LOGIC_PARADOX: ADX={adx_value:.0f} (no trend) + Regime={regime} (trending)")
-                log.warning(f"⚠️ LOGIC PARADOX: ADX={adx_value:.0f} indicates NO trend, but Regime={regime}. Forcing to choppy.")
-                # Force regime to 'choppy' when ADX is extremely low but regime says trending
-                four_layer_result['regime'] = 'choppy'
-                four_layer_result['regime_override'] = True
-            
-            # Store anomalies for LLM awareness
-            four_layer_result['data_anomalies'] = data_anomalies if data_anomalies else None
-            
-            # Now check if we have enough data for trend analysis
-            if len(df_1h) < 60:
-                log.warning(f"⚠️ Insufficient 1h data: {len(df_1h)} bars (need 60+)")
-                four_layer_result['blocking_reason'] = 'Insufficient 1h data'
-                trend_1h = 'neutral'
-            else:
-                # 📈 OPTIMIZED: Relaxed trend detection
-                # Primary: EMA20 > EMA60 = Bullish, EMA20 < EMA60 = Bearish
-                # Bonus: Close above/below EMA20 adds confirmation strength
-                if ema20_1h > ema60_1h:
-                    trend_1h = 'long'
-                    # Bonus confirmation: Close > EMA20
-                    if close_1h > ema20_1h:
-                        four_layer_result['trend_confirmation'] = 'strong'
-                    else:
-                        four_layer_result['trend_confirmation'] = 'moderate'
-                elif ema20_1h < ema60_1h:
-                    trend_1h = 'short'
-                    if close_1h < ema20_1h:
-                        four_layer_result['trend_confirmation'] = 'strong'
-                    else:
-                        four_layer_result['trend_confirmation'] = 'moderate'
-                else:
-                    trend_1h = 'neutral'
-                
-                log.info(f"📊 1h EMA: Close=${close_1h:.2f}, EMA20=${ema20_1h:.2f}, EMA60=${ema60_1h:.2f} => {trend_1h.upper()}")
-            
-            oi_divergence_warning = None
-            oi_divergence_warn = 15.0
-            oi_divergence_block = 60.0
-
-            if trend_1h == 'neutral':
-                four_layer_result['blocking_reason'] = 'No clear 1h trend (EMA 20/60)'
-                log.info("❌ Layer 1 FAIL: No clear trend")
-            # 🆕 ADX Weak Trend Filter - Even if EMA aligned, weak trend is not tradeable
-            elif adx_value < 15: # OPTIMIZATION (Phase 2): Lowered from 20
-                four_layer_result['blocking_reason'] = f"Weak Trend Strength (ADX {adx_value:.0f} < 15)"
-                log.info(f"❌ Layer 1 FAIL: ADX={adx_value:.0f} < 15, trend not strong enough")
-            elif trend_1h == 'long' and oi_change < -oi_divergence_block:
-                four_layer_result['blocking_reason'] = f"OI Divergence: Trend UP but OI {oi_change:.1f}%"
-                log.warning(f"🚨 Layer 1 FAIL: OI Divergence - Price up but OI {oi_change:.1f}%")
-            elif trend_1h == 'short' and oi_change > oi_divergence_block:
-                four_layer_result['blocking_reason'] = f"OI Divergence: Trend DOWN but OI +{oi_change:.1f}%"
-                log.warning(f"🚨 Layer 1 FAIL: OI Divergence - Price down but OI +{oi_change:.1f}%")
-            elif trend_1h == 'long' and oi_change < -oi_divergence_warn:
-                oi_divergence_warning = f"OI Divergence: Trend UP but OI {oi_change:.1f}%"
-                log.warning(f"⚠️ Layer 1 WARNING: OI Divergence - Price up but OI {oi_change:.1f}%")
-            elif trend_1h == 'short' and oi_change > oi_divergence_warn:
-                oi_divergence_warning = f"OI Divergence: Trend DOWN but OI +{oi_change:.1f}%"
-                log.warning(f"⚠️ Layer 1 WARNING: OI Divergence - Price down but OI +{oi_change:.1f}%")
-            elif trend_1h == 'long' and oi_fuel.get('whale_trap_risk', False):
-                four_layer_result['blocking_reason'] = f"Whale trap detected (OI {oi_change:.1f}%)"
-                log.warning(f"🐋 Layer 1 FAIL: Whale exit trap")
-
-            if not four_layer_result.get('blocking_reason'):
-                four_layer_result['layer1_pass'] = True
-                
-                # 🔴 Issue #3 Fix: Weak Fuel is WARNING, not BLOCK
-                if abs(oi_change) < 1.0:
-                    four_layer_result['fuel_warning'] = f"Weak Fuel (OI {oi_change:.1f}%)"
-                    four_layer_result['confidence_penalty'] = -10
-                    log.warning(f"⚠️ Layer 1 WARNING: Weak fuel - OI {oi_change:.1f}% (proceed with caution)")
-                    fuel_strength = 'Weak'
-                else:
-                    # Specification: Strong Fuel > 3%, Moderate 1-3%
-                    fuel_strength = 'Strong' if abs(oi_change) > 3.0 else 'Moderate'
-                if oi_divergence_warning:
-                    existing_warning = four_layer_result.get('fuel_warning')
-                    if existing_warning:
-                        four_layer_result['fuel_warning'] = f"{existing_warning} | {oi_divergence_warning}"
-                    else:
-                        four_layer_result['fuel_warning'] = oi_divergence_warning
-                    current_penalty = four_layer_result.get('confidence_penalty', 0)
-                    four_layer_result['confidence_penalty'] = min(current_penalty, -10) if current_penalty else -10
-                log.info(f"✅ Layer 1 PASS: {trend_1h.upper()} trend + {fuel_strength} Fuel (OI {oi_change:+.1f}%)")
-                
-                # Layer 2: AI Prediction Filter (Optional - skip if disabled)
-                if self.agent_config.ai_prediction_filter_agent and self.agent_config.predict_agent:
-                    from src.agents.ai_prediction_filter_agent import AIPredictionFilter
-                    ai_filter = AIPredictionFilter()
-                    ai_check = ai_filter.check_divergence(trend_1h, predict_result)
-                    
-                    four_layer_result['ai_check'] = ai_check
-                    
-                    # 🆕 AI PREDICTION INVALIDATION: When ADX < 5, any directional AI prediction is noise
-                    if adx_value < 5:
-                        ai_check['ai_invalidated'] = True
-                        ai_check['original_signal'] = ai_check.get('ai_signal', 'unknown')
-                        ai_check['ai_signal'] = 'INVALID (ADX<5)'
-                        four_layer_result['ai_prediction_note'] = f"AI prediction invalidated: ADX={adx_value:.0f} (<5), directional signals are statistically meaningless"
-                        log.warning(f"⚠️ AI prediction invalidated: ADX={adx_value:.0f} is too low for any directional signal to be reliable")
-                    
-                    if ai_check['ai_veto']:
-                        four_layer_result['blocking_reason'] = ai_check['reason']
-                        log.warning(f"🚫 Layer 2 VETO: {ai_check['reason']}")
-                    else:
-                        four_layer_result['layer2_pass'] = True
-                        four_layer_result['confidence_boost'] = ai_check['confidence_boost']
-                        log.info(f"✅ Layer 2 PASS: AI {ai_check['ai_signal']} (boost: {ai_check['confidence_boost']:+d}%)")
-                else:
-                    # AIPredictionFilterAgent disabled - auto-pass Layer 2
-                    four_layer_result['layer2_pass'] = True
-                    four_layer_result['ai_check'] = {
-                        'allow_trade': True,
-                        'reason': 'AIPredictionFilter disabled',
-                        'confidence_boost': 0,
-                        'ai_veto': False,
-                        'ai_signal': 'disabled',
-                        'ai_confidence': 0
-                    }
-                    log.info(f"⏭️ Layer 2 SKIP: AIPredictionFilterAgent disabled")
-                
-                # Layer 3: 15m Setup (only if Layer 2 passed)
-                if four_layer_result['layer2_pass']:
-                    df_15m = processed_dfs['15m']
-                    if len(df_15m) < 20:
-                        log.warning(f"⚠️ Insufficient 15m data: {len(df_15m)} bars")
-                        four_layer_result['blocking_reason'] = 'Insufficient 15m data'
-                        setup_ready = False
-                    else:
-                        close_15m = df_15m['close'].iloc[-1]
-                        bb_middle = df_15m['bb_middle'].iloc[-1]
-                        bb_upper = df_15m['bb_upper'].iloc[-1]
-                        bb_lower = df_15m['bb_lower'].iloc[-1]
-                        kdj_j = df_15m['kdj_j'].iloc[-1]
-                        kdj_k = df_15m['kdj_k'].iloc[-1]
-                        
-                        log.info(f"📊 15m Setup: Close=${close_15m:.2f}, BB[{bb_lower:.2f}/{bb_middle:.2f}/{bb_upper:.2f}], KDJ_J={kdj_j:.1f}")
-                        
-                        # 🆕 Store setup details for display
-                        four_layer_result['setup_note'] = f"KDJ_J={kdj_j:.0f}, Close={'>' if close_15m > bb_middle else '<'}BB_mid"
-                        four_layer_result['kdj_j'] = kdj_j
-                        four_layer_result['bb_position'] = 'upper' if close_15m > bb_upper else 'lower' if close_15m < bb_lower else 'middle'
-                        
-                        # 🔴 Bug #3 Fix: Add explicit kdj_zone field
-                        if kdj_j > 80 or close_15m > bb_upper:
-                            four_layer_result['kdj_zone'] = 'overbought'
-                        elif kdj_j < 20 or close_15m < bb_lower:
-                            four_layer_result['kdj_zone'] = 'oversold'
-                        else:
-                            four_layer_result['kdj_zone'] = 'neutral'
-                        
-                        # 🔴 Issue #2 Fix: Pullback Strategy (Buy the Dip)
-                        # Specification logic for long setup
-                        if trend_1h == 'long':
-                            # Filter: Too high (overbought) - WAIT for pullback
-                            if close_15m > bb_upper or kdj_j > 80:
-                                setup_ready = False
-                                four_layer_result['blocking_reason'] = f"15m overbought (J={kdj_j:.0f}) - wait for pullback"
-                                log.info(f"⏳ Layer 3 WAIT: Overbought - waiting for pullback")
-                            # IDEAL: Pullback position (best entry in uptrend!)
-                            elif close_15m < bb_middle or kdj_j < 50: # OPTIMIZATION (Phase 2): Relaxed from 40
-                                setup_ready = True
-                                four_layer_result['setup_quality'] = 'IDEAL'
-                                log.info(f"✅ Layer 3 READY: IDEAL PULLBACK - J={kdj_j:.0f} < 50 or Close < BB_middle")
-                            # Acceptable: Neutral/mid-range (not ideal but OK)
-                            else:
-                                setup_ready = True  # ✅ Changed from False
-                                four_layer_result['setup_quality'] = 'ACCEPTABLE'
-                                log.info(f"✅ Layer 3 READY: Acceptable mid-range entry (J={kdj_j:.0f})")
-                        
-                        # Specification logic for short setup
-                        elif trend_1h == 'short':
-                            # Filter: Too low (oversold) - WAIT for rally
-                            if close_15m < bb_lower or kdj_j < 20:
-                                setup_ready = False
-                                four_layer_result['blocking_reason'] = f"15m oversold (J={kdj_j:.0f}) - wait for rally"
-                                log.info(f"⏳ Layer 3 WAIT: Oversold - waiting for rally")
-                            # IDEAL: Rally position (best entry in downtrend!)
-                            elif close_15m > bb_middle or kdj_j > 50: # OPTIMIZATION (Phase 2): Relaxed from 60
-                                setup_ready = True
-                                four_layer_result['setup_quality'] = 'IDEAL'
-                                log.info(f"✅ Layer 3 READY: IDEAL RALLY - J={kdj_j:.0f} > 60 or Close > BB_middle")
-                            # Acceptable: Neutral/mid-range
-                            else:
-                                setup_ready = True  # ✅ Changed from False
-                                four_layer_result['setup_quality'] = 'ACCEPTABLE'
-                                log.info(f"✅ Layer 3 READY: Acceptable mid-range entry (J={kdj_j:.0f})")
-                        else:
-                            setup_ready = False
-                    
-                    if not setup_ready:
-                        four_layer_result['blocking_reason'] = f"15m setup not ready"
-                        log.info(f"⏳ Layer 3 WAIT: 15m setup not ready")
-                    else:
-                        four_layer_result['layer3_pass'] = True
-                        log.info(f"✅ Layer 3 PASS: 15m setup ready")
-                        
-                        # Layer 4: 5min Trigger + Sentiment Risk (Specification Module 4)
-                        if self.agent_config.trigger_detector_agent:
-                            from src.agents.trigger_detector_agent import TriggerDetector
-                            trigger_detector = TriggerDetector()
-                            
-                            df_5m = processed_dfs['5m']
-                            trigger_result = trigger_detector.detect_trigger(df_5m, direction=trend_1h)
-                            
-                            # 🆕 Always store trigger data for LLM display
-                            four_layer_result['trigger_pattern'] = trigger_result.get('pattern_type') or 'None'
-                            rvol = trigger_result.get('rvol', 1.0)
-                            four_layer_result['trigger_rvol'] = rvol
-                            
-                            # ⚠️ LOW VOLUME WARNING
-                            if rvol < 0.5:
-                                log.warning(f"⚠️ Low Volume Warning (RVOL {rvol:.1f}x < 0.5) - Trend validation may be unreliable")
-                                if not four_layer_result.get('data_anomalies'): four_layer_result['data_anomalies'] = []
-                                four_layer_result['data_anomalies'].append(f"Low Volume (RVOL {rvol:.1f}x)")
-                            
-                            if not trigger_result['triggered']:
-                                four_layer_result['blocking_reason'] = f"5min trigger not confirmed (RVOL={trigger_result.get('rvol', 1.0):.1f}x)"
-                                log.info(f"⏳ Layer 4 WAIT: No engulfing or breakout pattern (RVOL={trigger_result.get('rvol', 1.0):.1f}x)")
-                            else:
-                                log.info(f"🎯 Layer 4 TRIGGER: {trigger_result['pattern_type']} detected")
-                                
-                                # Sentiment Risk Adjustment (Specification: Score range -100 to +100)
-                                # Normal zone: -60 to +60
-                                # Extreme Greed: > +80 => TP减半 (防止随时崩盘)
-                                # Extreme Fear: < -80 => 可适当放大仓位/TP
-                                sentiment_score = sentiment.get('total_sentiment_score', 0)
-                                
-                                if sentiment_score > 80:  # Extreme Greed
-                                    four_layer_result['tp_multiplier'] = 0.5  # 止盈减半
-                                    four_layer_result['sl_multiplier'] = 1.0  # 止损不变
-                                    log.warning(f"🔴 Extreme Greed ({sentiment_score:.0f}): TP target halved")
-                                elif sentiment_score < -80:  # Extreme Fear
-                                    four_layer_result['tp_multiplier'] = 1.5  # 可加大TP
-                                    four_layer_result['sl_multiplier'] = 0.8  # 缩小SL
-                                    log.info(f"🟢 Extreme Fear ({sentiment_score:.0f}): Be greedy when others are fearful")
-                                else:
-                                    four_layer_result['tp_multiplier'] = 1.0
-                                    four_layer_result['sl_multiplier'] = 1.0
-                                
-                                # 🆕 Funding Rate Crowding Adjustment
-                                if trend_1h == 'long' and funding_rate > 0.05:
-                                    four_layer_result['tp_multiplier'] *= 0.7
-                                    log.warning(f"💰 High Funding Rate ({funding_rate:.3f}%): Longs crowded, TP reduced")
-                                elif trend_1h == 'short' and funding_rate < -0.05:
-                                    four_layer_result['tp_multiplier'] *= 0.7
-                                    log.warning(f"💰 Negative Funding Rate ({funding_rate:.3f}%): Shorts crowded, TP reduced")
-                                
-                                four_layer_result['layer4_pass'] = True
-                                four_layer_result['final_action'] = trend_1h
-                                four_layer_result['trigger_pattern'] = trigger_result['pattern_type']
-                                log.info(f"✅ Layer 4 PASS: Sentiment {sentiment_score:.0f}, Trigger={trigger_result['pattern_type']}")
-                                log.info(f"🎯 ALL LAYERS PASSED: {trend_1h.upper()} with {70 + four_layer_result['confidence_boost']}% confidence")
-                        else:
-                            four_layer_result['trigger_pattern'] = 'disabled'
-                            four_layer_result['trigger_rvol'] = None
-                            four_layer_result['layer4_pass'] = True
-                            four_layer_result['final_action'] = trend_1h
-                            log.info("⏭️ Layer 4 SKIP: TriggerDetectorAgent disabled")
-            
-            # Store for LLM context
-            global_state.four_layer_result = four_layer_result
-            
-            await self._run_semantic_analysis(
-                run_id=run_id,
-                cycle_id=cycle_id,
-                current_price=current_price,
-                trend_1h=trend_1h,
-                four_layer_result=four_layer_result,
-                processed_dfs=processed_dfs
-            )
-
-            # Step 2.6: Multi-Period Parser Agent (feeds Decision)
-            try:
-                multi_period_result = self.multi_period_agent.analyze(
-                    quant_analysis=quant_analysis,
-                    four_layer_result=four_layer_result,
-                    semantic_analyses=getattr(global_state, 'semantic_analyses', {}) or {}
-                )
-                global_state.multi_period_result = multi_period_result
-                summary = multi_period_result.get('summary')
-                if summary:
-                    global_state.add_agent_message("multi_period_agent", summary, level="info")
-            except Exception as e:
-                log.error(f"❌ Multi-Period Parser Agent failed: {e}")
-                global_state.multi_period_result = {}
-
-            decision_payload, decision_source, fast_signal, vote_result, selected_agent_outputs = await self._run_decision_stage(
-                run_id=run_id,
-                cycle_id=cycle_id,
-                processed_dfs=processed_dfs,
-                quant_analysis=quant_analysis,
-                predict_result=predict_result,
-                reflection_text=reflection_text,
-                current_price=current_price,
-                current_position_info=current_position_info,
-                regime_result=regime_result
-            )
-            
-            # 保存完整的 LLM 交互日志 (Input, Process, Output)
-            # Only save detailed logs in local mode to conserve disk space on Railway
-            if decision_source == 'llm' and os.environ.get('ENABLE_DETAILED_LLM_LOGS', 'false').lower() == 'true':
-                full_log_content = f"""
-================================================================================
-🕐 Timestamp: {datetime.now().isoformat()}
-💱 Symbol: {self.current_symbol}
-🔄 Cycle: #{cycle_id}
-================================================================================
-
---------------------------------------------------------------------------------
-📤 INPUT (PROMPT)
---------------------------------------------------------------------------------
-[SYSTEM PROMPT]
-{decision_payload.get('system_prompt', '(Missing System Prompt)')}
-
-[USER PROMPT]
-{decision_payload.get('user_prompt', '(Missing User Prompt)')}
-
---------------------------------------------------------------------------------
-🧠 PROCESSING (REASONING)
---------------------------------------------------------------------------------
-{decision_payload.get('reasoning_detail', '(No reasoning detail)')}
-
---------------------------------------------------------------------------------
-📥 OUTPUT (DECISION)
---------------------------------------------------------------------------------
-{decision_payload.get('raw_response', '(No raw response)')}
-"""
-                self.saver.save_llm_log(
-                    content=full_log_content,
-                    symbol=self.current_symbol,
-                    snapshot_id=snapshot_id,
-                    cycle_id=cycle_id
-                )
-            
-            # LOG: Bullish/Bearish Perspective (show first for adversarial context)
-            bull_conf = decision_payload.get('bull_perspective', {}).get('bull_confidence', 50)
-            bear_conf = decision_payload.get('bear_perspective', {}).get('bear_confidence', 50)
-            bull_stance = decision_payload.get('bull_perspective', {}).get('stance', 'UNKNOWN')
-            bear_stance = decision_payload.get('bear_perspective', {}).get('stance', 'UNKNOWN')
-            bull_reasons = decision_payload.get('bull_perspective', {}).get('bullish_reasons', '')[:120]
-            bear_reasons = decision_payload.get('bear_perspective', {}).get('bearish_reasons', '')[:120]
-            global_state.add_log(f"[🐂 Long Case] [{bull_stance}] Conf={bull_conf}%")
-            global_state.add_log(f"[🐻 Short Case] [{bear_stance}] Conf={bear_conf}%")
-            
-            # LOG: Decision Engine (LLM or Fast trend)
-            decision_label = "FAST Decision" if decision_source == 'fast_trend' else ("RULE Decision" if decision_source == 'decision_core' else "Final Decision")
-            global_state.add_log(f"[⚖️ {decision_label}] Action={vote_result.action.upper()} | Conf={decision_payload.get('confidence', 0)}%")
-            
-            # ✅ Decision Recording moved after Risk Audit for complete context
-            # Saved to file still happens here for "raw" decision
-            self.saver.save_decision(asdict(vote_result), self.current_symbol, snapshot_id, cycle_id=cycle_id)
-
-            # 如果是观望，也需要更新状态
-            if is_passive_action(vote_result.action):
-                # Check if there's an active position to distinguish hold vs wait.
-                # ✅ 先检查持仓，再显示正确的 action
-                has_position = False
-                if current_position_info:
-                    try:
-                        qty = float(current_position_info.get('quantity', 0) or 0)
-                        has_position = abs(qty) > 0
-                    except (TypeError, ValueError):
-                        has_position = True
-                if not has_position and self.test_mode:
-                    has_position = self.current_symbol in global_state.virtual_positions
-                actual_action = 'hold' if has_position else 'wait'  # Position → hold, no position → wait
-                
-                # ✅ 使用修正后的 action 显示
-                action_display = '持仓观望' if actual_action == 'hold' else '观望'
-                print(f"\n✅ 决策: {action_display} ({actual_action})")
-                
-                # GlobalState Logging of Logic
-                regime_txt = vote_result.regime.get('regime', 'Unknown') if vote_result.regime else 'Unknown'
-                pos_txt = f"{min(max(vote_result.position.get('position_pct', 0), 0), 100):.0f}%" if vote_result.position else 'N/A'
-                
-                # LOG 3: Critic (Wait/Hold Case) - 使用修正后的 action
-                global_state.add_log(f"⚖️ DecisionCoreAgent (The Critic): Context(Regime={regime_txt}, Pos={pos_txt}) => Vote: {actual_action.upper()} ({vote_result.reason})")
-                
-                # Update State with WAIT/HOLD decision
-                decision_dict = self._build_decision_snapshot(
-                    vote_result=vote_result,
-                    quant_analysis=quant_analysis,
-                    predict_result=predict_result,
-                    risk_level='safe',
-                    guardian_passed=True,
-                    action_override=actual_action
-                )
-                global_state.update_decision(decision_dict)
-
-                return {
-                    'status': actual_action,
-                    'action': actual_action,
-                    'details': {
-                        'reason': vote_result.reason,
-                        'confidence': vote_result.confidence
-                    }
-                }
-            
-            # Step 4: 审计 - 风控守护者 (The Guardian)
-            if not (hasattr(self, '_headless_mode') and self._headless_mode):
-                print(f"[Step 4/5] 👮 The Guardian (Risk Audit) - Final review...")
-            order_params, audit_result, account_balance, current_position = await self._run_risk_audit_stage(
-                run_id=run_id,
-                cycle_id=cycle_id,
-                vote_result=vote_result,
-                quant_analysis=quant_analysis,
-                processed_dfs=processed_dfs,
-                current_price=current_price,
-                current_position_info=current_position_info,
-                regime_result=regime_result
-            )
-            
-            # ✅ Update Global State with FULL Decision info (Vote + Audit)
-            decision_dict = self._build_decision_snapshot(
-                vote_result=vote_result,
-                quant_analysis=quant_analysis,
-                predict_result=predict_result,
-                risk_level=audit_result.risk_level.value,
-                guardian_passed=audit_result.passed,
-                guardian_reason=audit_result.blocked_reason
-            )
-            
-            # ✅ Save Risk Audit Report
-            self.saver.save_risk_audit(
-                audit_result={
-                    'passed': audit_result.passed,
-                    'risk_level': audit_result.risk_level.value,
-                    'blocked_reason': audit_result.blocked_reason,
-                    'corrections': audit_result.corrections,
-                    'warnings': audit_result.warnings,
-                    'order_params': order_params,
-                    'cycle_id': cycle_id
-                },
-                symbol=self.current_symbol,
-                snapshot_id=snapshot_id,
-                cycle_id=cycle_id
-            )
-            
-            print(f"  ✅ 审计结果: {'✅ 通过' if audit_result.passed else '❌ 拦截'}")
-            print(f"  ✅ 风险等级: {audit_result.risk_level.value}")
-            
-            # 如果有修正
-            if audit_result.corrections:
-                print(f"  ⚠️  自动修正:")
-                for key, value in audit_result.corrections.items():
-                    print(f"     {key}: {order_params[key]} -> {value}")
-                    order_params[key] = value  # 应用修正
-            
-            # 如果有警告
-            if audit_result.warnings:
-                print(f"  ⚠️  警告信息:")
-                for warning in audit_result.warnings:
-                    print(f"     {warning}")
-
-            decision_dict['order_params'] = order_params
-            global_state.update_decision(decision_dict)
-            
-            # 如果被拦截
-            if not audit_result.passed:
-                print(f"\n❌ 决策被风控拦截: {audit_result.blocked_reason}")
-                return {
-                    'status': 'blocked',
-                    'action': vote_result.action,
-                    'details': {
-                        'reason': audit_result.blocked_reason,
-                        'risk_level': audit_result.risk_level.value
-                    },
-                    'current_price': current_price
-                }
-
-            # Decoupling: If analyze_only is True, skip execution for OPEN actions
-            if analyze_only and vote_result.action in ('open_long', 'open_short'):
-                log.info(f"🔍 [Analyze Only] Strategy suggests {vote_result.action.upper()} for {self.current_symbol}, skipping execution for selector")
-                return {
-                    'status': 'suggested',
-                    'action': vote_result.action,
-                    'confidence': vote_result.confidence,
-                    'order_params': order_params,
-                    'vote_result': vote_result,
-                    'current_price': current_price
-                }
-            # Step 5: 执行引擎
-            self._emit_runtime_event(
-                run_id=run_id,
-                stream="lifecycle",
-                agent="executor",
-                phase="start",
-                cycle_id=cycle_id,
-                data={"mode": "test" if self.test_mode else "live"}
-            )
-            if self.test_mode:
-                if not (hasattr(self, '_headless_mode') and self._headless_mode):
-                    print("\n[Step 5/5] 🧪 TestMode - 模拟执行...")
-                print(f"  模拟订单: {order_params['action']} {order_params['quantity']} @ {current_price}")
-                
-                # LOG 5: Executor (Test)
-                global_state.add_log(f"[🚀 EXECUTOR] Test: {order_params['action'].upper()} {order_params['quantity']} @ {current_price:.2f}")
-
-                 # ✅ Save Execution (Simulated)
-                self.saver.save_execution({
-                    'symbol': self.current_symbol,
-                    'action': 'SIMULATED_EXECUTION',
-                    'params': order_params,
-                    'status': 'success',
-                    'timestamp': datetime.now().isoformat(),
-                    'cycle_id': cycle_id
-                }, self.current_symbol, cycle_id=cycle_id)
-                
-                # 💰 测试模式逻辑: 计算 PnL 和更新状态 (Virtual Account)
-                realized_pnl = 0.0
-                exit_test_price = 0.0
-                
-                if self.test_mode:
-                    normalized_action = normalize_action(
-                        vote_result.action,
-                        position_side=(current_position_info or {}).get('side')
-                    )
-                    
-                    # Close Logic
-                    if is_close_action(normalized_action):
-                        if self.current_symbol in global_state.virtual_positions:
-                            pos = global_state.virtual_positions[self.current_symbol]
-                            entry_price = pos['entry_price']
-                            qty = pos['quantity']
-                            side = pos['side']
-                            
-                            # Calc Realized PnL
-                            if side.upper() == 'LONG':
-                                realized_pnl = (current_price - entry_price) * qty
-                            else:
-                                realized_pnl = (entry_price - current_price) * qty
-                            
-                            exit_test_price = current_price
-                            # Update Virtual Balance
-                            global_state.virtual_balance += realized_pnl
-                            
-                            # Remove position
-                            del global_state.virtual_positions[self.current_symbol]
-                            self._save_virtual_state()
-                            
-                            log.info(f"💰 [TEST] Closed {side} {self.current_symbol}: PnL=${realized_pnl:.2f}, Bal=${global_state.virtual_balance:.2f}")
-                            
-                            # Record trade to history -> MOVED TO UNIFIED BLOCK BELOW
-                            # global_state.record_trade({ ... })
-                        else:
-                            log.warning(f"⚠️ [TEST] Close ignored - No position for {self.current_symbol}")
-                    
-                    # Open Logic
-                    elif is_open_action(normalized_action):
-                        side = 'LONG' if normalized_action == 'open_long' else 'SHORT'
-                        # 计算持仓价值
-                        position_value = order_params['quantity'] * current_price
-                        global_state.virtual_positions[self.current_symbol] = {
-                            'entry_price': current_price,
-                            'quantity': order_params['quantity'],
-                            'side': side,
-                            'entry_time': datetime.now().isoformat(),
-                            'stop_loss': order_params.get('stop_loss_price', 0),
-                            'take_profit': order_params.get('take_profit_price', 0),
-                            'leverage': order_params.get('leverage', 1),
-                            'position_value': position_value  # 用于计算可用余额
-                        }
-                        self._save_virtual_state()
-                        log.info(f"💰 [TEST] Opened {side} {self.current_symbol} @ ${current_price:,.2f}")
-                        
-                        # Record trade to history -> MOVED TO UNIFIED BLOCK BELOW
-                        # global_state.record_trade({ ... })
-
-                # ✅ Save Trade in persistent history
-                # Logic Update: If CLOSING, try to update previous OPEN record. If failing, save new.
-                
-                is_close_trade_action = is_close_action(vote_result.action)
-                update_success = False
-                
-                if is_close_trade_action:
-                    update_success = self.saver.update_trade_exit(
-                        symbol=self.current_symbol,
-                        exit_price=exit_test_price,
-                        pnl=realized_pnl,
-                        exit_time=datetime.now().strftime("%H:%M:%S"),
-                        close_cycle=global_state.cycle_counter
-                    )
-                    
-                    # ✅ Sync global_state.trade_history if CSV update succeeded
-                    if update_success:
-                        for trade in global_state.trade_history:
-                            if trade.get('symbol') == self.current_symbol and trade.get('exit_price', 0) == 0:
-                                trade['exit_price'] = exit_test_price
-                                trade['pnl'] = realized_pnl
-                                trade['close_cycle'] = global_state.cycle_counter
-                                trade['status'] = 'CLOSED'
-                                log.info(f"✅ Synced global_state.trade_history: {self.current_symbol} PnL ${realized_pnl:.2f}")
-                                break
-                        
-                        # 🆕 Accumulate realized PnL for dashboard Total PnL calculation
-                        global_state.cumulative_realized_pnl += realized_pnl
-                        log.info(f"📊 Cumulative Realized PnL: ${global_state.cumulative_realized_pnl:.2f}")
-                
-                # Only save NEW record if it's OPEN action OR if Update Failed (Fallback)
-                if not update_success:
-                    is_open_trade_action = is_open_action(order_params.get('action'))
-                    
-                    # For CLOSE actions, find the original open_cycle from trade_history
-                    original_open_cycle = 0
-                    if not is_open_trade_action:
-                        for trade in global_state.trade_history:
-                            if trade.get('symbol') == self.current_symbol and trade.get('exit_price', 0) == 0:
-                                original_open_cycle = trade.get('open_cycle', 0)
-                                break
-                    
-                    trade_record = {
-                        'open_cycle': global_state.cycle_counter if is_open_trade_action else original_open_cycle,
-                        'close_cycle': 0 if is_open_trade_action else global_state.cycle_counter,
-                        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        'action': order_params['action'].upper(),
-                        'symbol': self.current_symbol,
-                        'entry_price': current_price, # ✅ Fixed field name (was price)
-                        'quantity': order_params['quantity'],
-                        'cost': current_price * order_params['quantity'],
-                        'exit_price': exit_test_price,
-                        'pnl': realized_pnl,
-                        'confidence': order_params['confidence'],
-                        'status': 'SIMULATED',
-                        'cycle': cycle_id
-                    }
-                    if is_close_trade_action:
-                         trade_record['status'] = 'CLOSED (Fallback)'
-                         
-                    self.saver.save_trade(trade_record)
-                    # Update Global State History
-                    global_state.trade_history.insert(0, trade_record)
-                    if len(global_state.trade_history) > 50:
-                        global_state.trade_history.pop()
-
-                # 🎯 递增周期开仓计数器
-                if is_open_action(vote_result.action):
-                    global_state.cycle_positions_opened += 1
-                    log.info(f"Positions opened this cycle: {global_state.cycle_positions_opened}/1")
-                self._emit_runtime_event(
-                    run_id=run_id,
-                    stream="lifecycle",
-                    agent="executor",
-                    phase="end",
-                    cycle_id=cycle_id,
-                    data={"status": "success", "mode": "test", "action": vote_result.action}
-                )
-                return {
-                    'status': 'success',
-                    'action': vote_result.action,
-                    'details': order_params,
-                    'current_price': current_price
-                }
-            else:
-                # Live Execution
-                if not (hasattr(self, '_headless_mode') and self._headless_mode):
-                    print("\n[Step 5/5] 🚀 LiveTrade - 实盘执行...")
-                
-                try:
-                    # _execute_order returns bool
-                    is_success = self._execute_order(order_params)
-                    
-                    status_icon = "✅" if is_success else "❌"
-                    status_txt = "SENT" if is_success else "FAILED"
-                    
-                    # LOG 5: Executor (Live)
-                    global_state.add_log(f"[🚀 EXECUTOR] Live: {order_params['action'].upper()} {order_params['quantity']} => {status_icon} {status_txt}")
-                        
-                    executed = {'status': 'filled' if is_success else 'failed', 'avgPrice': current_price, 'executedQty': order_params['quantity']}
-                        
-                except Exception as e:
-                    log.error(f"Live order execution failed: {e}", exc_info=True)
-                    global_state.add_log(f"[Execution] ❌ Live Order Failed: {e}")
-                    self._emit_runtime_event(
-                        run_id=run_id,
-                        stream="error",
-                        agent="executor",
-                        phase="error",
-                        cycle_id=cycle_id,
-                        data={"status": "failed", "mode": "live", "error": str(e)}
-                    )
-                    return {
-                        'status': 'failed',
-                        'action': vote_result.action,
-                        'details': {'error': str(e)}
-                    }
-            
-            # ✅ Save Execution
-            self.saver.save_execution({
-                'symbol': self.current_symbol,
-                'action': 'REAL_EXECUTION',
-                'params': order_params,
-                'status': 'success' if executed else 'failed',
-                'timestamp': datetime.now().isoformat(),
-                'cycle_id': cycle_id
-            }, self.current_symbol, cycle_id=cycle_id)
-            
-            if executed:
-                print("  ✅ 订单执行成功!")
-                global_state.add_log(f"✅ Order: {order_params['action'].upper()} {order_params['quantity']} @ ${order_params['price']}")
-                
-                # 记录交易日志
-                trade_logger.log_open_position(
-                    symbol=self.current_symbol,
-                    side=order_params['action'].upper(),
-                    decision=order_params,
-                    execution_result={
-                        'success': True,
-                        'entry_price': order_params['entry_price'],
-                        'quantity': order_params['quantity'],
-                        'stop_loss': order_params['stop_loss'],
-                        'take_profit': order_params['take_profit'],
-                        'order_id': 'real_order' # Placeholder if actual ID not captured
-                    },
-                    market_state=market_snapshot.live_5m,
-                    account_info={'available_balance': account_balance}
-                )
-                
-                # 计算盈亏 (如果是平仓)
-                pnl = 0.0
-                exit_price = 0.0
-                entry_price = order_params['entry_price']
-                if is_close_action(order_params.get('action')) and current_position:
-                    exit_price = current_price
-                    entry_price = current_position.entry_price
-                    # PnL = (Exit - Entry) * Qty (Multiplied by 1 if long, -1 if short)
-                    direction = 1 if current_position.side == 'long' else -1
-                    pnl = (exit_price - entry_price) * current_position.quantity * direction
-                
-                # ✅ Save Trade in persistent history
-                # Logic Update: If CLOSING, try to update previous OPEN record. If failing, save new.
-                
-                is_close_trade_action = is_close_action(order_params.get('action'))
-                update_success = False
-                
-                if is_close_trade_action:
-                    update_success = self.saver.update_trade_exit(
-                        symbol=self.current_symbol,
-                        exit_price=exit_price,
-                        pnl=pnl,
-                        exit_time=datetime.now().strftime("%H:%M:%S"),
-                        close_cycle=global_state.cycle_counter
-                    )
-                    
-                    # ✅ Sync global_state.trade_history if CSV update succeeded
-                    if update_success:
-                        for trade in global_state.trade_history:
-                            if trade.get('symbol') == self.current_symbol and trade.get('exit_price', 0) == 0:
-                                trade['exit_price'] = exit_price
-                                trade['pnl'] = pnl
-                                trade['close_cycle'] = global_state.cycle_counter
-                                trade['status'] = 'CLOSED'
-                                log.info(f"✅ Synced global_state.trade_history: {self.current_symbol} PnL ${pnl:.2f}")
-                                break
-                        
-                        # 🆕 Accumulate realized PnL for dashboard Total PnL calculation
-                        global_state.cumulative_realized_pnl += pnl
-                        log.info(f"📊 Cumulative Realized PnL: ${global_state.cumulative_realized_pnl:.2f}")
-                
-                if not update_success:
-                    is_open_trade_action = is_open_action(order_params.get('action'))
-                    
-                    # For CLOSE actions, find the original open_cycle from trade_history
-                    original_open_cycle = 0
-                    if not is_open_trade_action:
-                        for trade in global_state.trade_history:
-                            if trade.get('symbol') == self.current_symbol and trade.get('exit_price', 0) == 0:
-                                original_open_cycle = trade.get('open_cycle', 0)
-                                break
-                    
-                    trade_record = {
-                        'open_cycle': global_state.cycle_counter if is_open_trade_action else original_open_cycle,
-                        'close_cycle': 0 if is_open_trade_action else global_state.cycle_counter,
-                        'action': order_params['action'].upper(),
-                        'symbol': self.current_symbol,
-                        'price': entry_price,
-                        'quantity': order_params['quantity'],
-                        'cost': entry_price * order_params['quantity'],
-                        'exit_price': exit_price,
-                        'pnl': pnl,
-                        'confidence': order_params['confidence'],
-                        'status': 'EXECUTED',
-                        'cycle': cycle_id
-                    }
-                    if is_close_trade_action:
-                         trade_record['status'] = 'CLOSED (Fallback)'
-                         
-                    self.saver.save_trade(trade_record)
-                    
-                    # Update Global State History
-                    global_state.trade_history.insert(0, trade_record)
-                    if len(global_state.trade_history) > 50:
-                        global_state.trade_history.pop()
-                
-                self._emit_runtime_event(
-                    run_id=run_id,
-                    stream="lifecycle",
-                    agent="executor",
-                    phase="end",
-                    cycle_id=cycle_id,
-                    data={"status": "success", "mode": "live", "action": vote_result.action}
-                )
-                return {
-                    'status': 'success',
-                    'action': vote_result.action,
-                    'details': order_params,
-                    'current_price': current_price
-                }
-            else:
-                print("  ❌ 订单执行失败")
-                global_state.add_log(f"❌ Order Failed: {order_params['action'].upper()}")
-                self._emit_runtime_event(
-                    run_id=run_id,
-                    stream="error",
-                    agent="executor",
-                    phase="error",
-                    cycle_id=cycle_id,
-                    data={"status": "failed", "mode": "live", "error": "execution_failed"}
-                )
-                return {
-                    'status': 'failed',
-                    'action': vote_result.action,
-                    'details': {'error': 'execution_failed'},
-                    'current_price': current_price
-                }
+            cycle_context = self._begin_cycle_context()
+            run_id = cycle_context.run_id
+            return await self._run_cycle_pipeline(context=cycle_context, analyze_only=analyze_only)
         
         except Exception as e:
             log.error(f"Trading cycle exception: {e}", exc_info=True)
@@ -3491,7 +3865,7 @@ class MultiAgentTradingBot:
                 stream="error",
                 agent="system",
                 phase="error",
-                cycle_id=global_state.current_cycle_id,
+                cycle_id=(cycle_context.cycle_id if cycle_context else global_state.current_cycle_id),
                 data={"status": "error", "error": str(e)}
             )
             return {
